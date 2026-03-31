@@ -10,6 +10,10 @@ import {
   toNumber
 } from "../shape/utils.js";
 import {
+  applyTextInputStyle,
+  normalizeTextStyleFlags
+} from "../utils.js";
+import {
   appendStationTexts,
   buildShapeParamValuesFromRuntime,
   buildStationRuntimeParamMap,
@@ -18,6 +22,7 @@ import {
   createDefaultStationTextPlacement,
   getStationTextFontOptions,
   normalizeStationTextCards,
+  normalizeStationTextContent,
   normalizeStationTextPlacement,
   normalizeTextBinding,
   normalizeTextSlot
@@ -25,6 +30,15 @@ import {
 
 const previewDefaultViewBox = Object.freeze({ x: -120, y: -120, width: 480, height: 480 });
 const previewInitialScale = 0.25;
+
+function getTextStyleToolbarItems() {
+  return [
+    { flag: "bold", icon: "/img/icon-bold.svg", label: "加粗" },
+    { flag: "italic", icon: "/img/icon-italic.svg", label: "斜体" },
+    { flag: "underline", icon: "/img/icon-underline.svg", label: "下划线" },
+    { flag: "strikethrough", icon: "/img/icon-strikethrough.svg", label: "删除线" }
+  ];
+}
 
 export function createStationManager({
   state,
@@ -428,15 +442,91 @@ export function createStationManager({
       descField.appendChild(descInput);
       item.appendChild(descField);
 
+      const multilineField = document.createElement("div");
+      multilineField.className = "station-text-card-field station-text-card-toggle-row";
+      const multilineLabel = document.createElement("span");
+      multilineLabel.textContent = "接受多行";
+      const multilineSwitch = document.createElement("label");
+      multilineSwitch.className = "toggle-switch";
+      const multilineInput = document.createElement("input");
+      multilineInput.type = "checkbox";
+      multilineInput.className = "toggle-checkbox";
+      multilineInput.checked = Boolean(card.allowMultiline);
+      const multilineSlider = document.createElement("span");
+      multilineSlider.className = "toggle-slider";
+      multilineSlider.setAttribute("aria-hidden", "true");
+      multilineSwitch.appendChild(multilineInput);
+      multilineSwitch.appendChild(multilineSlider);
+      multilineField.appendChild(multilineLabel);
+      multilineField.appendChild(multilineSwitch);
+      item.appendChild(multilineField);
+
+      multilineInput.addEventListener("change", () => {
+        mutateSelectedTextCard(card.id, (liveCard) => {
+          liveCard.allowMultiline = Boolean(multilineInput.checked);
+          liveCard.defaultValue = normalizeStationTextContent(
+            liveCard.defaultValue,
+            liveCard.allowMultiline
+          );
+        });
+        persistStationLibrary();
+        renderTextCards(preset);
+        renderPreview(preset);
+        renderSubmenu?.();
+      });
+
+      const textStyleField = document.createElement("div");
+      textStyleField.className = "station-text-card-field";
+      const textStyleLabel = document.createElement("span");
+      textStyleLabel.textContent = "文字样式";
+      textStyleField.appendChild(textStyleLabel);
+
+      const styleToolbar = document.createElement("div");
+      styleToolbar.className = "text-style-toolbar";
+      const cardTextStyle = normalizeTextStyleFlags(card);
+      getTextStyleToolbarItems().forEach((itemDef) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "text-style-btn";
+        button.setAttribute("aria-label", itemDef.label);
+        const isActive = Boolean(cardTextStyle[itemDef.flag]);
+        button.classList.toggle("active", isActive);
+        button.setAttribute("aria-pressed", isActive ? "true" : "false");
+        button.innerHTML = `<img src="${itemDef.icon}" alt="${itemDef.label}" />`;
+        button.addEventListener("click", () => {
+          mutateSelectedTextCard(card.id, (liveCard) => {
+            const current = normalizeTextStyleFlags(liveCard);
+            liveCard[itemDef.flag] = !current[itemDef.flag];
+          });
+          persistStationLibrary();
+          renderTextCards(preset);
+          renderPreview(preset);
+          renderSubmenu?.();
+        });
+        styleToolbar.appendChild(button);
+      });
+      textStyleField.appendChild(styleToolbar);
+      item.appendChild(textStyleField);
+
       const valueField = document.createElement("label");
       valueField.className = "station-text-card-field";
       const valueLabel = document.createElement("span");
       valueLabel.textContent = "默认值";
-      const valueInput = document.createElement("textarea");
-      valueInput.value = String(card.defaultValue || "");
+      const valueInput = card.allowMultiline
+        ? document.createElement("textarea")
+        : document.createElement("input");
+      if (valueInput instanceof HTMLInputElement) {
+        valueInput.type = "text";
+      }
+      valueInput.value = normalizeStationTextContent(card.defaultValue, Boolean(card.allowMultiline));
+      applyTextInputStyle(valueInput, cardTextStyle);
       valueInput.addEventListener("input", () => {
+        const nextValue = normalizeStationTextContent(valueInput.value, Boolean(card.allowMultiline));
+        if (valueInput.value !== nextValue) {
+          valueInput.value = nextValue;
+        }
         mutateSelectedTextCard(card.id, (liveCard) => {
-          liveCard.defaultValue = String(valueInput.value || "");
+          liveCard.defaultValue = nextValue;
         });
         persistStationLibrary();
         renderPreview(preset);

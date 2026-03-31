@@ -252,7 +252,7 @@
   margin-left: 0;
 }
 
-.station-text-card input {
+.station-text-card input:not(.toggle-checkbox) {
   border: 1px solid var(--line);
   border-radius: 7px;
   padding: 5px 8px;
@@ -279,6 +279,17 @@
 .station-text-card-field {
   display: grid;
   gap: 4px;
+}
+
+.station-text-card-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.station-text-card-toggle-row .toggle-switch {
+  flex-shrink: 0;
 }
 
 .station-text-card-field>label {

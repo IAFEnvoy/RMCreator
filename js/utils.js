@@ -80,3 +80,44 @@ export function clientToSvgPoint(clientX, clientY, svg) {
   const result = pt.matrixTransform(svgMatrix.inverse());
   return { x: result.x, y: result.y };
 }
+
+export function normalizeTextStyleFlags(rawStyle, fallbackStyle = null) {
+  const fallback = fallbackStyle && typeof fallbackStyle === "object"
+    ? fallbackStyle
+    : {};
+  const source = rawStyle && typeof rawStyle === "object"
+    ? rawStyle
+    : {};
+
+  return {
+    bold: Boolean(source.bold ?? fallback.bold),
+    italic: Boolean(source.italic ?? fallback.italic),
+    underline: Boolean(source.underline ?? fallback.underline),
+    strikethrough: Boolean(source.strikethrough ?? source.strikeThrough ?? fallback.strikethrough)
+  };
+}
+
+export function getSvgTextDecoration(textStyle) {
+  const style = normalizeTextStyleFlags(textStyle);
+  const segments = [];
+
+  if (style.underline) {
+    segments.push("underline");
+  }
+  if (style.strikethrough) {
+    segments.push("line-through");
+  }
+
+  return segments.join(" ") || "none";
+}
+
+export function applyTextInputStyle(inputEl, textStyle) {
+  if (!inputEl || typeof inputEl.style === "undefined") {
+    return;
+  }
+
+  const style = normalizeTextStyleFlags(textStyle);
+  inputEl.style.fontWeight = style.bold ? "700" : "400";
+  inputEl.style.fontStyle = style.italic ? "italic" : "normal";
+  inputEl.style.textDecoration = getSvgTextDecoration(style);
+}

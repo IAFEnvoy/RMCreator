@@ -3,6 +3,10 @@ import {
   normalizeShapeParameters,
   shapeParameterTypeDefinitions
 } from "../shape/utils.js";
+import {
+  getSvgTextDecoration,
+  normalizeTextStyleFlags
+} from "../utils.js";
 
 const defaultTextColor = "#000000";
 const defaultTextFontFamily = "Segoe UI";
@@ -24,6 +28,11 @@ export function createDefaultStationTextCard(index = 0, createId) {
     id,
     label: `文本 ${index + 1}`,
     defaultValue: "",
+    allowMultiline: false,
+    bold: false,
+    italic: false,
+    underline: false,
+    strikethrough: false,
     fontFamily: defaultTextFontFamily,
     colorBinding: {
       mode: "value",
@@ -36,6 +45,15 @@ export function createDefaultStationTextCard(index = 0, createId) {
       paramId: ""
     }
   };
+}
+
+export function normalizeStationTextContent(rawValue, allowMultiline = false) {
+  const normalized = String(rawValue ?? "").replace(/\r\n?/g, "\n");
+  if (allowMultiline) {
+    return normalized;
+  }
+
+  return normalized.replace(/\n+/g, " ");
 }
 
 export function createDefaultStationTextPlacement() {
@@ -68,11 +86,15 @@ export function normalizeStationTextCard(raw, index = 0, createId) {
     return fallback;
   }
 
+  const allowMultiline = Boolean(raw.allowMultiline);
+
   const card = {
     ...fallback,
     id: String(raw.id || fallback.id),
     label: String(raw.label || fallback.label).trim() || fallback.label,
-    defaultValue: String(raw.defaultValue || ""),
+    allowMultiline,
+    ...normalizeTextStyleFlags(raw, fallback),
+    defaultValue: normalizeStationTextContent(raw.defaultValue ?? "", allowMultiline),
     fontFamily: String(raw.fontFamily || fallback.fontFamily).trim() || fallback.fontFamily,
     colorBinding: normalizeTextBinding(
       raw.colorBinding || (Object.prototype.hasOwnProperty.call(raw, "color") ? { mode: "value", value: raw.color } : null),
@@ -226,6 +248,7 @@ export function appendStationTexts({
   centerY,
   pointerEvents = "none",
   textValueMap = null,
+  textStyleMap = null,
   placementOverride = null
 }) {
   if (!container || !preset) {
@@ -263,16 +286,28 @@ export function appendStationTexts({
     const fontSize = Math.max(1, Number(resolveTextBindingValue(card.fontSizeBinding, "number", runtimeParamMap, defaultTextFontSize)) || defaultTextFontSize);
     const hasOverride = textValueMap && typeof textValueMap === "object"
       && Object.prototype.hasOwnProperty.call(textValueMap, card.id);
-    const textValue = hasOverride
-      ? String(textValueMap[card.id] ?? "")
-      : String(card.defaultValue || "");
-    const lines = textValue.split("\n");
-    const metrics = measureTextBox(lines, card.fontFamily || defaultTextFontFamily, fontSize);
+    const allowMultiline = Boolean(card.allowMultiline);
+    const textValue = normalizeStationTextContent(
+      hasOverride ? textValueMap[card.id] : card.defaultValue,
+      allowMultiline
+    );
+    const lines = allowMultiline ? textValue.split("\n") : [textValue];
+    const styleOverride = textStyleMap && typeof textStyleMap === "object"
+      ? textStyleMap[card.id]
+      : null;
+    const textStyle = normalizeTextStyleFlags(styleOverride, card);
+    const metrics = measureTextBox(
+      lines,
+      card.fontFamily || defaultTextFontFamily,
+      fontSize,
+      textStyle
+    );
 
     return {
       color,
       fontSize,
       fontFamily: card.fontFamily || defaultTextFontFamily,
+      textStyle,
       lines,
       metrics
     };
@@ -303,6 +338,9 @@ export function appendStationTexts({
     text.setAttribute("fill", block.color);
     text.setAttribute("font-size", String(block.fontSize));
     text.setAttribute("font-family", block.fontFamily);
+    text.setAttribute("font-weight", block.textStyle.bold ? "700" : "400");
+    text.setAttribute("font-style", block.textStyle.italic ? "italic" : "normal");
+    text.setAttribute("text-decoration", getSvgTextDecoration(block.textStyle));
     text.setAttribute("text-anchor", layout.textAnchor);
     text.setAttribute("dominant-baseline", "hanging");
     text.setAttribute("pointer-events", pointerEvents);
@@ -324,9 +362,10 @@ export function appendStationTexts({
   });
 }
 
-function measureTextBox(lines, fontFamily, fontSize) {
+function measureTextBox(lines, fontFamily, fontSize, textStyle) {
   const safeLines = Array.isArray(lines) && lines.length ? lines : [""];
   const safeFontSize = Math.max(1, Number(fontSize) || defaultTextFontSize);
+  const safeStyle = normalizeTextStyleFlags(textStyle);
   const lineHeight = safeFontSize * 1.2;
 
   let width = safeFontSize;
@@ -337,7 +376,9 @@ function measureTextBox(lines, fontFamily, fontSize) {
 
     const ctx = measureCanvas.getContext("2d");
     if (ctx) {
-      ctx.font = `${safeFontSize}px ${fontFamily || defaultTextFontFamily}`;
+      const fontStyle = safeStyle.italic ? "italic" : "normal";
+      const fontWeight = safeStyle.bold ? "700" : "400";
+      ctx.font = `${fontStyle} ${fontWeight} ${safeFontSize}px ${fontFamily || defaultTextFontFamily}`;
       width = safeLines.reduce((max, line) => Math.max(max, ctx.measureText(String(line || " ")).width), safeFontSize);
     } else {
       width = safeLines.reduce((max, line) => Math.max(max, String(line || " ").length * safeFontSize * 0.55), safeFontSize);

@@ -1,8 +1,10 @@
 import { geometryLabelMap } from "./constants.js";
 import {
+  applyTextInputStyle,
   clamp,
   escapeHtml,
   mergeColorAndAlpha,
+  normalizeTextStyleFlags,
   splitColorAndAlpha
 } from "./utils.js";
 import {
@@ -13,6 +15,7 @@ import {
   shapeParameterTypeDefinitions
 } from "./shape/utils.js";
 import {
+  normalizeStationTextContent,
   normalizeStationTextCards,
   normalizeTextSlot
 } from "./station/textUtils.js";
@@ -32,7 +35,7 @@ export function createSettingsRenderer({
   getStationTypeIndexByStation,
   onStateChanged
 }) {
-  return function renderSettings() {
+  const renderSettings = () => {
     const selectedEntities = Array.isArray(state.selectedEntities) ? state.selectedEntities : [];
     if (!selectedEntities.length) {
       settingsPanel.hidden = true;
@@ -111,6 +114,8 @@ export function createSettingsRenderer({
     }
   };
 
+  return renderSettings;
+
   function renderSingleStation(station, summaryHtml) {
     const currentTypeIndex = getStationTypeIndexByStation(station);
     const stationTypeOptions = state.stationTypes
@@ -120,6 +125,7 @@ export function createSettingsRenderer({
     const stationPreset = getStationPresetByTypeIndex(currentTypeIndex);
     const stationTextCards = normalizeStationTextCards(stationPreset?.textCards);
     ensureStationTextValues(station, stationTextCards);
+    ensureStationTextStyleValues(station, stationTextCards);
     ensureStationTextPlacement(station, stationPreset);
     const activeTextSlot = normalizeTextSlot(station.textPlacement?.slot);
 
@@ -134,11 +140,25 @@ export function createSettingsRenderer({
             const cardId = escapeHtml(String(card.id || ""));
             const controlId = `stationTextValue-${escapeHtml(station.id)}-${cardId}`;
             const label = escapeHtml(String(card.label || `文本 ${index + 1}`));
-            const value = escapeHtml(String(station.textValues?.[card.id] ?? card.defaultValue ?? ""));
+            const allowMultiline = Boolean(card.allowMultiline);
+            const textStyle = normalizeTextStyleFlags(station.textStyleValues?.[card.id], card);
+            const toolbarHtml = buildTextStyleToolbarHtml({
+              scope: "station",
+              targetId: cardId,
+              textStyle
+            });
+            const value = escapeHtml(normalizeStationTextContent(
+              station.textValues?.[card.id] ?? card.defaultValue ?? "",
+              allowMultiline
+            ));
+            const controlHtml = allowMultiline
+              ? `<textarea id="${controlId}" data-station-text-card-id="${cardId}" data-station-text-multiline="1">${value}</textarea>`
+              : `<input id="${controlId}" data-station-text-card-id="${cardId}" data-station-text-multiline="0" type="text" value="${value}" />`;
             return `
-              <div class="station-instance-text-row">
-                <label for="${controlId}">${label}</label>
-                <input id="${controlId}" data-station-text-card-id="${cardId}" type="text" value="${value}" />
+              <div class="station-instance-text-item">
+                <label class="station-instance-text-label" for="${controlId}">${label}</label>
+                ${toolbarHtml}
+                ${controlHtml}
               </div>
             `;
           }).join("")}
@@ -218,8 +238,8 @@ export function createSettingsRenderer({
         <select id="stationTypeSelect">${stationTypeOptions}</select>
       </div>
       ${textFieldsHtml}
-      ${paramFieldsHtml || '<div class="kv">当前车站类型没有可调整参数（已锁定参数不会显示）。</div>'}
       ${anchorGridHtml}
+      ${paramFieldsHtml || '<div class="kv">当前车站类型没有可调整参数（已锁定参数不会显示）。</div>'}
       <div class="kv">再次按住并拖动该车站，可调整位置。</div>
     `;
 
@@ -238,18 +258,66 @@ export function createSettingsRenderer({
         return;
       }
 
+      const sourceCard = stationTextCards.find((item) => String(item?.id || "") === cardId);
+      const textStyle = normalizeTextStyleFlags(station.textStyleValues?.[cardId], sourceCard);
+      applyTextInputStyle(inputEl, textStyle);
+
       const apply = () => {
         if (!station.textValues || typeof station.textValues !== "object") {
           station.textValues = {};
         }
 
-        station.textValues[cardId] = String(inputEl.value || "");
+        const allowMultiline = inputEl.getAttribute("data-station-text-multiline") === "1";
+        const nextValue = normalizeStationTextContent(inputEl.value || "", allowMultiline);
+        station.textValues[cardId] = nextValue;
+        if (inputEl.value !== nextValue) {
+          inputEl.value = nextValue;
+        }
         renderStations();
         onStateChanged?.({ coalesceKey: "station-text-values" });
       };
 
       inputEl.addEventListener("input", apply);
       inputEl.addEventListener("change", apply);
+    });
+
+    settingsBody.querySelectorAll("[data-station-text-style-card-id][data-text-style-flag]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const cardId = String(button.getAttribute("data-station-text-style-card-id") || "").trim();
+        const flag = String(button.getAttribute("data-text-style-flag") || "").trim();
+        if (!cardId || !isSupportedTextStyleFlag(flag)) {
+          return;
+        }
+
+        if (!station.textStyleValues || typeof station.textStyleValues !== "object") {
+          station.textStyleValues = {};
+        }
+
+        const sourceCard = stationTextCards.find((item) => String(item?.id || "") === cardId) || {};
+        const current = normalizeTextStyleFlags(station.textStyleValues[cardId], sourceCard);
+        const next = {
+          ...current,
+          [flag]: !current[flag]
+        };
+        station.textStyleValues[cardId] = next;
+
+        const control = settingsBody.querySelector(`[data-station-text-card-id="${cssEscapeAttr(cardId)}"]`);
+        if (control) {
+          applyTextInputStyle(control, next);
+        }
+
+        settingsBody
+          .querySelectorAll(`[data-station-text-style-card-id="${cssEscapeAttr(cardId)}"]`)
+          .forEach((toolbarButton) => {
+            const toolbarFlag = toolbarButton.getAttribute("data-text-style-flag");
+            const isActive = Boolean(toolbarFlag && next[toolbarFlag]);
+            toolbarButton.classList.toggle("active", isActive);
+            toolbarButton.setAttribute("aria-pressed", isActive ? "true" : "false");
+          });
+
+        renderStations();
+        onStateChanged?.({ coalesceKey: "station-text-style" });
+      });
     });
 
     settingsBody.querySelectorAll("[data-station-text-slot]").forEach((button) => {
@@ -672,11 +740,13 @@ export function createSettingsRenderer({
   }
 
   function renderSingleText(label, summaryHtml) {
+    const labelStyle = normalizeTextStyleFlags(label);
     settingsBody.innerHTML = `
       ${summaryHtml}
       <div class="kv">组件类型: 文本</div>
       <div class="field">
         <label for="textValue">内容</label>
+        ${buildTextStyleToolbarHtml({ scope: "label", targetId: String(label.id || ""), textStyle: labelStyle })}
         <textarea id="textValue">${escapeHtml(label.value)}</textarea>
       </div>
       <div class="field">
@@ -692,13 +762,20 @@ export function createSettingsRenderer({
         <label for="textColor">颜色</label>
         <input id="textColor" type="color" value="${label.color}" />
       </div>
+      <div class="field">
+        <label for="textFontSize">字号</label>
+        <input id="textFontSize" type="number" min="1" max="300" step="0.1" value="${Number(label.fontSize) || 20}" />
+      </div>
     `;
 
     const valueInput = document.getElementById("textValue");
     const fontSelect = document.getElementById("textFont");
     const colorInput = document.getElementById("textColor");
+    const fontSizeInput = document.getElementById("textFontSize");
+    const styleButtons = settingsBody.querySelectorAll("[data-label-text-style-id][data-text-style-flag]");
 
     fontSelect.value = label.fontFamily;
+    applyTextInputStyle(valueInput, labelStyle);
 
     valueInput.addEventListener("input", () => {
       label.value = valueInput.value || "Text";
@@ -716,6 +793,44 @@ export function createSettingsRenderer({
       label.color = colorInput.value;
       renderTexts();
       onStateChanged?.();
+    });
+
+    const applyFontSize = () => {
+      const nextSize = clamp(Number(fontSizeInput.value) || 20, 1, 300);
+      fontSizeInput.value = String(nextSize);
+      label.fontSize = nextSize;
+      renderTexts();
+      onStateChanged?.();
+    };
+
+    fontSizeInput.addEventListener("input", applyFontSize);
+    fontSizeInput.addEventListener("change", applyFontSize);
+
+    styleButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        const styleFlag = String(button.getAttribute("data-text-style-flag") || "").trim();
+        if (!isSupportedTextStyleFlag(styleFlag)) {
+          return;
+        }
+
+        const current = normalizeTextStyleFlags(label);
+        const next = {
+          ...current,
+          [styleFlag]: !current[styleFlag]
+        };
+        Object.assign(label, next);
+        applyTextInputStyle(valueInput, next);
+
+        styleButtons.forEach((item) => {
+          const flag = item.getAttribute("data-text-style-flag");
+          const isActive = Boolean(flag && next[flag]);
+          item.classList.toggle("active", isActive);
+          item.setAttribute("aria-pressed", isActive ? "true" : "false");
+        });
+
+        renderTexts();
+        onStateChanged?.();
+      });
     });
   }
 
@@ -948,13 +1063,35 @@ export function createSettingsRenderer({
       }
 
       if (Object.prototype.hasOwnProperty.call(source, id)) {
-        normalized[id] = String(source[id] ?? "");
+        normalized[id] = normalizeStationTextContent(source[id], Boolean(card?.allowMultiline));
       } else {
-        normalized[id] = String(card?.defaultValue || "");
+        normalized[id] = normalizeStationTextContent(card?.defaultValue ?? "", Boolean(card?.allowMultiline));
       }
     });
 
     station.textValues = normalized;
+  }
+
+  function ensureStationTextStyleValues(station, cards) {
+    if (!station || typeof station !== "object") {
+      return;
+    }
+
+    const source = station.textStyleValues && typeof station.textStyleValues === "object"
+      ? station.textStyleValues
+      : {};
+    const normalized = {};
+
+    (Array.isArray(cards) ? cards : []).forEach((card) => {
+      const id = String(card?.id || "").trim();
+      if (!id) {
+        return;
+      }
+
+      normalized[id] = normalizeTextStyleFlags(source[id], card);
+    });
+
+    station.textStyleValues = normalized;
   }
 
   function ensureStationTextPlacement(station, preset) {
@@ -980,4 +1117,46 @@ function getCommonValue(items, getter) {
 
 function toSvgDataUrl(svgText) {
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(String(svgText || ""))}`;
+}
+
+function getTextStyleToolbarItems() {
+  return [
+    { flag: "bold", icon: "/img/icon-bold.svg", label: "加粗" },
+    { flag: "italic", icon: "/img/icon-italic.svg", label: "斜体" },
+    { flag: "underline", icon: "/img/icon-underline.svg", label: "下划线" },
+    { flag: "strikethrough", icon: "/img/icon-strikethrough.svg", label: "删除线" }
+  ];
+}
+
+function isSupportedTextStyleFlag(flag) {
+  return getTextStyleToolbarItems().some((item) => item.flag === flag);
+}
+
+function buildTextStyleToolbarHtml({ scope, targetId, textStyle }) {
+  const normalized = normalizeTextStyleFlags(textStyle);
+  const safeTargetId = escapeHtml(String(targetId || ""));
+  const targetAttr = scope === "station"
+    ? `data-station-text-style-card-id="${safeTargetId}"`
+    : `data-label-text-style-id="${safeTargetId}"`;
+
+  const buttons = getTextStyleToolbarItems().map((item) => {
+    const active = Boolean(normalized[item.flag]);
+    const activeClass = active ? " active" : "";
+    return `
+      <button type="button" class="text-style-btn${activeClass}" ${targetAttr} data-text-style-flag="${item.flag}" aria-label="${item.label}" aria-pressed="${active ? "true" : "false"}">
+        <img src="${item.icon}" alt="${item.label}" />
+      </button>
+    `;
+  }).join("");
+
+  return `<div class="text-style-toolbar">${buttons}</div>`;
+}
+
+function cssEscapeAttr(value) {
+  const raw = String(value ?? "");
+  if (typeof CSS !== "undefined" && typeof CSS.escape === "function") {
+    return CSS.escape(raw);
+  }
+
+  return raw.replace(/\\/g, "\\\\").replace(/"/g, "\\\"");
 }

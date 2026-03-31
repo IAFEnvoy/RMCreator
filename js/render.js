@@ -8,7 +8,12 @@ import {
   getParallelOffsets
 } from "./line/geometry.js";
 import { resolveSegmentColor } from "./line/typeStore.js";
-import { clamp, normalizeColor } from "./utils.js";
+import {
+  clamp,
+  getSvgTextDecoration,
+  normalizeColor,
+  normalizeTextStyleFlags
+} from "./utils.js";
 import { createSettingsRenderer } from "./settingsRenderer.js";
 import { buildRenderableShapeSvg } from "./shape/utils.js";
 import {
@@ -584,6 +589,7 @@ export function createRenderer({
       centerY: 0,
       pointerEvents: "none",
       textValueMap: station.textValues,
+      textStyleMap: station.textStyleValues,
       placementOverride: station.textPlacement
     });
     return true;
@@ -632,6 +638,7 @@ export function createRenderer({
       centerY: Number(station.y) || 0,
       pointerEvents: "none",
       textValueMap: station.textValues,
+      textStyleMap: station.textStyleValues,
       placementOverride: station.textPlacement
     });
   }
@@ -740,12 +747,16 @@ export function createRenderer({
     textLayer.innerHTML = "";
 
     state.labels.forEach((label) => {
+      const textStyle = normalizeTextStyleFlags(label);
       const text = document.createElementNS(svgNs, "text");
       text.setAttribute("x", String(label.x));
       text.setAttribute("y", String(label.y));
       text.setAttribute("fill", label.color);
       text.setAttribute("font-size", String(label.fontSize));
       text.setAttribute("font-family", label.fontFamily);
+      text.setAttribute("font-weight", textStyle.bold ? "700" : "400");
+      text.setAttribute("font-style", textStyle.italic ? "italic" : "normal");
+      text.setAttribute("text-decoration", getSvgTextDecoration(textStyle));
       text.setAttribute("class", "node-text");
       text.setAttribute("data-text-id", label.id);
       text.setAttribute("dominant-baseline", "hanging");

@@ -1,4 +1,7 @@
-import { clamp } from "./utils.js";
+import {
+  clamp,
+  normalizeTextStyleFlags
+} from "./utils.js";
 import { normalizeLineType } from "./line/typeStore.js";
 
 const drawingVersion = 1;
@@ -109,6 +112,7 @@ function sanitizeNodes(rawNodes) {
     .map((node) => {
       const paramValues = {};
       const textValues = {};
+      const textStyleValues = {};
       if (node?.paramValues && typeof node.paramValues === "object") {
         Object.entries(node.paramValues).forEach(([key, value]) => {
           const paramKey = String(key || "").trim();
@@ -135,6 +139,17 @@ function sanitizeNodes(rawNodes) {
         });
       }
 
+      if (node?.textStyleValues && typeof node.textStyleValues === "object") {
+        Object.entries(node.textStyleValues).forEach(([key, value]) => {
+          const textKey = String(key || "").trim();
+          if (!textKey) {
+            return;
+          }
+
+          textStyleValues[textKey] = normalizeTextStyleFlags(value);
+        });
+      }
+
       const slot = String(node?.textPlacement?.slot || "").toLowerCase();
       const textPlacement = {
         slot: stationTextSlotSet.has(slot) ? slot : "s"
@@ -150,6 +165,7 @@ function sanitizeNodes(rawNodes) {
         stationTypeIndex: Number.isInteger(node?.stationTypeIndex) ? node.stationTypeIndex : 0,
         paramValues,
         textValues,
+        textStyleValues,
         textPlacement
       };
     })
@@ -193,7 +209,8 @@ function sanitizeLabels(rawLabels) {
       value: String(label?.value || "Text"),
       fontSize: clamp(Number(label?.fontSize) || 20, 8, 200),
       color: String(label?.color || "#23344d"),
-      fontFamily: String(label?.fontFamily || "Segoe UI")
+      fontFamily: String(label?.fontFamily || "Segoe UI"),
+      ...normalizeTextStyleFlags(label)
     }))
     .filter((label) => label.id.length > 0);
 }

@@ -8,12 +8,13 @@
 
 1. 入口与状态：`main.js`
 2. 事件处理：`event.js`
-3. 历史管理：`historyManager.js`
-4. 画布与 UI 渲染：`render.js`、`settingsRenderer.js`
-5. 文件序列化：`serialization.js`
-6. 线条子系统：`line/manager.js`、`line/typeStore.js`、`line/geometry.js`
-7. 图形子系统：`shape/manager.js`、`shape/utils.js`
-8. 基础设施：`dom.js`、`constants.js`、`utils.js`
+3. 导出子系统：`exports.js`
+4. 历史管理：`historyManager.js`
+5. 画布与 UI 渲染：`render.js`、`settingsRenderer.js`
+6. 文件序列化：`serialization.js`
+7. 线条子系统：`line/manager.js`、`line/typeStore.js`、`line/geometry.js`
+8. 图形子系统：`shape/manager.js`、`shape/utils.js`
+9. 基础设施：`dom.js`、`constants.js`、`utils.js`
 
 ## 文件职责
 
@@ -23,6 +24,13 @@
 - 负责初始化流程：加载菜单数据、创建各模块实例、绑定事件。
 - 负责实体层操作（新增/选择/删除站点、线、文本）和场景重绘调度。
 - 负责编排历史管理器与按需持久化快照。
+- 负责装配导出管理器（`exports.js`），并把导出动作注入给事件层。
+
+### `exports.js`
+- 导出功能集中模块。
+- 提供 `SVG` 直接导出（透明底）与 `PNG` 导出（缩放比例、透明背景开关）。
+- 负责 PNG 导出模态框的打开/关闭与确认导出逻辑。
+- 对导出的 SVG 节点执行清理（去除交互辅助属性和选中态类名）。
 
 ### `historyManager.js`
 - 撤销/重做的核心状态机。
@@ -31,7 +39,7 @@
 
 ### `event.js`
 - 统一处理输入事件。
-- 包含工具栏点击、画布鼠标、滚轮缩放、键盘删除、文件菜单（新建/保存/加载/撤销/重做）等事件绑定与回调。
+- 包含工具栏点击、画布鼠标、滚轮缩放、键盘删除、文件菜单（新建/保存/加载/导出/撤销/重做）等事件绑定与回调。
 - 只做“输入 -> 状态变更/调用动作”，不直接负责复杂渲染细节。
 - 通过注入的回调（如 `addLine`、`selectEntity`）与主流程解耦。
 - 键盘快捷键：`Ctrl+Z` 撤销，`Ctrl+Shift+Z` 重做（macOS 兼容 `Cmd`）。
@@ -104,10 +112,11 @@
 
 ## 依赖关系（简化）
 
-- `main.js` -> `event.js`、`historyManager.js`、`render.js`、`serialization.js`、`line/manager.js`、`line/typeStore.js`、`shape/manager.js`、`shape/utils.js`
+- `main.js` -> `event.js`、`exports.js`、`historyManager.js`、`render.js`、`serialization.js`、`line/manager.js`、`line/typeStore.js`、`shape/manager.js`、`shape/utils.js`
 - `render.js` -> `settingsRenderer.js`、`line/geometry.js`、`line/typeStore.js`、`shape/utils.js`
 - `settingsRenderer.js` -> `constants.js`、`utils.js`、`shape/utils.js`
 - `line/manager.js` -> `line/geometry.js`、`line/typeStore.js`、`utils.js`
+- `exports.js` -> `utils.js`
 - `event.js` -> `utils.js`
 
 ## 维护建议

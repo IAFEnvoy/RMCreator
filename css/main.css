@@ -502,6 +502,41 @@
   height: 18px;
 }
 
+.text-style-toolbar {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.text-style-btn {
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  padding: 0;
+}
+
+.text-style-btn:hover {
+  border-color: #9eb3d4;
+  background: #f5f9ff;
+}
+
+.text-style-btn.active {
+  border-color: #2f6de5;
+  background: #eaf2ff;
+}
+
+.text-style-btn img {
+  width: 14px;
+  height: 14px;
+  display: block;
+}
+
 .station-instance-text-panel {
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -513,26 +548,58 @@
 }
 
 .station-instance-text-title {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
-  color: #556a89;
+  color: #4d6282;
 }
 
-.station-instance-text-row {
+.station-instance-text-item {
   display: grid;
-  grid-template-columns: 92px 1fr;
-  gap: 8px;
-  align-items: center;
+  gap: 6px;
 }
 
-.station-instance-text-row label {
+.station-instance-text-label {
   margin: 0;
   font-size: 12px;
   color: var(--muted);
+  font-weight: 600;
+}
+
+.station-instance-text-item textarea,
+.station-instance-text-item input {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 13px;
+  background: #ffffff;
+  font-family: "Segoe UI", "PingFang SC", "Noto Sans SC", sans-serif;
+}
+
+.station-instance-text-item textarea {
+  min-height: 52px;
+  resize: vertical;
 }
 
 .station-instance-anchor-grid {
   margin-top: 2px;
+}
+
+.export-modal {
+  width: min(360px, calc(100% - 30px));
+  height: auto;
+  min-height: 0;
+}
+
+.export-modal-body {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+}
+
+.export-modal-actions {
+  margin-top: 2px;
+  justify-content: flex-end;
 }
 
 @media (max-width: 960px) {

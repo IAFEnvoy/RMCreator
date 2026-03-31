@@ -18,9 +18,14 @@ import {
 } from "./shape/utils.js";
 import { createRenderer } from "./render.js";
 import { createEventBinder } from "./event.js";
+import { createExportManager } from "./exports.js";
 import { parseDrawingJson, serializeDrawingToJson } from "./serialization.js";
 import { createMainClipboard } from "./clipboards.js";
-import { clamp, normalizeColor } from "./utils.js";
+import {
+  clamp,
+  normalizeColor,
+  normalizeTextStyleFlags
+} from "./utils.js";
 import { appSettingsStorageKey, drawingStorageKey, geometryLabelMap } from "./constants.js";
 import { createHistoryManager } from "./historyManager.js";
 
@@ -105,6 +110,7 @@ let defaultLineTypes = [];
 let lineManager = null;
 let shapeManager = null;
 let stationManager = null;
+const exportManager = createExportManager({ elements });
 
 const renderer = createRenderer({
   state,
@@ -188,6 +194,8 @@ const eventBinder = createEventBinder({
   deleteSelectedEntity,
   createNewDrawing,
   saveDrawing,
+  exportDrawingAsSvg: exportManager.exportDrawingAsSvg,
+  openPngExportModal: exportManager.openPngExportModal,
   loadDrawingFromFile,
   undo,
   redo,
@@ -221,6 +229,7 @@ async function init() {
   eventBinder.bindCanvas();
   eventBinder.bindKeyboard();
   eventBinder.bindFileMenu();
+  exportManager.bind();
   lineManager.bind();
   shapeManager.bind();
   stationManager.bind();
@@ -501,12 +510,20 @@ function applyDrawingData(drawing, {
     ...node,
     paramValues: node.paramValues && typeof node.paramValues === "object" ? { ...node.paramValues } : {},
     textValues: node.textValues && typeof node.textValues === "object" ? { ...node.textValues } : {},
+    textStyleValues: node.textStyleValues && typeof node.textStyleValues === "object"
+      ? Object.fromEntries(
+        Object.entries(node.textStyleValues).map(([key, style]) => [key, normalizeTextStyleFlags(style)])
+      )
+      : {},
     textPlacement: node.textPlacement && typeof node.textPlacement === "object"
       ? { ...node.textPlacement }
       : { slot: "s" }
   }));
   state.edges = nextEdges;
-  state.labels = drawing.labels.map((label) => ({ ...label }));
+  state.labels = drawing.labels.map((label) => ({
+    ...label,
+    ...normalizeTextStyleFlags(label)
+  }));
   state.shapes = drawing.shapes.map((shape) => ({
     ...shape,
     paramValues: shape.paramValues && typeof shape.paramValues === "object" ? { ...shape.paramValues } : {}
@@ -884,6 +901,7 @@ function addStation(x, y, typeIndex) {
     stationTypeIndex: typeIndex,
     paramValues: resolveStationParamDefaultsByTypeIndex(typeIndex),
     textValues: resolveStationTextDefaultsByTypeIndex(typeIndex),
+    textStyleValues: resolveStationTextStyleDefaultsByTypeIndex(typeIndex),
     textPlacement: resolveStationTextPlacementByTypeIndex(typeIndex)
   };
 
@@ -927,7 +945,11 @@ function addText(x, y) {
     value: "Text",
     fontSize: 20,
     color: "#23344d",
-    fontFamily: "Segoe UI"
+    fontFamily: "Segoe UI",
+    bold: false,
+    italic: false,
+    underline: false,
+    strikethrough: false
   };
 
   state.labels.push(label);
@@ -1136,6 +1158,7 @@ function applyStationType(station, typeIndex) {
   station.stationTypeIndex = typeIndex;
   station.paramValues = resolveStationParamDefaultsByTypeIndex(typeIndex);
   station.textValues = resolveStationTextDefaultsByTypeIndex(typeIndex);
+  station.textStyleValues = resolveStationTextStyleDefaultsByTypeIndex(typeIndex);
   station.textPlacement = resolveStationTextPlacementByTypeIndex(typeIndex);
 }
 
@@ -1154,6 +1177,26 @@ function resolveStationTextDefaultsByTypeIndex(typeIndex) {
     }
 
     out[cardId] = String(card?.defaultValue || "");
+  });
+
+  return out;
+}
+
+function resolveStationTextStyleDefaultsByTypeIndex(typeIndex) {
+  const preset = getStationPresetByTypeIndex(typeIndex);
+  if (!preset) {
+    return {};
+  }
+
+  const out = {};
+  const cards = Array.isArray(preset.textCards) ? preset.textCards : [];
+  cards.forEach((card) => {
+    const cardId = String(card?.id || "").trim();
+    if (!cardId) {
+      return;
+    }
+
+    out[cardId] = normalizeTextStyleFlags(card);
   });
 
   return out;

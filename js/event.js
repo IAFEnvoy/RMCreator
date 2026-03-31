@@ -16,6 +16,8 @@ export function createEventBinder({
   deleteSelectedEntity,
   createNewDrawing,
   saveDrawing,
+  exportDrawingAsSvg,
+  openPngExportModal,
   loadDrawingFromFile,
   undo,
   redo,
@@ -44,6 +46,8 @@ export function createEventBinder({
     fileNewBtn,
     fileSaveBtn,
     fileLoadBtn,
+    fileExportSvgBtn,
+    fileExportPngBtn,
     fileUndoBtn,
     fileRedoBtn,
     fileCutBtn,
@@ -312,6 +316,20 @@ export function createEventBinder({
       closeAllMenus();
       saveDrawing();
     });
+
+    if (fileExportSvgBtn) {
+      fileExportSvgBtn.addEventListener("click", () => {
+        closeAllMenus();
+        exportDrawingAsSvg?.();
+      });
+    }
+
+    if (fileExportPngBtn) {
+      fileExportPngBtn.addEventListener("click", () => {
+        closeAllMenus();
+        openPngExportModal?.();
+      });
+    }
 
     fileLoadBtn.addEventListener("click", () => {
       closeAllMenus();

@@ -401,6 +401,24 @@
   gap: 8px;
 }
 
+.line-manager-modal.export-modal {
+  width: min(360px, calc(100% - 30px));
+  height: auto;
+  min-height: 0;
+  max-height: calc(100% - 30px);
+}
+
+.line-manager-modal.export-modal .export-modal-body {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+}
+
+.line-manager-modal.export-modal .export-modal-actions {
+  margin-top: 2px;
+  justify-content: flex-end;
+}
+
 @media (max-width: 960px) {
   .modal-body {
     grid-template-columns: 1fr;
