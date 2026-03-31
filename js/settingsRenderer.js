@@ -7,9 +7,15 @@ import {
 } from "./utils.js";
 import {
   buildRenderableShapeSvg,
+  normalizeShapeParameterDefault,
+  normalizeShapeParameters,
   resolveShapeParametersWithValues,
   shapeParameterTypeDefinitions
 } from "./shape/utils.js";
+import {
+  normalizeStationTextCards,
+  normalizeTextSlot
+} from "./station/textUtils.js";
 
 export function createSettingsRenderer({
   state,
@@ -111,6 +117,99 @@ export function createSettingsRenderer({
       .map((type, index) => `<option value="${index}" ${index === currentTypeIndex ? "selected" : ""}>${escapeHtml(type.name)}</option>`)
       .join("");
 
+    const stationPreset = getStationPresetByTypeIndex(currentTypeIndex);
+    const stationTextCards = normalizeStationTextCards(stationPreset?.textCards);
+    ensureStationTextValues(station, stationTextCards);
+    ensureStationTextPlacement(station, stationPreset);
+    const activeTextSlot = normalizeTextSlot(station.textPlacement?.slot);
+
+    const stationParams = buildStationParameterDescriptors(station);
+    ensureStationParameterValues(station, stationParams);
+
+    const textFieldsHtml = stationTextCards.length
+      ? `
+        <div class="station-instance-text-panel">
+          <div class="station-instance-text-title">站点文本</div>
+          ${stationTextCards.map((card, index) => {
+            const cardId = escapeHtml(String(card.id || ""));
+            const controlId = `stationTextValue-${escapeHtml(station.id)}-${cardId}`;
+            const label = escapeHtml(String(card.label || `文本 ${index + 1}`));
+            const value = escapeHtml(String(station.textValues?.[card.id] ?? card.defaultValue ?? ""));
+            return `
+              <div class="station-instance-text-row">
+                <label for="${controlId}">${label}</label>
+                <input id="${controlId}" data-station-text-card-id="${cardId}" type="text" value="${value}" />
+              </div>
+            `;
+          }).join("")}
+        </div>
+      `
+      : "<div class=\"kv\">当前车站类型没有可编辑文本。</div>";
+
+    const anchorGridHtml = `
+      <div class="field">
+        <label>文本锚点</label>
+        <div class="station-position-grid station-instance-anchor-grid" role="group" aria-label="文本锚点">
+          <button type="button" data-station-text-slot="nw" class="${activeTextSlot === "nw" ? "active" : ""}">↖</button>
+          <button type="button" data-station-text-slot="n" class="${activeTextSlot === "n" ? "active" : ""}">↑</button>
+          <button type="button" data-station-text-slot="ne" class="${activeTextSlot === "ne" ? "active" : ""}">↗</button>
+          <button type="button" data-station-text-slot="w" class="${activeTextSlot === "w" ? "active" : ""}">←</button>
+          <button type="button" class="disabled" disabled>•</button>
+          <button type="button" data-station-text-slot="e" class="${activeTextSlot === "e" ? "active" : ""}">→</button>
+          <button type="button" data-station-text-slot="sw" class="${activeTextSlot === "sw" ? "active" : ""}">↙</button>
+          <button type="button" data-station-text-slot="s" class="${activeTextSlot === "s" ? "active" : ""}">↓</button>
+          <button type="button" data-station-text-slot="se" class="${activeTextSlot === "se" ? "active" : ""}">↘</button>
+        </div>
+      </div>
+    `;
+
+    const paramFieldsHtml = stationParams
+      .filter((param) => !param.locked)
+      .map((param) => {
+        const controlId = `stationParamValue-${escapeHtml(station.id)}-${escapeHtml(param.id)}`;
+        const label = escapeHtml(param.label || shapeParameterTypeDefinitions[param.type]?.label || "参数");
+        const typeLabel = escapeHtml(shapeParameterTypeDefinitions[param.type]?.label || "参数");
+        const value = normalizeShapeParameterDefault(param.type, station.paramValues?.[param.id]);
+
+        if (param.type === "color") {
+          return `
+            <div class="field">
+              <label for="${controlId}">${label}（${typeLabel}）</label>
+              <input id="${controlId}" data-station-param-id="${escapeHtml(param.id)}" data-station-param-type="${escapeHtml(param.type)}" type="color" value="${escapeHtml(String(value || "#2f5d9d"))}" />
+            </div>
+          `;
+        }
+
+        if (param.type === "number") {
+          return `
+            <div class="field">
+              <label for="${controlId}">${label}（${typeLabel}）</label>
+              <input id="${controlId}" data-station-param-id="${escapeHtml(param.id)}" data-station-param-type="${escapeHtml(param.type)}" type="number" step="0.1" value="${Number(value) || 0}" />
+            </div>
+          `;
+        }
+
+        if (param.type === "checkbox") {
+          return `
+            <div class="field field-toggle">
+              <label for="${controlId}">${label}（${typeLabel}）</label>
+              <label class="toggle-switch" for="${controlId}">
+                <input id="${controlId}" data-station-param-id="${escapeHtml(param.id)}" data-station-param-type="${escapeHtml(param.type)}" class="toggle-checkbox" type="checkbox" ${value ? "checked" : ""} />
+                <span class="toggle-slider" aria-hidden="true"></span>
+              </label>
+            </div>
+          `;
+        }
+
+        return `
+          <div class="field">
+            <label for="${controlId}">${label}（${typeLabel}）</label>
+            <input id="${controlId}" data-station-param-id="${escapeHtml(param.id)}" data-station-param-type="${escapeHtml(param.type)}" type="text" value="${escapeHtml(String(value || ""))}" />
+          </div>
+        `;
+      })
+      .join("");
+
     settingsBody.innerHTML = `
       ${summaryHtml}
       <div class="kv">组件类型: 车站</div>
@@ -118,6 +217,9 @@ export function createSettingsRenderer({
         <label for="stationTypeSelect">车站类型</label>
         <select id="stationTypeSelect">${stationTypeOptions}</select>
       </div>
+      ${textFieldsHtml}
+      ${paramFieldsHtml || '<div class="kv">当前车站类型没有可调整参数（已锁定参数不会显示）。</div>'}
+      ${anchorGridHtml}
       <div class="kv">再次按住并拖动该车站，可调整位置。</div>
     `;
 
@@ -128,6 +230,71 @@ export function createSettingsRenderer({
       renderStations();
       renderSettings();
       onStateChanged?.();
+    });
+
+    settingsBody.querySelectorAll("[data-station-text-card-id]").forEach((inputEl) => {
+      const cardId = inputEl.getAttribute("data-station-text-card-id");
+      if (!cardId) {
+        return;
+      }
+
+      const apply = () => {
+        if (!station.textValues || typeof station.textValues !== "object") {
+          station.textValues = {};
+        }
+
+        station.textValues[cardId] = String(inputEl.value || "");
+        renderStations();
+        onStateChanged?.({ coalesceKey: "station-text-values" });
+      };
+
+      inputEl.addEventListener("input", apply);
+      inputEl.addEventListener("change", apply);
+    });
+
+    settingsBody.querySelectorAll("[data-station-text-slot]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const slot = normalizeTextSlot(button.getAttribute("data-station-text-slot"));
+        if (!station.textPlacement || typeof station.textPlacement !== "object") {
+          station.textPlacement = { slot };
+        } else {
+          station.textPlacement.slot = slot;
+        }
+
+        renderStations();
+        renderSettings();
+        onStateChanged?.({ coalesceKey: "station-text-slot" });
+      });
+    });
+
+    settingsBody.querySelectorAll("[data-station-param-id]").forEach((inputEl) => {
+      const paramId = inputEl.getAttribute("data-station-param-id");
+      const paramType = inputEl.getAttribute("data-station-param-type") || "text";
+      if (!paramId) {
+        return;
+      }
+
+      const apply = () => {
+        if (!station.paramValues || typeof station.paramValues !== "object") {
+          station.paramValues = {};
+        }
+
+        let nextValue;
+        if (paramType === "checkbox") {
+          nextValue = Boolean(inputEl.checked);
+        } else if (paramType === "number") {
+          nextValue = Number(inputEl.value) || 0;
+        } else {
+          nextValue = inputEl.value;
+        }
+
+        station.paramValues[paramId] = normalizeShapeParameterDefault(paramType, nextValue);
+        renderStations();
+        onStateChanged?.({ coalesceKey: "station-params" });
+      };
+
+      inputEl.addEventListener("input", apply);
+      inputEl.addEventListener("change", apply);
     });
   }
 
@@ -659,6 +826,145 @@ export function createSettingsRenderer({
       inputEl.addEventListener("input", apply);
       inputEl.addEventListener("change", apply);
     });
+  }
+
+  function getStationPresetByTypeIndex(typeIndex) {
+    const sourceType = state.stationTypes[typeIndex];
+    if (!sourceType) {
+      return null;
+    }
+
+    const presetId = sourceType.stationPresetId ? String(sourceType.stationPresetId) : "";
+    if (presetId) {
+      const byId = state.stationLibrary.find((item) => item.id === presetId);
+      if (byId) {
+        return byId;
+      }
+    }
+
+    if (typeIndex >= 0 && typeIndex < state.stationLibrary.length) {
+      return state.stationLibrary[typeIndex] || null;
+    }
+
+    return null;
+  }
+
+  function buildStationParameterDescriptors(station) {
+    const typeIndex = getStationTypeIndexByStation(station);
+    const preset = getStationPresetByTypeIndex(typeIndex);
+    if (!preset) {
+      return [];
+    }
+
+    const descriptors = [];
+    const seen = new Set();
+
+    normalizeShapeParameters(preset.params).forEach((param) => {
+      if (seen.has(param.id)) {
+        return;
+      }
+
+      seen.add(param.id);
+      descriptors.push({
+        id: param.id,
+        type: param.type,
+        label: param.label,
+        defaultValue: normalizeShapeParameterDefault(param.type, param.defaultValue),
+        locked: false
+      });
+    });
+
+    const shape = state.shapeLibrary.find((item) => item.id === preset.shapeId);
+    const shapeParams = normalizeShapeParameters(shape?.parameters);
+    const shapeSettings = preset.shapeParamSettings && typeof preset.shapeParamSettings === "object"
+      ? preset.shapeParamSettings
+      : {};
+
+    shapeParams.forEach((param) => {
+      if (seen.has(param.id)) {
+        return;
+      }
+
+      seen.add(param.id);
+      const setting = shapeSettings[param.id];
+      const mode = setting?.mode === "default" || setting?.mode === "locked"
+        ? setting.mode
+        : "inherit";
+      const fallback = mode === "inherit" ? param.defaultValue : setting?.value;
+
+      descriptors.push({
+        id: param.id,
+        type: param.type,
+        label: param.label,
+        defaultValue: normalizeShapeParameterDefault(param.type, fallback),
+        locked: mode === "locked"
+      });
+    });
+
+    return descriptors;
+  }
+
+  function ensureStationParameterValues(station, descriptors) {
+    if (!station || typeof station !== "object") {
+      return;
+    }
+
+    if (!station.paramValues || typeof station.paramValues !== "object") {
+      station.paramValues = {};
+    }
+
+    descriptors.forEach((descriptor) => {
+      if (descriptor.locked) {
+        station.paramValues[descriptor.id] = descriptor.defaultValue;
+        return;
+      }
+
+      if (Object.prototype.hasOwnProperty.call(station.paramValues, descriptor.id)) {
+        station.paramValues[descriptor.id] = normalizeShapeParameterDefault(
+          descriptor.type,
+          station.paramValues[descriptor.id]
+        );
+        return;
+      }
+
+      station.paramValues[descriptor.id] = descriptor.defaultValue;
+    });
+  }
+
+  function ensureStationTextValues(station, cards) {
+    if (!station || typeof station !== "object") {
+      return;
+    }
+
+    const source = station.textValues && typeof station.textValues === "object"
+      ? station.textValues
+      : {};
+    const normalized = {};
+
+    (Array.isArray(cards) ? cards : []).forEach((card) => {
+      const id = String(card?.id || "").trim();
+      if (!id) {
+        return;
+      }
+
+      if (Object.prototype.hasOwnProperty.call(source, id)) {
+        normalized[id] = String(source[id] ?? "");
+      } else {
+        normalized[id] = String(card?.defaultValue || "");
+      }
+    });
+
+    station.textValues = normalized;
+  }
+
+  function ensureStationTextPlacement(station, preset) {
+    if (!station || typeof station !== "object") {
+      return;
+    }
+
+    station.textPlacement = {
+      slot: normalizeTextSlot(station?.textPlacement?.slot || preset?.textPlacement?.slot)
+    };
   }
 }
 

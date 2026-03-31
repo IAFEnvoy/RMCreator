@@ -9,6 +9,7 @@
   <link rel="stylesheet" href="css/main.css" />
   <link rel="stylesheet" href="css/modal-line-manager.css" />
   <link rel="stylesheet" href="css/modal-shape-manager.css" />
+  <link rel="stylesheet" href="css/modal-station-manager.css" />
 </head>
 
 <body>
@@ -87,7 +88,16 @@
           <span>设置</span>
         </button>
       </div>
-      <div class="zoom-indicator" id="zoomIndicator">100%</div>
+      <div class="zoom-indicator-wrap">
+        <button class="zoom-indicator" id="zoomIndicator" type="button" aria-haspopup="true"
+          aria-expanded="false">100%</button>
+        <div class="zoom-menu" id="zoomMenu" hidden>
+          <button class="zoom-menu-item" type="button" data-zoom="0.25">25%</button>
+          <button class="zoom-menu-item" type="button" data-zoom="0.5">50%</button>
+          <button class="zoom-menu-item" type="button" data-zoom="1">100%</button>
+          <button class="zoom-menu-item" type="button" data-zoom="2">200%</button>
+        </div>
+      </div>
     </header>
 
     <aside class="submenu floating-panel" id="submenuPanel">
@@ -191,6 +201,8 @@
               <button class="btn-ghost" id="shapeResetViewBtn" type="button">复位视图</button>
               <button class="btn-ghost" id="shapeImportSvgBtn" type="button">导入SVG</button>
               <input id="shapeImportSvgInput" type="file" accept="image/svg+xml,.svg" hidden />
+              <button class="btn-ghost" id="shapeUndoBtn" type="button">撤回 (Ctrl+Z)</button>
+              <button class="btn-ghost" id="shapeRedoBtn" type="button">重做 (Ctrl+Shift+Z)</button>
             </div>
             <div class="shape-editor-canvas-wrap" id="shapeEditorCanvasWrap">
               <svg id="shapeEditorCanvas" class="shape-editor-canvas" viewBox="0 0 240 240"
@@ -217,6 +229,121 @@
                 <button class="btn-main" id="shapeAddParamBtn" type="button">添加参数</button>
               </div>
               <div class="shape-param-list" id="shapeParamList"></div>
+            </section>
+          </aside>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-backdrop" id="stationManagerModal" hidden>
+      <div class="line-manager-modal station-manager-modal" role="dialog" aria-modal="true" aria-label="车站管理器">
+        <div class="modal-head">
+          <h2>车站管理器</h2>
+          <button class="btn-ghost" id="closeStationManagerBtn" type="button" aria-label="关闭">
+            <img src="/img/icon-close.svg" alt="关闭" />
+          </button>
+        </div>
+        <div class="modal-body station-manager-body">
+          <section class="line-library station-library-panel">
+            <div class="line-library-head">
+              <span>车站库</span>
+              <button class="btn-main" id="newStationPresetBtn" type="button">新建</button>
+            </div>
+            <div class="line-library-list" id="stationLibraryList"></div>
+          </section>
+
+          <section class="station-editor-panel">
+            <div class="field">
+              <label for="stationPresetNameInput">预设名称</label>
+              <input id="stationPresetNameInput" type="text" placeholder="输入车站预设名称" />
+            </div>
+            <div class="station-editor-toolbar">
+              <div class="field">
+                <label for="stationShapeSearchInput">图形搜索</label>
+                <input id="stationShapeSearchInput" type="search" placeholder="按名称筛选图形" />
+              </div>
+              <div class="field">
+                <label for="stationShapeSelect">图形选择</label>
+                <select id="stationShapeSelect"></select>
+              </div>
+            </div>
+            <section class="station-text-placement" id="stationTextPlacementPanel">
+              <div class="line-library-head station-preview-head">
+                <span id="stationPlacementTitle">文字位置</span>
+              </div>
+              <div class="station-position-grid" id="stationPositionGrid" role="group" aria-label="文字位置">
+                <button type="button" data-slot="nw">↖</button>
+                <button type="button" data-slot="n">↑</button>
+                <button type="button" data-slot="ne">↗</button>
+                <button type="button" data-slot="w">←</button>
+                <button type="button" class="disabled" disabled>•</button>
+                <button type="button" data-slot="e">→</button>
+                <button type="button" data-slot="sw">↙</button>
+                <button type="button" data-slot="s">↓</button>
+                <button type="button" data-slot="se">↘</button>
+              </div>
+              <div class="station-distance-controls">
+                <label for="stationTextDistanceMode">文字距离</label>
+                <select id="stationTextDistanceMode">
+                  <option value="value">固定值</option>
+                  <option value="param">参数引用</option>
+                </select>
+                <input id="stationTextDistanceValue" type="number" step="0.1" min="0" value="18" />
+                <select id="stationTextDistanceParamSelect"></select>
+              </div>
+              <div class="station-distance-controls station-line-gap-controls">
+                <label for="stationTextLineGap">文本间距</label>
+                <input id="stationTextLineGap" type="number" step="0.1" value="4" />
+              </div>
+            </section>
+            <div class="field">
+              <div class="line-library-head station-preview-head">
+                <span>车站浏览</span>
+                <button class="btn-ghost" id="stationPreviewResetBtn" type="button">重置视图</button>
+              </div>
+              <div class="station-preview" id="stationPreview">
+                <div class="station-preview-canvas-wrap" id="stationPreviewCanvasWrap">
+                  <svg id="stationPreviewCanvas" class="station-preview-canvas" viewBox="0 0 240 240"
+                    xmlns="http://www.w3.org/2000/svg"></svg>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <aside class="station-side-panel shape-side-panel">
+            <div class="shape-side-tabs">
+              <button class="shape-tab-btn" id="stationTabTextBtn" type="button">文本卡片</button>
+              <button class="shape-tab-btn" id="stationTabParamsBtn" type="button">参数区</button>
+            </div>
+
+            <section class="shape-tab-panel" id="stationTextPanel">
+              <div class="shape-param-actions station-text-card-actions">
+                <button class="btn-main" id="stationAddTextCardBtn" type="button">新建文本</button>
+              </div>
+              <div class="station-text-card-list shape-param-list" id="stationTextCardList"></div>
+            </section>
+
+            <section class="shape-tab-panel" id="stationParamsPanel" hidden>
+              <div class="station-param-sections">
+                <section class="station-param-section">
+                  <div class="shape-prop-title">自定义参数区</div>
+                  <div class="shape-param-actions">
+                    <select id="stationParamTypeSelect" aria-label="自定义参数类型">
+                      <option value="color">颜色参数</option>
+                      <option value="text">文本参数</option>
+                      <option value="number">数字参数</option>
+                      <option value="checkbox">勾选参数</option>
+                    </select>
+                    <button class="btn-main" id="stationAddParamBtn" type="button">添加参数</button>
+                  </div>
+                  <div class="shape-param-list" id="stationCustomParamList"></div>
+                </section>
+
+                <section class="station-param-section">
+                  <div class="shape-prop-title">已有参数区</div>
+                  <div class="station-existing-param-list" id="stationExistingParamList"></div>
+                </section>
+              </div>
             </section>
           </aside>
         </div>

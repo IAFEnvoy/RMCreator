@@ -11,6 +11,11 @@ import { resolveSegmentColor } from "./line/typeStore.js";
 import { clamp, normalizeColor } from "./utils.js";
 import { createSettingsRenderer } from "./settingsRenderer.js";
 import { buildRenderableShapeSvg } from "./shape/utils.js";
+import {
+  appendStationTexts,
+  buildShapeParamValuesFromRuntime,
+  buildStationRuntimeParamMap
+} from "./station/textUtils.js";
 
 export function createRenderer({
   state,
@@ -19,6 +24,7 @@ export function createRenderer({
   getColorListDefault,
   openLineManager,
   openShapeManager,
+  openStationManager,
   onAppSettingsChanged,
   applyStationType,
   getStationTypeIndexByStation,
@@ -55,6 +61,18 @@ export function createRenderer({
 
     if (state.activeTool === "station") {
       submenuTitle.textContent = "车站样式";
+
+      const managerBtn = document.createElement("button");
+      managerBtn.className = "menu-item menu-item-action";
+      managerBtn.textContent = "车站管理器";
+      managerBtn.addEventListener("click", () => openStationManager?.());
+      submenuItems.appendChild(managerBtn);
+
+      const stationTypeTitle = document.createElement("div");
+      stationTypeTitle.className = "menu-group-title";
+      stationTypeTitle.textContent = "车站类型";
+      submenuItems.appendChild(stationTypeTitle);
+
       state.stationTypes.forEach((item, index) => {
         const button = document.createElement("button");
         button.className = "menu-item";
@@ -338,8 +356,32 @@ export function createRenderer({
 
       const selectionTitle = document.createElement("div");
       selectionTitle.className = "menu-group-title";
-      selectionTitle.textContent = "选择";
+      selectionTitle.textContent = "显示";
       settingsCard.appendChild(selectionTitle);
+
+      const gridRow = document.createElement("div");
+      gridRow.className = "submenu-settings-row";
+      const gridText = document.createElement("span");
+      gridText.textContent = "显示网格";
+      const gridSwitch = document.createElement("label");
+      gridSwitch.className = "toggle-switch";
+      gridSwitch.setAttribute("for", "showGridToggle");
+      const gridInput = document.createElement("input");
+      gridInput.id = "showGridToggle";
+      gridInput.className = "toggle-checkbox";
+      gridInput.type = "checkbox";
+      gridInput.checked = state.appSettings?.showGrid !== false;
+      const gridSlider = document.createElement("span");
+      gridSlider.className = "toggle-slider";
+      gridSlider.setAttribute("aria-hidden", "true");
+      gridInput.addEventListener("change", () => {
+        onAppSettingsChanged?.({ showGrid: gridInput.checked });
+      });
+      gridSwitch.appendChild(gridInput);
+      gridSwitch.appendChild(gridSlider);
+      gridRow.appendChild(gridText);
+      gridRow.appendChild(gridSwitch);
+      settingsCard.appendChild(gridRow);
 
       const glowRow = document.createElement("label");
       glowRow.className = "submenu-settings-row";
@@ -458,6 +500,12 @@ export function createRenderer({
       const group = document.createElementNS(svgNs, "g");
       group.setAttribute("data-station-id", station.id);
 
+      const renderedByShape = renderStationShape(group, station);
+      if (renderedByShape) {
+        stationLayer.appendChild(group);
+        return;
+      }
+
       const base = document.createElementNS(svgNs, "circle");
       base.setAttribute("cx", String(station.x));
       base.setAttribute("cy", String(station.y));
@@ -482,7 +530,109 @@ export function createRenderer({
         group.appendChild(inner);
       }
 
+      renderStationTextsFallback(group, station);
+
       stationLayer.appendChild(group);
+    });
+  }
+
+  function renderStationShape(group, station) {
+    const preset = getStationPresetByStation(station);
+    if (!preset?.shapeId) {
+      return false;
+    }
+
+    const shape = state.shapeLibrary.find((item) => item.id === preset.shapeId);
+    if (!shape) {
+      return false;
+    }
+
+    const runtimeParams = buildStationRuntimeParamMap({
+      preset,
+      shape,
+      stationParamValues: station.paramValues
+    });
+    const resolvedSvg = buildRenderableShapeSvg(shape, buildShapeParamValuesFromRuntime(shape, runtimeParams));
+    const parsed = parseShapeSvgContent(resolvedSvg);
+    if (!parsed || !parsed.nodes.length) {
+      return false;
+    }
+
+    const shapeRenderScale = 0.25;
+    const cx = parsed.minX + parsed.width / 2;
+    const cy = parsed.minY + parsed.height / 2;
+
+    group.setAttribute("transform", `translate(${Number(station.x) || 0} ${Number(station.y) || 0})`);
+
+    if (isSelected("station", station.id)) {
+      group.classList.add("selected-shape");
+    }
+
+    const shapeGroup = document.createElementNS(svgNs, "g");
+    shapeGroup.setAttribute(
+      "transform",
+      `scale(${shapeRenderScale}) translate(${-cx} ${-cy})`
+    );
+    parsed.nodes.forEach((node) => shapeGroup.appendChild(node));
+    group.appendChild(shapeGroup);
+
+    appendStationTexts({
+      container: group,
+      preset,
+      runtimeParamMap: runtimeParams,
+      centerX: 0,
+      centerY: 0,
+      pointerEvents: "none",
+      textValueMap: station.textValues,
+      placementOverride: station.textPlacement
+    });
+    return true;
+  }
+
+  function getStationPresetByStation(station) {
+    const sourceType = Number.isInteger(station?.stationTypeIndex)
+      ? state.stationTypes[station.stationTypeIndex]
+      : null;
+    if (!sourceType) {
+      return null;
+    }
+
+    const presetId = sourceType.stationPresetId ? String(sourceType.stationPresetId) : "";
+    if (presetId) {
+      const byId = state.stationLibrary.find((item) => item.id === presetId);
+      if (byId) {
+        return byId;
+      }
+    }
+
+    if (station.stationTypeIndex >= 0 && station.stationTypeIndex < state.stationLibrary.length) {
+      return state.stationLibrary[station.stationTypeIndex] || null;
+    }
+
+    return null;
+  }
+
+  function renderStationTextsFallback(group, station) {
+    const preset = getStationPresetByStation(station);
+    if (!preset) {
+      return;
+    }
+
+    const runtimeParams = buildStationRuntimeParamMap({
+      preset,
+      shape: null,
+      stationParamValues: station.paramValues
+    });
+
+    appendStationTexts({
+      container: group,
+      preset,
+      runtimeParamMap: runtimeParams,
+      centerX: Number(station.x) || 0,
+      centerY: Number(station.y) || 0,
+      pointerEvents: "none",
+      textValueMap: station.textValues,
+      placementOverride: station.textPlacement
     });
   }
 

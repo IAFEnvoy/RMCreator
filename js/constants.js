@@ -1,5 +1,6 @@
 export const lineStorageKey = "rmcreator.customLineTypes.v1";
 export const shapeStorageKey = "rmcreator.shapeLibrary.v1";
+export const stationStorageKey = "rmcreator.stationLibrary.v1";
 export const drawingStorageKey = "rmcreator.drawing.v1";
 export const appSettingsStorageKey = "rmcreator.appSettings.v1";
 

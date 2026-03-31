@@ -2,6 +2,7 @@ import { clamp } from "./utils.js";
 import { normalizeLineType } from "./line/typeStore.js";
 
 const drawingVersion = 1;
+const stationTextSlotSet = new Set(["nw", "n", "ne", "w", "e", "sw", "s", "se"]);
 
 export function serializeDrawing(state) {
   return {
@@ -105,15 +106,53 @@ function sanitizeNodes(rawNodes) {
   }
 
   return rawNodes
-    .map((node) => ({
-      id: String(node?.id || "").trim(),
-      x: Number(node?.x) || 0,
-      y: Number(node?.y) || 0,
-      name: String(node?.name || "车站"),
-      radius: clamp(Number(node?.radius) || 10, 2, 80),
-      oval: Boolean(node?.oval),
-      stationTypeIndex: Number.isInteger(node?.stationTypeIndex) ? node.stationTypeIndex : 0
-    }))
+    .map((node) => {
+      const paramValues = {};
+      const textValues = {};
+      if (node?.paramValues && typeof node.paramValues === "object") {
+        Object.entries(node.paramValues).forEach(([key, value]) => {
+          const paramKey = String(key || "").trim();
+          if (!paramKey) {
+            return;
+          }
+
+          if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+            paramValues[paramKey] = value;
+          }
+        });
+      }
+
+      if (node?.textValues && typeof node.textValues === "object") {
+        Object.entries(node.textValues).forEach(([key, value]) => {
+          const textKey = String(key || "").trim();
+          if (!textKey) {
+            return;
+          }
+
+          if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+            textValues[textKey] = String(value);
+          }
+        });
+      }
+
+      const slot = String(node?.textPlacement?.slot || "").toLowerCase();
+      const textPlacement = {
+        slot: stationTextSlotSet.has(slot) ? slot : "s"
+      };
+
+      return {
+        id: String(node?.id || "").trim(),
+        x: Number(node?.x) || 0,
+        y: Number(node?.y) || 0,
+        name: String(node?.name || "车站"),
+        radius: clamp(Number(node?.radius) || 10, 2, 80),
+        oval: Boolean(node?.oval),
+        stationTypeIndex: Number.isInteger(node?.stationTypeIndex) ? node.stationTypeIndex : 0,
+        paramValues,
+        textValues,
+        textPlacement
+      };
+    })
     .filter((node) => node.id.length > 0);
 }
 

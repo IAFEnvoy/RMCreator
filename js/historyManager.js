@@ -106,6 +106,8 @@ export function createHistoryManager({
     commit,
     undo,
     redo,
-    isApplying: () => state.isApplying
+    isApplying: () => state.isApplying,
+    canUndo: () => state.undoStack.length > 0,
+    canRedo: () => state.redoStack.length > 0
   };
 }

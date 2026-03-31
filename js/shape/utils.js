@@ -63,6 +63,8 @@ export function createPrimitiveElement(type, index) {
       cx: 120 + shift * 0.4,
       cy: 120 - shift * 0.35,
       r: 42,
+      radiusX: 42,
+      radiusY: 42,
       fill: "none",
       stroke: "#2f5d9d",
       strokeWidth: 6,
@@ -92,6 +94,8 @@ export function createPrimitiveElement(type, index) {
       cx: 120,
       cy: 120,
       r: 54,
+      radiusX: 54,
+      radiusY: 54,
       fill: "none",
       stroke: "#2f5d9d",
       strokeWidth: 6,
@@ -105,6 +109,8 @@ export function createPrimitiveElement(type, index) {
       cx: 120,
       cy: 120,
       r: 54,
+      radiusX: 54,
+      radiusY: 54,
       fill: "none",
       stroke: "#2f5d9d",
       strokeWidth: 6,
@@ -325,11 +331,16 @@ export function normalizePrimitive(raw) {
   }
 
   if (type === "circle") {
+    const baseR = normalizeNumber(raw.r, 42, 1, 400);
+    const radiusX = normalizeNumber(raw.radiusX, baseR, 1, 400);
+    const radiusY = normalizeNumber(raw.radiusY, baseR, 1, 400);
     return {
       type,
       cx: toNumber(raw.cx, 120),
       cy: toNumber(raw.cy, 120),
-      r: normalizeNumber(raw.r, 42, 1, 400),
+      r: baseR,
+      radiusX,
+      radiusY,
       fill: safeFill(raw.fill),
       stroke: safeColor(raw.stroke),
       strokeWidth: normalizeNumber(raw.strokeWidth, 6, 0.1, 100),
@@ -359,11 +370,16 @@ export function normalizePrimitive(raw) {
   }
 
   if (type === "hexagon" || type === "octagon") {
+    const baseR = normalizeNumber(raw.r, 52, 1, 600);
+    const radiusX = normalizeNumber(raw.radiusX, baseR, 1, 600);
+    const radiusY = normalizeNumber(raw.radiusY, baseR, 1, 600);
     return {
       type,
       cx: toNumber(raw.cx, 120),
       cy: toNumber(raw.cy, 120),
-      r: normalizeNumber(raw.r, 52, 1, 600),
+      r: baseR,
+      radiusX,
+      radiusY,
       fill: safeFill(raw.fill),
       stroke: safeColor(raw.stroke),
       strokeWidth: normalizeNumber(raw.strokeWidth, 6, 0.1, 100),
@@ -429,15 +445,29 @@ export function createPrimitiveNode(primitive) {
   }
 
   if (type === "circle") {
-    const circle = document.createElementNS(svgNs, "circle");
-    circle.setAttribute("cx", String(primitive.cx));
-    circle.setAttribute("cy", String(primitive.cy));
-    circle.setAttribute("r", String(primitive.r));
-    circle.setAttribute("fill", safeFill(primitive.fill));
-    circle.setAttribute("stroke", safeColor(primitive.stroke));
-    circle.setAttribute("stroke-width", String(primitive.strokeWidth));
-    setRotationTransform(circle, primitive.rotation, primitive.cx, primitive.cy);
-    return circle;
+    const { radiusX, radiusY } = getPrimitiveRadii(primitive, 42);
+    if (Math.abs(radiusX - radiusY) < 1e-6) {
+      const circle = document.createElementNS(svgNs, "circle");
+      circle.setAttribute("cx", String(primitive.cx));
+      circle.setAttribute("cy", String(primitive.cy));
+      circle.setAttribute("r", String(radiusX));
+      circle.setAttribute("fill", safeFill(primitive.fill));
+      circle.setAttribute("stroke", safeColor(primitive.stroke));
+      circle.setAttribute("stroke-width", String(primitive.strokeWidth));
+      setRotationTransform(circle, primitive.rotation, primitive.cx, primitive.cy);
+      return circle;
+    }
+
+    const ellipse = document.createElementNS(svgNs, "ellipse");
+    ellipse.setAttribute("cx", String(primitive.cx));
+    ellipse.setAttribute("cy", String(primitive.cy));
+    ellipse.setAttribute("rx", String(radiusX));
+    ellipse.setAttribute("ry", String(radiusY));
+    ellipse.setAttribute("fill", safeFill(primitive.fill));
+    ellipse.setAttribute("stroke", safeColor(primitive.stroke));
+    ellipse.setAttribute("stroke-width", String(primitive.strokeWidth));
+    setRotationTransform(ellipse, primitive.rotation, primitive.cx, primitive.cy);
+    return ellipse;
   }
 
   if (type === "rect") {
@@ -458,7 +488,8 @@ export function createPrimitiveNode(primitive) {
   if (type === "hexagon" || type === "octagon") {
     const polygon = document.createElementNS(svgNs, "polygon");
     const sides = type === "hexagon" ? 6 : 8;
-    polygon.setAttribute("points", buildRegularPolygonPoints(primitive.cx, primitive.cy, primitive.r, sides));
+    const { radiusX, radiusY, r } = getPrimitiveRadii(primitive, 54);
+    polygon.setAttribute("points", buildRegularPolygonPoints(primitive.cx, primitive.cy, r, sides, radiusX, radiusY));
     polygon.setAttribute("fill", safeFill(primitive.fill));
     polygon.setAttribute("stroke", safeColor(primitive.stroke));
     polygon.setAttribute("stroke-width", String(primitive.strokeWidth));
@@ -513,7 +544,11 @@ export function primitiveToMarkup(primitive) {
   }
 
   if (primitive.type === "circle") {
-    return `<circle cx=\"${num(primitive.cx)}\" cy=\"${num(primitive.cy)}\" r=\"${num(primitive.r)}\" fill=\"${safeFill(primitive.fill)}\" stroke=\"${safeColor(primitive.stroke)}\" stroke-width=\"${num(primitive.strokeWidth)}\"${rotationAttr} />`;
+    const { radiusX, radiusY } = getPrimitiveRadii(primitive, 42);
+    if (Math.abs(radiusX - radiusY) < 1e-6) {
+      return `<circle cx=\"${num(primitive.cx)}\" cy=\"${num(primitive.cy)}\" r=\"${num(radiusX)}\" fill=\"${safeFill(primitive.fill)}\" stroke=\"${safeColor(primitive.stroke)}\" stroke-width=\"${num(primitive.strokeWidth)}\"${rotationAttr} />`;
+    }
+    return `<ellipse cx=\"${num(primitive.cx)}\" cy=\"${num(primitive.cy)}\" rx=\"${num(radiusX)}\" ry=\"${num(radiusY)}\" fill=\"${safeFill(primitive.fill)}\" stroke=\"${safeColor(primitive.stroke)}\" stroke-width=\"${num(primitive.strokeWidth)}\"${rotationAttr} />`;
   }
 
   if (primitive.type === "rect") {
@@ -523,7 +558,8 @@ export function primitiveToMarkup(primitive) {
 
   if (primitive.type === "hexagon" || primitive.type === "octagon") {
     const sides = primitive.type === "hexagon" ? 6 : 8;
-    return `<polygon points=\"${buildRegularPolygonPoints(primitive.cx, primitive.cy, primitive.r, sides)}\" fill=\"${safeFill(primitive.fill)}\" stroke=\"${safeColor(primitive.stroke)}\" stroke-width=\"${num(primitive.strokeWidth)}\"${rotationAttr} />`;
+    const { radiusX, radiusY, r } = getPrimitiveRadii(primitive, 54);
+    return `<polygon points=\"${buildRegularPolygonPoints(primitive.cx, primitive.cy, r, sides, radiusX, radiusY)}\" fill=\"${safeFill(primitive.fill)}\" stroke=\"${safeColor(primitive.stroke)}\" stroke-width=\"${num(primitive.strokeWidth)}\"${rotationAttr} />`;
   }
 
   if (primitive.type === "bezier") {
@@ -584,16 +620,30 @@ export function getPrimitiveCenter(primitive) {
   return { x: 120, y: 120 };
 }
 
-export function buildRegularPolygonPoints(cx, cy, r, sides) {
+export function getPrimitiveRadii(primitive, fallback) {
+  if (!primitive || typeof primitive !== "object") {
+    const safe = toNumber(fallback, 0);
+    return { r: safe, radiusX: safe, radiusY: safe };
+  }
+
+  const base = toNumber(primitive.r, toNumber(fallback, 0));
+  const radiusX = toNumber(primitive.radiusX, base);
+  const radiusY = toNumber(primitive.radiusY, base);
+  return { r: base, radiusX, radiusY };
+}
+
+export function buildRegularPolygonPoints(cx, cy, r, sides, radiusX, radiusY) {
   const points = [];
-  const radius = Math.max(1, toNumber(r, 50));
+  const baseRadius = Math.max(1, toNumber(r, 50));
+  const radius = Math.max(1, toNumber(radiusX, baseRadius));
+  const heightRadius = Math.max(1, toNumber(radiusY, baseRadius));
   const centerX = toNumber(cx, 120);
   const centerY = toNumber(cy, 120);
   const count = Math.max(3, Number(sides) || 6);
 
   for (let i = 0; i < count; i += 1) {
     const angle = (Math.PI * 2 * i) / count - Math.PI / 2;
-    points.push(`${num(centerX + radius * Math.cos(angle))},${num(centerY + radius * Math.sin(angle))}`);
+    points.push(`${num(centerX + radius * Math.cos(angle))},${num(centerY + heightRadius * Math.sin(angle))}`);
   }
 
   return points.join(" ");
@@ -624,8 +674,9 @@ export function computeEditableBounds(elements) {
     }
 
     if (primitive.type === "circle") {
-      pushPoint(primitive.cx - primitive.r, primitive.cy - primitive.r);
-      pushPoint(primitive.cx + primitive.r, primitive.cy + primitive.r);
+      const { radiusX, radiusY } = getPrimitiveRadii(primitive, 42);
+      pushPoint(primitive.cx - radiusX, primitive.cy - radiusY);
+      pushPoint(primitive.cx + radiusX, primitive.cy + radiusY);
       return;
     }
 
@@ -636,8 +687,9 @@ export function computeEditableBounds(elements) {
     }
 
     if (primitive.type === "hexagon" || primitive.type === "octagon") {
-      pushPoint(primitive.cx - primitive.r, primitive.cy - primitive.r);
-      pushPoint(primitive.cx + primitive.r, primitive.cy + primitive.r);
+      const { radiusX, radiusY } = getPrimitiveRadii(primitive, 52);
+      pushPoint(primitive.cx - radiusX, primitive.cy - radiusY);
+      pushPoint(primitive.cx + radiusX, primitive.cy + radiusY);
       return;
     }
 

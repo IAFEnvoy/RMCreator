@@ -19,6 +19,8 @@ export function createEventBinder({
   loadDrawingFromFile,
   undo,
   redo,
+  shapeUndo,
+  shapeRedo,
   copySelection,
   cutSelection,
   pasteSelection,
@@ -47,7 +49,9 @@ export function createEventBinder({
     fileCutBtn,
     fileCopyBtn,
     filePasteBtn,
-    fileLoadInput
+    fileLoadInput,
+    zoomIndicator,
+    zoomMenu
   } = elements;
 
   function bindToolbar() {
@@ -84,6 +88,74 @@ export function createEventBinder({
       }
       renderer.updateDragCursor();
     });
+
+    bindZoomIndicator();
+  }
+
+  function bindZoomIndicator() {
+    if (!zoomIndicator || !zoomMenu) {
+      return;
+    }
+
+    const closeMenu = () => {
+      zoomMenu.hidden = true;
+      zoomIndicator.setAttribute("aria-expanded", "false");
+    };
+
+    const openMenu = () => {
+      zoomMenu.hidden = false;
+      zoomIndicator.setAttribute("aria-expanded", "true");
+    };
+
+    const setZoom = (nextZoom) => {
+      const scale = clamp(Number(nextZoom), 0.3, 4);
+      const rect = svg?.getBoundingClientRect();
+      if (!rect || !Number.isFinite(rect.width) || !Number.isFinite(rect.height)) {
+        return;
+      }
+
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top + rect.height / 2;
+      const before = toCanvasPoint({ clientX: cx, clientY: cy }, svg, viewport);
+      const cursor = clientToSvgPoint(cx, cy, svg);
+
+      state.zoom = scale;
+      state.pan.x = cursor.x - before.x * scale;
+      state.pan.y = cursor.y - before.y * scale;
+
+      renderer.updateViewportTransform();
+      renderer.updateZoomIndicator();
+      onStateChanged?.({ coalesceKey: "viewport" });
+    };
+
+    zoomIndicator.addEventListener("click", (event) => {
+      event.stopPropagation();
+      if (zoomMenu.hidden) {
+        openMenu();
+      } else {
+        closeMenu();
+      }
+    });
+
+    zoomMenu.addEventListener("click", (event) => {
+      const btn = event.target.closest("[data-zoom]");
+      if (!btn) {
+        return;
+      }
+      const zoomValue = Number(btn.getAttribute("data-zoom"));
+      if (!Number.isFinite(zoomValue)) {
+        return;
+      }
+      setZoom(zoomValue);
+      closeMenu();
+    });
+
+    document.addEventListener("click", (event) => {
+      if (zoomIndicator.contains(event.target) || zoomMenu.contains(event.target)) {
+        return;
+      }
+      closeMenu();
+    });
   }
 
   function bindCanvas() {
@@ -103,7 +175,13 @@ export function createEventBinder({
         }
 
         event.preventDefault();
-        if (event.shiftKey) {
+        if (state.shapeManager?.isOpen) {
+          if (event.shiftKey) {
+            shapeRedo?.();
+          } else {
+            shapeUndo?.();
+          }
+        } else if (event.shiftKey) {
           redo?.();
         } else {
           undo?.();
@@ -113,7 +191,12 @@ export function createEventBinder({
 
       const hasModifier = event.ctrlKey || event.metaKey;
       if (hasModifier && !event.altKey) {
-        if (isEditableTarget(event.target) || state.lineManager.isOpen || state.shapeManager?.isOpen) {
+        if (
+          isEditableTarget(event.target)
+          || state.lineManager.isOpen
+          || state.shapeManager?.isOpen
+          || state.stationManager?.isOpen
+        ) {
           return;
         }
 
@@ -144,7 +227,12 @@ export function createEventBinder({
         return;
       }
 
-      if (isEditableTarget(event.target) || state.lineManager.isOpen || state.shapeManager?.isOpen) {
+      if (
+        isEditableTarget(event.target)
+        || state.lineManager.isOpen
+        || state.shapeManager?.isOpen
+        || state.stationManager?.isOpen
+      ) {
         return;
       }
 

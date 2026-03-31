@@ -10,7 +10,12 @@ import {
 } from "./line/typeStore.js";
 import { createLineManager } from "./line/manager.js";
 import { createShapeManager } from "./shape/manager.js";
-import { getShapeParameterDefaults } from "./shape/utils.js";
+import { createStationManager } from "./station/manager.js";
+import {
+  getShapeParameterDefaults,
+  normalizeShapeParameterDefault,
+  normalizeShapeParameters
+} from "./shape/utils.js";
 import { createRenderer } from "./render.js";
 import { createEventBinder } from "./event.js";
 import { parseDrawingJson, serializeDrawingToJson } from "./serialization.js";
@@ -19,13 +24,14 @@ import { clamp, normalizeColor } from "./utils.js";
 import { appSettingsStorageKey, drawingStorageKey, geometryLabelMap } from "./constants.js";
 import { createHistoryManager } from "./historyManager.js";
 
-const { linePreview } = elements;
+const { linePreview, fileUndoBtn, fileRedoBtn, canvasBg } = elements;
 const defaultAppSettings = Object.freeze({
   continuousSelectMode: true,
   continuousStationMode: true,
   continuousLineMode: true,
   continuousTextMode: true,
   continuousShapeMode: true,
+  showGrid: true,
   selectionGlowColor: "#2f6de5",
   selectionGlowSize: 4,
   defaultLineGeometry: "bend135",
@@ -50,6 +56,7 @@ const state = {
   labels: [],
   shapes: [],
   shapeLibrary: [],
+  stationLibrary: [],
   selectedEntities: [],
   drag: {
     mode: null,
@@ -80,6 +87,11 @@ const state = {
     activeTab: "props",
     viewBox: { x: 0, y: 0, width: 240, height: 240 }
   },
+  stationManager: {
+    selectedId: null,
+    isOpen: false,
+    shapeQuery: ""
+  },
   counter: 1
 };
 
@@ -87,10 +99,12 @@ const getNextId = (prefix) => `${prefix}-${state.counter++}`;
 const findLineType = (id) => getLineTypeById(state.lineTypes, id);
 const createLineTypeId = () => createUniqueLineTypeId(new Set(state.lineTypes.map((item) => item.id)));
 const createShapeId = () => createRandomLineTypeId("shape");
+const createStationPresetId = () => createRandomLineTypeId("station-preset");
 
 let defaultLineTypes = [];
 let lineManager = null;
 let shapeManager = null;
+let stationManager = null;
 
 const renderer = createRenderer({
   state,
@@ -99,6 +113,7 @@ const renderer = createRenderer({
   getColorListDefault,
   openLineManager: () => lineManager?.open(),
   openShapeManager: () => shapeManager?.open(),
+  openStationManager: () => stationManager?.open(),
   onAppSettingsChanged: updateAppSettings,
   applyStationType,
   getStationTypeIndexByStation,
@@ -121,6 +136,13 @@ shapeManager = createShapeManager({
   createShapeId,
   renderSubmenu: renderer.renderSubmenu,
   onPlacedShapeDefaultsUpdated: commitStateChange
+});
+
+stationManager = createStationManager({
+  state,
+  elements,
+  createStationPresetId,
+  renderSubmenu: renderer.renderSubmenu
 });
 
 const mainClipboard = createMainClipboard({
@@ -169,6 +191,8 @@ const eventBinder = createEventBinder({
   loadDrawingFromFile,
   undo,
   redo,
+  shapeUndo: () => shapeManager?.undo?.(),
+  shapeRedo: () => shapeManager?.redo?.(),
   copySelection: clipboardController.copySelection,
   cutSelection: clipboardController.cutSelection,
   pasteSelection: clipboardController.pasteSelection,
@@ -199,6 +223,7 @@ async function init() {
   eventBinder.bindFileMenu();
   lineManager.bind();
   shapeManager.bind();
+  stationManager.bind();
 
   renderer.renderSubmenu();
   rerenderScene();
@@ -258,6 +283,10 @@ function applyAppSettings() {
     "--selection-glow-size",
     `${state.appSettings.selectionGlowSize}px`
   );
+
+  if (canvasBg) {
+    canvasBg.setAttribute("visibility", state.appSettings.showGrid === false ? "hidden" : "visible");
+  }
 }
 
 function sanitizeAppSettings(rawSettings) {
@@ -277,6 +306,7 @@ function sanitizeAppSettings(rawSettings) {
     continuousLineMode: Boolean(next.continuousLineMode),
     continuousTextMode: Boolean(next.continuousTextMode),
     continuousShapeMode: Boolean(next.continuousShapeMode),
+    showGrid: next.showGrid !== false,
     selectionGlowColor: normalizeHexColor(next.selectionGlowColor, defaultAppSettings.selectionGlowColor),
     selectionGlowSize: clamp(Number(next.selectionGlowSize) || defaultAppSettings.selectionGlowSize, 1, 30),
     defaultLineGeometry,
@@ -371,6 +401,10 @@ function createNewDrawing() {
     shapeManager.close();
   }
 
+  if (state.stationManager.isOpen) {
+    stationManager.close();
+  }
+
   state.counter = Math.max(1, computeNextCounter());
 
   linePreview.setAttribute("visibility", "hidden");
@@ -463,7 +497,14 @@ function applyDrawingData(drawing, {
     ...customLineTypes
   ];
 
-  state.nodes = drawing.nodes.map((node) => ({ ...node }));
+  state.nodes = drawing.nodes.map((node) => ({
+    ...node,
+    paramValues: node.paramValues && typeof node.paramValues === "object" ? { ...node.paramValues } : {},
+    textValues: node.textValues && typeof node.textValues === "object" ? { ...node.textValues } : {},
+    textPlacement: node.textPlacement && typeof node.textPlacement === "object"
+      ? { ...node.textPlacement }
+      : { slot: "s" }
+  }));
   state.edges = nextEdges;
   state.labels = drawing.labels.map((label) => ({ ...label }));
   state.shapes = drawing.shapes.map((shape) => ({
@@ -505,6 +546,10 @@ function applyDrawingData(drawing, {
     shapeManager.close();
   }
 
+  if (state.stationManager.isOpen) {
+    stationManager.close();
+  }
+
   renderer.renderSubmenu();
   rerenderScene();
   renderer.renderSettings();
@@ -536,16 +581,19 @@ function restoreDrawingFromLocalStorage() {
 
 function initHistoryBaseline() {
   historyManager.initBaseline(safeSerializeSnapshot());
+  updateMainUndoRedoUI();
 }
 
 function commitStateChange(options) {
   const snapshot = safeSerializeSnapshot();
   historyManager.commit(snapshot, options);
+  updateMainUndoRedoUI();
 }
 
 function undo() {
   try {
     historyManager.undo();
+    updateMainUndoRedoUI();
   } catch (error) {
     const message = error instanceof Error ? error.message : "未知错误";
     window.alert(`撤销失败：${message}`);
@@ -555,9 +603,22 @@ function undo() {
 function redo() {
   try {
     historyManager.redo();
+    updateMainUndoRedoUI();
   } catch (error) {
     const message = error instanceof Error ? error.message : "未知错误";
     window.alert(`重做失败：${message}`);
+  }
+}
+
+function updateMainUndoRedoUI() {
+  if (fileUndoBtn) {
+    fileUndoBtn.disabled = !historyManager.canUndo();
+    fileUndoBtn.setAttribute("aria-disabled", String(fileUndoBtn.disabled));
+  }
+
+  if (fileRedoBtn) {
+    fileRedoBtn.disabled = !historyManager.canRedo();
+    fileRedoBtn.setAttribute("aria-disabled", String(fileRedoBtn.disabled));
   }
 }
 
@@ -820,7 +881,10 @@ function addStation(x, y, typeIndex) {
     name: sourceType.name,
     radius: Number(sourceType.radius) || 10,
     oval: Boolean(sourceType.oval),
-    stationTypeIndex: typeIndex
+    stationTypeIndex: typeIndex,
+    paramValues: resolveStationParamDefaultsByTypeIndex(typeIndex),
+    textValues: resolveStationTextDefaultsByTypeIndex(typeIndex),
+    textPlacement: resolveStationTextPlacementByTypeIndex(typeIndex)
   };
 
   state.nodes.push(station);
@@ -1070,4 +1134,93 @@ function applyStationType(station, typeIndex) {
   station.radius = Number(sourceType.radius) || 10;
   station.oval = Boolean(sourceType.oval);
   station.stationTypeIndex = typeIndex;
+  station.paramValues = resolveStationParamDefaultsByTypeIndex(typeIndex);
+  station.textValues = resolveStationTextDefaultsByTypeIndex(typeIndex);
+  station.textPlacement = resolveStationTextPlacementByTypeIndex(typeIndex);
+}
+
+function resolveStationTextDefaultsByTypeIndex(typeIndex) {
+  const preset = getStationPresetByTypeIndex(typeIndex);
+  if (!preset) {
+    return {};
+  }
+
+  const out = {};
+  const cards = Array.isArray(preset.textCards) ? preset.textCards : [];
+  cards.forEach((card) => {
+    const cardId = String(card?.id || "").trim();
+    if (!cardId) {
+      return;
+    }
+
+    out[cardId] = String(card?.defaultValue || "");
+  });
+
+  return out;
+}
+
+function resolveStationTextPlacementByTypeIndex(typeIndex) {
+  const preset = getStationPresetByTypeIndex(typeIndex);
+  return {
+    slot: normalizeStationTextSlot(preset?.textPlacement?.slot)
+  };
+}
+
+function normalizeStationTextSlot(rawSlot) {
+  const slot = String(rawSlot || "").toLowerCase();
+  const slots = new Set(["nw", "n", "ne", "w", "e", "sw", "s", "se"]);
+  return slots.has(slot) ? slot : "s";
+}
+
+function resolveStationParamDefaultsByTypeIndex(typeIndex) {
+  const preset = getStationPresetByTypeIndex(typeIndex);
+  if (!preset) {
+    return {};
+  }
+
+  const defaults = {};
+
+  normalizeShapeParameters(preset.params).forEach((param) => {
+    defaults[param.id] = normalizeShapeParameterDefault(param.type, param.defaultValue);
+  });
+
+  const shape = state.shapeLibrary.find((item) => item.id === preset.shapeId);
+  const shapeParams = normalizeShapeParameters(shape?.parameters);
+  const settings = preset.shapeParamSettings && typeof preset.shapeParamSettings === "object"
+    ? preset.shapeParamSettings
+    : {};
+
+  shapeParams.forEach((param) => {
+    const setting = settings[param.id];
+    const mode = setting?.mode === "default" || setting?.mode === "locked"
+      ? setting.mode
+      : "inherit";
+    const nextValue = mode === "inherit"
+      ? param.defaultValue
+      : setting?.value;
+    defaults[param.id] = normalizeShapeParameterDefault(param.type, nextValue);
+  });
+
+  return defaults;
+}
+
+function getStationPresetByTypeIndex(typeIndex) {
+  const sourceType = state.stationTypes[typeIndex];
+  if (!sourceType) {
+    return null;
+  }
+
+  const presetId = sourceType.stationPresetId ? String(sourceType.stationPresetId) : "";
+  if (presetId) {
+    const byId = state.stationLibrary.find((item) => item.id === presetId);
+    if (byId) {
+      return byId;
+    }
+  }
+
+  if (typeIndex >= 0 && typeIndex < state.stationLibrary.length) {
+    return state.stationLibrary[typeIndex] || null;
+  }
+
+  return null;
 }

@@ -1,5 +1,6 @@
 import { shapeStorageKey } from "../constants.js";
 import { createShapeManagerClipboard } from "../clipboards.js";
+import { createHistoryManager } from "../historyManager.js";
 import { svgNs } from "../dom.js";
 import {
   boundsToViewBox,
@@ -12,6 +13,7 @@ import {
   getFirstPrimitiveIndex,
   getPrimitiveParamBinding,
   getPrimitiveParamBindings,
+  getPrimitiveRadii,
   normalizeEditableElements,
   normalizeImportedSvg,
   normalizeNumber,
@@ -56,6 +58,8 @@ export function createShapeManager({
     shapeResetViewBtn,
     shapeImportSvgBtn,
     shapeImportSvgInput,
+    shapeUndoBtn,
+    shapeRedoBtn,
     shapeEditorCanvasWrap,
     shapeEditorCanvas,
     shapeTabPropsBtn,
@@ -110,6 +114,11 @@ export function createShapeManager({
     renderSubmenu,
     resetViewToSelectedShape,
     deleteCurrentSelection
+  });
+
+  const historyManager = createHistoryManager({
+    maxEntries: 120,
+    applySnapshot: applyShapeHistorySnapshot
   });
 
   function getSelectedPrimitiveIndices(shape) {
@@ -216,6 +225,8 @@ export function createShapeManager({
       || !shapeResetViewBtn
       || !shapeImportSvgBtn
       || !shapeImportSvgInput
+      || !shapeUndoBtn
+      || !shapeRedoBtn
       || !shapeEditorCanvasWrap
       || !shapeEditorCanvas
       || !shapeTabPropsBtn
@@ -261,6 +272,9 @@ export function createShapeManager({
 
     shapeImportSvgBtn.addEventListener("click", () => shapeImportSvgInput.click());
     shapeImportSvgInput.addEventListener("change", importExternalSvgShape);
+
+    shapeUndoBtn.addEventListener("click", undo);
+    shapeRedoBtn.addEventListener("click", redo);
 
     shapeTabPropsBtn.addEventListener("click", () => {
       state.shapeManager.activeTab = "props";
@@ -318,10 +332,19 @@ export function createShapeManager({
     clipboard.clear();
   }
 
+  function undo() {
+    historyManager.undo();
+  }
+
+  function redo() {
+    historyManager.redo();
+  }
+
   function renderShapeManager() {
     const selectedShape = getSelectedShape();
 
     renderShapeLibraryList();
+    updateShapeHistoryUI();
     shapePrimitiveSelect.value = state.shapeManager.primitiveType || "line";
     shapeParamTypeSelect.value = shapeParameterTypeDefinitions[state.shapeManager.parameterType || "color"]
       ? state.shapeManager.parameterType || "color"
@@ -932,7 +955,8 @@ export function createShapeManager({
     if (primary.type === "circle") {
       addNumber("中心 X", "cx", { defaultValue: 120 });
       addNumber("中心 Y", "cy", { defaultValue: 120 });
-      addNumber("半径", "r", { defaultValue: 40, min: 1, max: 300 });
+      addNumber("半径 X", "radiusX", { defaultValue: 40, min: 1, max: 300 });
+      addNumber("半径 Y", "radiusY", { defaultValue: 40, min: 1, max: 300 });
       addNumber("旋转", "rotation", { defaultValue: 0, min: -360, max: 360, step: 1 });
       addNumber("线宽", "strokeWidth", { defaultValue: 8, min: 0.1, max: 100, step: 0.1 });
       addColor("描边颜色", "stroke", "#2f5d9d");
@@ -981,7 +1005,8 @@ export function createShapeManager({
     if (primary.type === "hexagon" || primary.type === "octagon") {
       addNumber("中心 X", "cx", { defaultValue: 120 });
       addNumber("中心 Y", "cy", { defaultValue: 120 });
-      addNumber("半径", "r", { defaultValue: 52, min: 1, max: 400 });
+      addNumber("半径 X", "radiusX", { defaultValue: 52, min: 1, max: 400 });
+      addNumber("半径 Y", "radiusY", { defaultValue: 52, min: 1, max: 400 });
       addNumber("旋转", "rotation", { defaultValue: 0, min: -360, max: 360, step: 1 });
       addNumber("线宽", "strokeWidth", { defaultValue: 8, min: 0.1, max: 100, step: 0.1 });
       addColor("描边颜色", "stroke", "#2f5d9d");
@@ -1505,7 +1530,7 @@ export function createShapeManager({
 
       const rawPoint = clientToCanvasPoint(event.clientX, event.clientY);
       const point = applyAutoSnap(rawPoint, event, getSnapTargetsForShape(shape, handleState.primitiveIndex));
-      if (updatePrimitiveByHandle(primitive, handleState.handleKey, point)) {
+      if (updatePrimitiveByHandle(shape, primitive, handleState.handleKey, point)) {
         handleState.dirty = true;
         handleState.moved = true;
         suppressCanvasClick = true;
@@ -1529,16 +1554,19 @@ export function createShapeManager({
       }
 
       const rawPoint = clientToCanvasPoint(event.clientX, event.clientY);
-      const point = applyAutoSnap(rawPoint, event, getSnapTargetsForShape(shape, transformState.primitiveIndex));
+      const point = transformState.mode === "resize"
+        ? rawPoint
+        : applyAutoSnap(rawPoint, event, getSnapTargetsForShape(shape, transformState.primitiveIndex));
       if (!point) {
         return;
       }
 
       let updated = false;
       if (transformState.mode === "move") {
-        updated = applyPrimitiveMove(primitive, transformState.startPrimitive, transformState.startPoint, point);
+        updated = applyPrimitiveMove(shape, primitive, transformState.startPrimitive, transformState.startPoint, point);
       } else if (transformState.mode === "resize") {
         updated = applyPrimitiveResize(
+          shape,
           primitive,
           transformState.startPrimitive,
           transformState.startBounds,
@@ -1705,9 +1733,10 @@ export function createShapeManager({
 
     const index = clampPrimitiveIndex(selectedIndex, shape.editableElements.length);
     const primitive = shape.editableElements[index];
+    const effectivePrimitive = resolvePrimitiveWithParameters(primitive, shape.parameters);
 
-    if (primitive.type !== "line" && primitive.type !== "bezier") {
-      const bounds = getTransformBoundsForPrimitive(primitive);
+    if (effectivePrimitive.type !== "line" && effectivePrimitive.type !== "bezier") {
+      const bounds = getTransformBoundsForPrimitive(effectivePrimitive);
       if (!bounds) {
         return;
       }
@@ -1751,7 +1780,7 @@ export function createShapeManager({
       return;
     }
 
-    const handles = getPrimitiveHandles(primitive);
+    const handles = getPrimitiveHandles(effectivePrimitive);
     if (!handles.length) {
       return;
     }
@@ -1872,20 +1901,44 @@ export function createShapeManager({
     return [];
   }
 
-  function updatePrimitiveByHandle(primitive, handleKey, point) {
+  function setPrimitiveNumberField(shape, primitive, key, value) {
+    if (!primitive || typeof primitive !== "object") {
+      return;
+    }
+
+    primitive[key] = value;
+
+    if (!shape || !Array.isArray(shape.parameters)) {
+      return;
+    }
+
+    const binding = getPrimitiveParamBinding(primitive, key, "number");
+    if (!binding) {
+      return;
+    }
+
+    const param = shape.parameters.find((item) => item.id === binding.paramId && item.type === "number");
+    if (!param) {
+      return;
+    }
+
+    param.defaultValue = normalizeShapeParameterDefault("number", value);
+  }
+
+  function updatePrimitiveByHandle(shape, primitive, handleKey, point) {
     if (!primitive || !point) {
       return false;
     }
 
     if (primitive.type === "line") {
       if (handleKey === "x1y1") {
-        primitive.x1 = Number(point.x.toFixed(2));
-        primitive.y1 = Number(point.y.toFixed(2));
+        setPrimitiveNumberField(shape, primitive, "x1", Number(point.x.toFixed(2)));
+        setPrimitiveNumberField(shape, primitive, "y1", Number(point.y.toFixed(2)));
         return true;
       }
       if (handleKey === "x2y2") {
-        primitive.x2 = Number(point.x.toFixed(2));
-        primitive.y2 = Number(point.y.toFixed(2));
+        setPrimitiveNumberField(shape, primitive, "x2", Number(point.x.toFixed(2)));
+        setPrimitiveNumberField(shape, primitive, "y2", Number(point.y.toFixed(2)));
         return true;
       }
       return false;
@@ -1893,23 +1946,23 @@ export function createShapeManager({
 
     if (primitive.type === "bezier") {
       if (handleKey === "x1y1") {
-        primitive.x1 = Number(point.x.toFixed(2));
-        primitive.y1 = Number(point.y.toFixed(2));
+        setPrimitiveNumberField(shape, primitive, "x1", Number(point.x.toFixed(2)));
+        setPrimitiveNumberField(shape, primitive, "y1", Number(point.y.toFixed(2)));
         return true;
       }
       if (handleKey === "x2y2") {
-        primitive.x2 = Number(point.x.toFixed(2));
-        primitive.y2 = Number(point.y.toFixed(2));
+        setPrimitiveNumberField(shape, primitive, "x2", Number(point.x.toFixed(2)));
+        setPrimitiveNumberField(shape, primitive, "y2", Number(point.y.toFixed(2)));
         return true;
       }
       if (handleKey === "cx1cy1") {
-        primitive.cx1 = Number(point.x.toFixed(2));
-        primitive.cy1 = Number(point.y.toFixed(2));
+        setPrimitiveNumberField(shape, primitive, "cx1", Number(point.x.toFixed(2)));
+        setPrimitiveNumberField(shape, primitive, "cy1", Number(point.y.toFixed(2)));
         return true;
       }
       if (handleKey === "cx2cy2") {
-        primitive.cx2 = Number(point.x.toFixed(2));
-        primitive.cy2 = Number(point.y.toFixed(2));
+        setPrimitiveNumberField(shape, primitive, "cx2", Number(point.x.toFixed(2)));
+        setPrimitiveNumberField(shape, primitive, "cy2", Number(point.y.toFixed(2)));
         return true;
       }
       return false;
@@ -1925,7 +1978,8 @@ export function createShapeManager({
     }
 
     const primitive = shape.editableElements[primitiveIndex];
-    const bounds = getTransformBoundsForPrimitive(primitive);
+    const effectivePrimitive = resolvePrimitiveWithParameters(primitive, shape.parameters);
+    const bounds = getTransformBoundsForPrimitive(effectivePrimitive);
     if (!primitive || !bounds) {
       return;
     }
@@ -1938,7 +1992,7 @@ export function createShapeManager({
     transformState.handleKey = handleKey;
     transformState.startPoint = { ...startPoint };
     transformState.startBounds = { ...bounds };
-    transformState.startPrimitive = structuredClone(primitive);
+    transformState.startPrimitive = structuredClone(effectivePrimitive);
     transformState.dirty = false;
     transformState.moved = false;
   }
@@ -1973,7 +2027,7 @@ export function createShapeManager({
     transformState.moved = false;
   }
 
-  function applyPrimitiveMove(primitive, startPrimitive, startPoint, currentPoint) {
+  function applyPrimitiveMove(shape, primitive, startPrimitive, startPoint, currentPoint) {
     const dx = currentPoint.x - startPoint.x;
     const dy = currentPoint.y - startPoint.y;
 
@@ -1982,27 +2036,27 @@ export function createShapeManager({
     }
 
     if (primitive.type === "circle" || primitive.type === "hexagon" || primitive.type === "octagon") {
-      primitive.cx = Number((startPrimitive.cx + dx).toFixed(2));
-      primitive.cy = Number((startPrimitive.cy + dy).toFixed(2));
+      setPrimitiveNumberField(shape, primitive, "cx", Number((startPrimitive.cx + dx).toFixed(2)));
+      setPrimitiveNumberField(shape, primitive, "cy", Number((startPrimitive.cy + dy).toFixed(2)));
       return true;
     }
 
     if (primitive.type === "rect") {
-      primitive.x = Number((startPrimitive.x + dx).toFixed(2));
-      primitive.y = Number((startPrimitive.y + dy).toFixed(2));
+      setPrimitiveNumberField(shape, primitive, "x", Number((startPrimitive.x + dx).toFixed(2)));
+      setPrimitiveNumberField(shape, primitive, "y", Number((startPrimitive.y + dy).toFixed(2)));
       return true;
     }
 
     if (primitive.type === "text") {
-      primitive.x = Number((startPrimitive.x + dx).toFixed(2));
-      primitive.y = Number((startPrimitive.y + dy).toFixed(2));
+      setPrimitiveNumberField(shape, primitive, "x", Number((startPrimitive.x + dx).toFixed(2)));
+      setPrimitiveNumberField(shape, primitive, "y", Number((startPrimitive.y + dy).toFixed(2)));
       return true;
     }
 
     return false;
   }
 
-  function applyPrimitiveResize(primitive, startPrimitive, startBounds, handleKey, currentPoint, lockAspectRatio) {
+  function applyPrimitiveResize(shape, primitive, startPrimitive, startBounds, handleKey, currentPoint, lockAspectRatio) {
     if (!startBounds) {
       return false;
     }
@@ -2022,23 +2076,26 @@ export function createShapeManager({
     const height = Math.max(1, maxY - minY);
 
     if (primitive.type === "rect") {
-      primitive.x = Number(minX.toFixed(2));
-      primitive.y = Number(minY.toFixed(2));
-      primitive.width = Number(width.toFixed(2));
-      primitive.height = Number(height.toFixed(2));
+      setPrimitiveNumberField(shape, primitive, "x", Number(minX.toFixed(2)));
+      setPrimitiveNumberField(shape, primitive, "y", Number(minY.toFixed(2)));
+      setPrimitiveNumberField(shape, primitive, "width", Number(width.toFixed(2)));
+      setPrimitiveNumberField(shape, primitive, "height", Number(height.toFixed(2)));
       if (primitive.rounded === false) {
-        primitive.rx = 0;
+        setPrimitiveNumberField(shape, primitive, "rx", 0);
       } else {
-        primitive.rx = Number(Math.min(width, height, startPrimitive.rx || 0).toFixed(2));
+        setPrimitiveNumberField(shape, primitive, "rx", Number(Math.min(width, height, startPrimitive.rx || 0).toFixed(2)));
       }
       return true;
     }
 
     if (primitive.type === "circle" || primitive.type === "hexagon" || primitive.type === "octagon") {
-      const r = Math.max(1, Math.min(width, height) / 2);
-      primitive.cx = Number(((minX + maxX) / 2).toFixed(2));
-      primitive.cy = Number(((minY + maxY) / 2).toFixed(2));
-      primitive.r = Number(r.toFixed(2));
+      const rx = Math.max(1, width / 2);
+      const ry = Math.max(1, height / 2);
+      setPrimitiveNumberField(shape, primitive, "cx", Number(((minX + maxX) / 2).toFixed(2)));
+      setPrimitiveNumberField(shape, primitive, "cy", Number(((minY + maxY) / 2).toFixed(2)));
+      setPrimitiveNumberField(shape, primitive, "radiusX", Number(rx.toFixed(2)));
+      setPrimitiveNumberField(shape, primitive, "radiusY", Number(ry.toFixed(2)));
+      setPrimitiveNumberField(shape, primitive, "r", Number(((rx + ry) / 2).toFixed(2)));
       return true;
     }
 
@@ -2046,9 +2103,14 @@ export function createShapeManager({
       const startW = Math.max(1, startBounds.maxX - startBounds.minX);
       const startH = Math.max(1, startBounds.maxY - startBounds.minY);
       const scale = Math.max(width / startW, height / startH);
-      primitive.x = Number(((minX + maxX) / 2).toFixed(2));
-      primitive.y = Number(((minY + maxY) / 2).toFixed(2));
-      primitive.fontSize = Number(clampNumber((startPrimitive.fontSize || 26) * scale, 1, 240).toFixed(2));
+      setPrimitiveNumberField(shape, primitive, "x", Number(((minX + maxX) / 2).toFixed(2)));
+      setPrimitiveNumberField(shape, primitive, "y", Number(((minY + maxY) / 2).toFixed(2)));
+      setPrimitiveNumberField(
+        shape,
+        primitive,
+        "fontSize",
+        Number(clampNumber((startPrimitive.fontSize || 26) * scale, 1, 240).toFixed(2))
+      );
       return true;
     }
 
@@ -2105,11 +2167,13 @@ export function createShapeManager({
     }
 
     if (primitive.type === "circle" || primitive.type === "hexagon" || primitive.type === "octagon") {
+      const fallback = primitive.type === "circle" ? 42 : 52;
+      const { radiusX, radiusY } = getPrimitiveRadii(primitive, fallback);
       return {
-        minX: primitive.cx - primitive.r,
-        minY: primitive.cy - primitive.r,
-        maxX: primitive.cx + primitive.r,
-        maxY: primitive.cy + primitive.r
+        minX: primitive.cx - radiusX,
+        minY: primitive.cy - radiusY,
+        maxX: primitive.cx + radiusX,
+        maxY: primitive.cy + radiusY
       };
     }
 
@@ -2233,10 +2297,12 @@ export function createShapeManager({
     }
 
     if (primitive.type === "circle" || primitive.type === "hexagon" || primitive.type === "octagon") {
+      const fallback = primitive.type === "circle" ? 42 : 52;
+      const { radiusX, radiusY } = getPrimitiveRadii(primitive, fallback);
       return [
         { x: primitive.cx, y: primitive.cy },
-        { x: primitive.cx - primitive.r, y: primitive.cy - primitive.r },
-        { x: primitive.cx + primitive.r, y: primitive.cy + primitive.r }
+        { x: primitive.cx - radiusX, y: primitive.cy - radiusY },
+        { x: primitive.cx + radiusX, y: primitive.cy + radiusY }
       ];
     }
 
@@ -2507,35 +2573,142 @@ export function createShapeManager({
   function loadShapeLibraryFromStorage() {
     state.shapeLibrary = readShapeLibrary();
     ensureSelectedShape();
+    initShapeHistoryBaseline();
     renderSubmenu();
   }
 
-  function persistShapeLibrary() {
+  function buildShapeLibraryPayload() {
+    return state.shapeLibrary.map((shape) => {
+      const editableElements = Array.isArray(shape.editableElements)
+        ? normalizeEditableElements(shape.editableElements)
+        : null;
+      const parameters = normalizeShapeParameters(shape.parameters);
+
+      const safeShape = {
+        id: String(shape.id || createShapeId()),
+        name: String(shape.name || "图形").trim() || "图形",
+        editableElements,
+        parameters,
+        imported: Boolean(shape.imported)
+      };
+
+      safeShape.svg = editableElements
+        ? buildSvgFromEditableElements(resolveEditableElementsWithParameters(editableElements, parameters))
+        : String(shape.svg || "");
+
+      return safeShape;
+    });
+  }
+
+  function buildShapeHistorySnapshot(payload) {
+    const library = payload || buildShapeLibraryPayload();
+    return JSON.stringify({
+      library,
+      selectedId: state.shapeManager.selectedId || null,
+      selectedPrimitiveIndices: Array.isArray(state.shapeManager.selectedPrimitiveIndices)
+        ? state.shapeManager.selectedPrimitiveIndices
+        : [],
+      selectedPrimitiveIndex: Number.isInteger(state.shapeManager.selectedPrimitiveIndex)
+        ? state.shapeManager.selectedPrimitiveIndex
+        : null,
+      viewBox: getCurrentViewBox()
+    });
+  }
+
+  function commitShapeHistory(payload) {
+    if (historyManager.isApplying()) {
+      return;
+    }
+
+    const snapshot = buildShapeHistorySnapshot(payload);
+    historyManager.commit(snapshot, { coalesceKey: "shape-edit" });
+    updateShapeHistoryUI();
+  }
+
+  function initShapeHistoryBaseline() {
+    historyManager.initBaseline(buildShapeHistorySnapshot());
+    updateShapeHistoryUI();
+  }
+
+  function applyShapeHistorySnapshot(snapshot) {
+    if (!snapshot) {
+      return;
+    }
+
+    let parsed = null;
     try {
-      const payload = state.shapeLibrary.map((shape) => {
-        const editableElements = Array.isArray(shape.editableElements)
-          ? normalizeEditableElements(shape.editableElements)
-          : null;
-        const parameters = normalizeShapeParameters(shape.parameters);
+      parsed = JSON.parse(snapshot);
+    } catch {
+      return;
+    }
 
-        const safeShape = {
-          id: String(shape.id || createShapeId()),
-          name: String(shape.name || "图形").trim() || "图形",
-          editableElements,
-          parameters,
-          imported: Boolean(shape.imported)
-        };
+    const library = Array.isArray(parsed?.library)
+      ? parsed.library.map((shape) => sanitizeShape(shape)).filter(Boolean)
+      : [];
 
-        safeShape.svg = editableElements
-          ? buildSvgFromEditableElements(resolveEditableElementsWithParameters(editableElements, parameters))
-          : String(shape.svg || "");
+    state.shapeLibrary = library;
 
-        return safeShape;
-      });
+    if (!library.length) {
+      state.shapeManager.selectedId = null;
+      state.shapeManager.selectedPrimitiveIndices = [];
+      state.shapeManager.selectedPrimitiveIndex = null;
+    } else {
+      const selectedId = parsed?.selectedId;
+      const selectedShape = library.find((shape) => shape.id === selectedId) || library[0];
+      state.shapeManager.selectedId = selectedShape?.id || null;
 
+      const indices = Array.isArray(parsed?.selectedPrimitiveIndices)
+        ? parsed.selectedPrimitiveIndices
+        : [];
+      const primaryIndex = Number.isInteger(parsed?.selectedPrimitiveIndex)
+        ? parsed.selectedPrimitiveIndex
+        : null;
+      setSelectedPrimitiveIndices(selectedShape, indices, { primaryIndex });
+
+      if (!getSelectedPrimitiveIndices(selectedShape).length) {
+        setSingleSelectedPrimitive(selectedShape, getFirstPrimitiveIndex(selectedShape));
+      }
+    }
+
+    const vb = parsed?.viewBox;
+    if (vb && Number.isFinite(vb.x) && Number.isFinite(vb.y) && Number.isFinite(vb.width) && Number.isFinite(vb.height)) {
+      state.shapeManager.viewBox = {
+        x: vb.x,
+        y: vb.y,
+        width: vb.width,
+        height: vb.height
+      };
+    } else {
+      resetViewToSelectedShape();
+    }
+
+    persistShapeLibrary({ skipHistory: true });
+    renderShapeManager();
+    renderSubmenu();
+  }
+
+  function persistShapeLibrary(options = {}) {
+    try {
+      const payload = buildShapeLibraryPayload();
       localStorage.setItem(shapeStorageKey, JSON.stringify(payload));
+
+      if (!options.skipHistory) {
+        commitShapeHistory(payload);
+      }
     } catch {
       // Ignore localStorage quota/availability errors.
+    }
+  }
+
+  function updateShapeHistoryUI() {
+    if (shapeUndoBtn) {
+      shapeUndoBtn.disabled = !historyManager.canUndo();
+      shapeUndoBtn.setAttribute("aria-disabled", String(shapeUndoBtn.disabled));
+    }
+
+    if (shapeRedoBtn) {
+      shapeRedoBtn.disabled = !historyManager.canRedo();
+      shapeRedoBtn.setAttribute("aria-disabled", String(shapeRedoBtn.disabled));
     }
   }
 
@@ -2605,6 +2778,8 @@ export function createShapeManager({
     bind,
     open,
     close,
+    undo,
+    redo,
     copySelection: clipboard.copySelection,
     cutSelection: clipboard.cutSelection,
     pasteSelection: clipboard.paste,
