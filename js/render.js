@@ -8,8 +8,9 @@ import {
   getParallelOffsets
 } from "./lineGeometry.js";
 import { resolveSegmentColor } from "./lineTypeStore.js";
-import { normalizeColor } from "./utils.js";
+import { clamp, normalizeColor } from "./utils.js";
 import { createSettingsRenderer } from "./settingsRenderer.js";
+import { buildRenderableShapeSvg } from "./shapeManager.js";
 
 export function createRenderer({
   state,
@@ -28,6 +29,7 @@ export function createRenderer({
     viewport,
     stationLayer,
     lineLayer,
+    shapeLayer,
     textLayer,
     linePreview,
     toolStrip,
@@ -37,6 +39,8 @@ export function createRenderer({
     settingsBody,
     zoomIndicator
   } = elements;
+
+  let shapeGhostEl = null;
 
   function setActiveToolButton() {
     toolStrip.querySelectorAll(".tool-btn").forEach((btn) => {
@@ -236,6 +240,35 @@ export function createRenderer({
       continuousTip.textContent = "关闭后，每次绘制一条线会自动取消当前线形选择。";
       settingsCard.appendChild(continuousTip);
 
+      const shapeContinuousRow = document.createElement("div");
+      shapeContinuousRow.className = "submenu-settings-row";
+      const shapeContinuousText = document.createElement("span");
+      shapeContinuousText.textContent = "连续放置图形模式";
+      const shapeContinuousSwitch = document.createElement("label");
+      shapeContinuousSwitch.className = "toggle-switch";
+      shapeContinuousSwitch.setAttribute("for", "continuousShapeModeToggle");
+      const shapeContinuousInput = document.createElement("input");
+      shapeContinuousInput.id = "continuousShapeModeToggle";
+      shapeContinuousInput.className = "toggle-checkbox";
+      shapeContinuousInput.type = "checkbox";
+      shapeContinuousInput.checked = state.appSettings?.continuousShapeMode !== false;
+      const shapeContinuousSlider = document.createElement("span");
+      shapeContinuousSlider.className = "toggle-slider";
+      shapeContinuousSlider.setAttribute("aria-hidden", "true");
+      shapeContinuousInput.addEventListener("change", () => {
+        onAppSettingsChanged?.({ continuousShapeMode: shapeContinuousInput.checked });
+      });
+      shapeContinuousSwitch.appendChild(shapeContinuousInput);
+      shapeContinuousSwitch.appendChild(shapeContinuousSlider);
+      shapeContinuousRow.appendChild(shapeContinuousText);
+      shapeContinuousRow.appendChild(shapeContinuousSwitch);
+      settingsCard.appendChild(shapeContinuousRow);
+
+      const shapeContinuousTip = document.createElement("div");
+      shapeContinuousTip.className = "submenu-settings-hint";
+      shapeContinuousTip.textContent = "关闭后，每次放置一个图形会自动取消当前预制图形选择。";
+      settingsCard.appendChild(shapeContinuousTip);
+
       const glowRow = document.createElement("label");
       glowRow.className = "submenu-settings-row";
       const glowText = document.createElement("span");
@@ -414,6 +447,45 @@ export function createRenderer({
     });
   }
 
+  function renderShapes() {
+    if (!shapeLayer) {
+      return;
+    }
+
+    shapeLayer.innerHTML = "";
+    (Array.isArray(state.shapes) ? state.shapes : []).forEach((shapeInstance) => {
+      const definition = state.shapeLibrary.find((item) => item.id === shapeInstance.shapeId);
+      if (!definition) {
+        return;
+      }
+
+      const resolvedSvg = buildRenderableShapeSvg(definition, shapeInstance.paramValues);
+      const parsed = parseShapeSvgContent(resolvedSvg);
+      if (!parsed || !parsed.nodes.length) {
+        return;
+      }
+
+      const scale = clamp(Number(shapeInstance.scale) || 1, 0.1, 10);
+      const cx = parsed.minX + parsed.width / 2;
+      const cy = parsed.minY + parsed.height / 2;
+
+      const group = document.createElementNS(svgNs, "g");
+      group.setAttribute("data-shape-id", String(shapeInstance.id));
+      group.setAttribute("class", "placed-shape-instance");
+      group.setAttribute(
+        "transform",
+        `translate(${Number(shapeInstance.x) || 0} ${Number(shapeInstance.y) || 0}) scale(${scale}) translate(${-cx} ${-cy})`
+      );
+
+      if (isSelected("shape", shapeInstance.id)) {
+        group.classList.add("selected-shape");
+      }
+
+      parsed.nodes.forEach((node) => group.appendChild(node));
+      shapeLayer.appendChild(group);
+    });
+  }
+
   function renderTexts() {
     textLayer.innerHTML = "";
 
@@ -454,6 +526,7 @@ export function createRenderer({
     ensureEdgeColorList,
     renderStations,
     renderLines,
+    renderShapes,
     renderTexts,
     applyStationType,
     getStationTypeIndexByStation,
@@ -476,6 +549,49 @@ export function createRenderer({
     linePreview.setAttribute("stroke-dasharray", getSegmentDasharray(first));
     linePreview.setAttribute("fill", "none");
     linePreview.setAttribute("visibility", "visible");
+  }
+
+  function drawShapeGhost(point, shapeId) {
+    if (!shapeLayer) {
+      return;
+    }
+
+    const definition = state.shapeLibrary.find((item) => item.id === shapeId);
+    if (!definition) {
+      hideShapeGhost();
+      return;
+    }
+
+    const resolvedSvg = buildRenderableShapeSvg(definition, null);
+    const parsed = parseShapeSvgContent(resolvedSvg);
+    if (!parsed || !parsed.nodes.length) {
+      hideShapeGhost();
+      return;
+    }
+
+    if (shapeGhostEl?.parentNode) {
+      shapeGhostEl.parentNode.removeChild(shapeGhostEl);
+    }
+
+    const cx = parsed.minX + parsed.width / 2;
+    const cy = parsed.minY + parsed.height / 2;
+    const group = document.createElementNS(svgNs, "g");
+    group.setAttribute("class", "placed-shape-ghost");
+    group.setAttribute(
+      "transform",
+      `translate(${Number(point?.x) || 0} ${Number(point?.y) || 0}) scale(0.25) translate(${-cx} ${-cy})`
+    );
+
+    parsed.nodes.forEach((node) => group.appendChild(node));
+    shapeLayer.appendChild(group);
+    shapeGhostEl = group;
+  }
+
+  function hideShapeGhost() {
+    if (shapeGhostEl?.parentNode) {
+      shapeGhostEl.parentNode.removeChild(shapeGhostEl);
+    }
+    shapeGhostEl = null;
   }
 
   function renderLineTypePreviewSvg(svgEl, lineType) {
@@ -605,14 +721,68 @@ export function createRenderer({
     return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(String(svgText || ""))}`;
   }
 
+  function parseShapeSvgContent(svgText) {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(String(svgText || ""), "image/svg+xml");
+    const root = doc.documentElement;
+    if (!root || root.nodeName.toLowerCase() !== "svg") {
+      return null;
+    }
+
+    const viewBox = parseViewBox(root.getAttribute("viewBox"));
+    const width = viewBox?.width || toPositiveNumber(root.getAttribute("width"), 240);
+    const height = viewBox?.height || toPositiveNumber(root.getAttribute("height"), 240);
+    const minX = viewBox?.x || 0;
+    const minY = viewBox?.y || 0;
+    const nodes = Array.from(root.childNodes)
+      .filter((node) => node.nodeType === Node.ELEMENT_NODE)
+      .map((node) => document.importNode(node, true));
+
+    return {
+      minX,
+      minY,
+      width,
+      height,
+      nodes
+    };
+  }
+
+  function parseViewBox(rawViewBox) {
+    const values = String(rawViewBox || "")
+      .trim()
+      .split(/[\s,]+/)
+      .map((value) => Number(value));
+    if (values.length !== 4 || values.some((value) => !Number.isFinite(value))) {
+      return null;
+    }
+
+    const [x, y, width, height] = values;
+    if (width <= 0 || height <= 0) {
+      return null;
+    }
+
+    return { x, y, width, height };
+  }
+
+  function toPositiveNumber(value, fallback) {
+    const n = Number(value);
+    if (!Number.isFinite(n) || n <= 0) {
+      return fallback;
+    }
+    return n;
+  }
+
   return {
     setActiveToolButton,
     renderSubmenu,
     renderStations,
     renderLines,
+    renderShapes,
     renderTexts,
     renderSettings,
     drawLinePreview,
+    drawShapeGhost,
+    hideShapeGhost,
     updateViewportTransform,
     updateDragCursor,
     updateZoomIndicator

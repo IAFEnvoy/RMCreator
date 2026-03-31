@@ -9,7 +9,7 @@ import {
   persistCustomLineTypes
 } from "./lineTypeStore.js";
 import { createLineManager } from "./lineManager.js";
-import { createShapeManager } from "./shapeManager.js";
+import { createShapeManager, getShapeParameterDefaults } from "./shapeManager.js";
 import { createRenderer } from "./render.js";
 import { createEventBinder } from "./event.js";
 import { parseDrawingJson, serializeDrawingToJson } from "./serialization.js";
@@ -20,6 +20,7 @@ import { createHistoryManager } from "./historyManager.js";
 const { linePreview } = elements;
 const defaultAppSettings = Object.freeze({
   continuousLineMode: true,
+  continuousShapeMode: true,
   selectionGlowColor: "#2f6de5",
   defaultLineGeometry: "bend135",
   lineSpacingScale: 1
@@ -41,6 +42,7 @@ const state = {
   nodes: [],
   edges: [],
   labels: [],
+  shapes: [],
   shapeLibrary: [],
   selectedEntities: [],
   drag: {
@@ -121,6 +123,7 @@ const eventBinder = createEventBinder({
   addStation,
   addLine,
   addText,
+  addShape,
   selectEntity,
   selectEntities,
   toggleEntitySelection,
@@ -228,6 +231,7 @@ function sanitizeAppSettings(rawSettings) {
 
   return {
     continuousLineMode: Boolean(next.continuousLineMode),
+    continuousShapeMode: Boolean(next.continuousShapeMode),
     selectionGlowColor: normalizeHexColor(next.selectionGlowColor, defaultAppSettings.selectionGlowColor),
     defaultLineGeometry,
     lineSpacingScale: clamp(Number(next.lineSpacingScale) || 1, 0.5, 1.8)
@@ -283,6 +287,7 @@ function createNewDrawing() {
   state.nodes = [];
   state.edges = [];
   state.labels = [];
+  state.shapes = [];
   state.selectedEntities = [];
   state.drag = {
     mode: null,
@@ -415,6 +420,10 @@ function applyDrawingData(drawing, {
   state.nodes = drawing.nodes.map((node) => ({ ...node }));
   state.edges = nextEdges;
   state.labels = drawing.labels.map((label) => ({ ...label }));
+  state.shapes = drawing.shapes.map((shape) => ({
+    ...shape,
+    paramValues: shape.paramValues && typeof shape.paramValues === "object" ? { ...shape.paramValues } : {}
+  }));
   state.selectedEntities = [];
   state.drag = {
     mode: null,
@@ -527,7 +536,7 @@ function persistDrawingSnapshot(snapshot) {
 }
 
 function hasDrawingContent() {
-  return state.nodes.length > 0 || state.edges.length > 0 || state.labels.length > 0;
+  return state.nodes.length > 0 || state.edges.length > 0 || state.labels.length > 0 || state.shapes.length > 0;
 }
 
 function confirmOverwrite(message) {
@@ -543,6 +552,7 @@ function computeNextCounter() {
     ...state.nodes.map((item) => item.id),
     ...state.edges.map((item) => item.id),
     ...state.labels.map((item) => item.id),
+    ...state.shapes.map((item) => item.id),
     ...state.lineTypes.map((item) => item.id)
   ];
 
@@ -816,6 +826,27 @@ function addText(x, y) {
   commitStateChange();
 }
 
+function addShape(x, y, shapeId) {
+  const preset = state.shapeLibrary.find((item) => item.id === shapeId);
+  if (!preset) {
+    return;
+  }
+
+  const shapeInstance = {
+    id: getNextId("shape"),
+    shapeId: preset.id,
+    x,
+    y,
+    scale: 0.25,
+    paramValues: getShapeParameterDefaults(preset)
+  };
+
+  state.shapes.push(shapeInstance);
+  renderer.renderShapes();
+  selectEntity({ type: "shape", id: shapeInstance.id });
+  commitStateChange();
+}
+
 function selectEntity(entity) {
   selectEntities([entity]);
 }
@@ -887,6 +918,9 @@ function deleteSelectedEntity() {
   const selectedTextIds = new Set(
     state.selectedEntities.filter((item) => item.type === "text").map((item) => item.id)
   );
+  const selectedShapeIds = new Set(
+    state.selectedEntities.filter((item) => item.type === "shape").map((item) => item.id)
+  );
 
   if (selectedStationIds.size) {
     state.nodes = state.nodes.filter((node) => !selectedStationIds.has(node.id));
@@ -900,6 +934,10 @@ function deleteSelectedEntity() {
 
   if (selectedTextIds.size) {
     state.labels = state.labels.filter((label) => !selectedTextIds.has(label.id));
+  }
+
+  if (selectedShapeIds.size) {
+    state.shapes = state.shapes.filter((shape) => !selectedShapeIds.has(shape.id));
   }
 
   clearSelection();
@@ -939,6 +977,11 @@ function normalizeEntities(entities) {
 
     if (type === "text" && state.labels.some((item) => item.id === id)) {
       normalized.push({ type, id });
+      return;
+    }
+
+    if (type === "shape" && state.shapes.some((item) => item.id === id)) {
+      normalized.push({ type, id });
     }
   });
 
@@ -948,6 +991,7 @@ function normalizeEntities(entities) {
 function rerenderScene() {
   renderer.renderStations();
   renderer.renderLines();
+  renderer.renderShapes();
   renderer.renderTexts();
 }
 

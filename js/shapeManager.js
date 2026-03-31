@@ -2,6 +2,19 @@ import { shapeStorageKey } from "./constants.js";
 import { svgNs } from "./dom.js";
 
 const defaultViewBox = Object.freeze({ x: 0, y: 0, width: 240, height: 240 });
+const snapConfig = Object.freeze({
+  gridStep: 10,
+  axisX: 120,
+  axisY: 120,
+  pixelTolerance: 8
+});
+
+export const shapeParameterTypeDefinitions = Object.freeze({
+  color: { label: "颜色参数", defaultValue: "#2f5d9d" },
+  text: { label: "文本参数", defaultValue: "" },
+  number: { label: "数字参数", defaultValue: 0 },
+  checkbox: { label: "勾选参数", defaultValue: false }
+});
 
 export function createShapeManager({
   state,
@@ -27,9 +40,8 @@ export function createShapeManager({
     shapePropsPanel,
     shapeParamsPanel,
     shapePropsList,
-    addColorParamBtn,
-    addTextParamBtn,
-    addCheckboxParamBtn,
+    shapeParamTypeSelect,
+    shapeAddParamBtn,
     shapeParamList
   } = elements;
 
@@ -81,9 +93,8 @@ export function createShapeManager({
       || !shapePropsPanel
       || !shapeParamsPanel
       || !shapePropsList
-      || !addColorParamBtn
-      || !addTextParamBtn
-      || !addCheckboxParamBtn
+      || !shapeParamTypeSelect
+      || !shapeAddParamBtn
       || !shapeParamList
     ) {
       return;
@@ -133,9 +144,13 @@ export function createShapeManager({
       renderParameterList(getSelectedShape());
     });
 
-    addColorParamBtn.addEventListener("click", () => addParameter("color"));
-    addTextParamBtn.addEventListener("click", () => addParameter("text"));
-    addCheckboxParamBtn.addEventListener("click", () => addParameter("checkbox"));
+    shapeParamTypeSelect.addEventListener("change", () => {
+      state.shapeManager.parameterType = shapeParamTypeSelect.value;
+    });
+
+    shapeAddParamBtn.addEventListener("click", () => {
+      addParameter(shapeParamTypeSelect.value);
+    });
 
     shapeEditorCanvas.addEventListener("click", onCanvasClick);
     shapeEditorCanvas.addEventListener("mousedown", onCanvasMouseDown);
@@ -177,12 +192,58 @@ export function createShapeManager({
 
     renderShapeLibraryList();
     shapePrimitiveSelect.value = state.shapeManager.primitiveType || "line";
+    shapeParamTypeSelect.value = shapeParameterTypeDefinitions[state.shapeManager.parameterType || "color"]
+      ? state.shapeManager.parameterType || "color"
+      : "color";
     shapeNameInput.value = selectedShape?.name || "";
 
     syncTabVisibility();
     renderEditorCanvas(selectedShape);
     renderPropertiesPanel(selectedShape);
     renderParameterList(selectedShape);
+  }
+
+  // param drag state handlers
+  function onParamDragStart(event) {
+    const handle = event.currentTarget;
+    const row = handle.closest(".shape-param-item");
+    if (!row) return;
+    state.shapeManager.dragParamIndex = Number(row.dataset.paramIndex);
+    row.classList.add("dragging");
+    if (event.dataTransfer) {
+      event.dataTransfer.effectAllowed = "move";
+      event.dataTransfer.setData("text/plain", String(state.shapeManager.dragParamIndex));
+    }
+  }
+
+  function onParamDragOver(event) {
+    if (!Number.isInteger(state.shapeManager.dragParamIndex)) return;
+    event.preventDefault();
+  }
+
+  function onParamDrop(event) {
+    event.preventDefault();
+    const targetRow = event.currentTarget;
+    const toIndex = Number(targetRow.dataset.paramIndex);
+    const fromIndex = state.shapeManager.dragParamIndex;
+    if (!Number.isInteger(fromIndex) || !Number.isInteger(toIndex) || fromIndex === toIndex) {
+      return;
+    }
+    const currentShape = getSelectedShape();
+    if (!currentShape) return;
+    const params = normalizeShapeParameters(currentShape.parameters || []);
+    const moved = params.splice(fromIndex, 1)[0];
+    const insertIndex = fromIndex < toIndex ? toIndex - 1 : toIndex;
+    params.splice(insertIndex, 0, moved);
+    currentShape.parameters = params;
+    state.shapeManager.dragParamIndex = null;
+    persistShapeLibrary();
+    renderParameterList(currentShape);
+  }
+
+  function onParamDragEnd() {
+    shapeParamList.querySelectorAll(".shape-param-item.dragging").forEach((item) => item.classList.remove("dragging"));
+    state.shapeManager.dragParamIndex = null;
   }
 
   function renderShapeLibraryList() {
@@ -297,7 +358,8 @@ export function createShapeManager({
     if (Array.isArray(shape.editableElements)) {
       const layer = document.createElementNS(svgNs, "g");
       shape.editableElements.forEach((primitive, index) => {
-        const node = createPrimitiveNode(primitive);
+        const effectivePrimitive = resolvePrimitiveWithParameters(primitive, shape.parameters);
+        const node = createPrimitiveNode(effectivePrimitive);
         if (!node) {
           return;
         }
@@ -372,9 +434,19 @@ export function createShapeManager({
     title.textContent = `当前图元: ${primitiveTypeLabel(primitive.type)} #${index + 1}`;
     shapePropsList.appendChild(title);
 
+    const layerActions = document.createElement("div");
+    layerActions.className = "shape-layer-actions";
+    layerActions.appendChild(createLayerActionButton("置底", shape, "bottom", index <= 0));
+    layerActions.appendChild(createLayerActionButton("下移", shape, "down", index <= 0));
+    layerActions.appendChild(createLayerActionButton("上移", shape, "up", index >= shape.editableElements.length - 1));
+    layerActions.appendChild(createLayerActionButton("置顶", shape, "top", index >= shape.editableElements.length - 1));
+    shapePropsList.appendChild(layerActions);
+
     if (primitive.type === "line" || primitive.type === "bezier") {
       appendInfo(shapePropsList, "可直接在中间画布拖拽控制点调整端点/控制点位置。", "shape-prop-tip");
     }
+
+    appendInfo(shapePropsList, "拖拽支持自动吸附（网格/轴线/其他图元关键点），按住 Alt 可临时关闭吸附。", "shape-prop-tip");
 
     const row = document.createElement("div");
     row.className = "shape-prop-grid";
@@ -384,6 +456,9 @@ export function createShapeManager({
   }
 
   function renderPrimitiveFields(container, shape, index, primitive) {
+    const shapeParameters = normalizeShapeParameters(shape.parameters);
+    shape.parameters = shapeParameters;
+
     const commit = ({ rerenderProps = false, refreshLibrary = true } = {}) => {
       syncShapeSvg(shape);
       persistShapeLibrary();
@@ -397,6 +472,99 @@ export function createShapeManager({
       }
     };
 
+    const resolveFieldValue = (key, paramType, fallback) => {
+      return resolvePrimitiveFieldValue(primitive, shapeParameters, key, paramType, fallback);
+    };
+
+    const attachParameterBinding = (field, key, paramType, onModeChange) => {
+      const params = shapeParameters.filter((param) => param.type === paramType);
+      const label = field.querySelector(".shape-prop-label");
+      if (!label) {
+        onModeChange(false);
+        return;
+      }
+
+      const labelRow = document.createElement("div");
+      labelRow.className = "shape-prop-label-row";
+      label.parentNode.insertBefore(labelRow, label);
+      labelRow.appendChild(label);
+
+      const toggleWrap = document.createElement("label");
+      toggleWrap.className = "shape-prop-param-toggle";
+      const toggleText = document.createElement("span");
+      toggleText.textContent = "参数";
+      const toggle = document.createElement("input");
+      toggle.type = "checkbox";
+      toggle.className = "toggle-checkbox";
+      const slider = document.createElement("span");
+      slider.className = "toggle-slider";
+      slider.setAttribute("aria-hidden", "true");
+      const switchRoot = document.createElement("span");
+      switchRoot.className = "toggle-switch";
+      switchRoot.appendChild(toggle);
+      switchRoot.appendChild(slider);
+      toggleWrap.appendChild(toggleText);
+      toggleWrap.appendChild(switchRoot);
+      labelRow.appendChild(toggleWrap);
+
+      const paramSelect = document.createElement("select");
+      paramSelect.className = "shape-prop-param-select";
+      if (params.length) {
+        params.forEach((param) => {
+          const option = document.createElement("option");
+          option.value = param.id;
+          option.textContent = param.label;
+          paramSelect.appendChild(option);
+        });
+      } else {
+        const empty = document.createElement("option");
+        empty.value = "";
+        empty.textContent = "暂无可用参数";
+        paramSelect.appendChild(empty);
+      }
+      field.appendChild(paramSelect);
+
+      const binding = getPrimitiveParamBinding(primitive, key, paramType);
+      let selectedParamId = binding?.paramId && params.some((param) => param.id === binding.paramId)
+        ? binding.paramId
+        : (params[0]?.id || "");
+
+      if (selectedParamId) {
+        paramSelect.value = selectedParamId;
+      }
+
+      toggle.disabled = !params.length;
+      toggle.checked = Boolean(params.length && selectedParamId && binding);
+
+      const applyMode = () => {
+        const useParam = Boolean(toggle.checked && params.length);
+        paramSelect.hidden = !useParam;
+        paramSelect.disabled = !useParam;
+
+        if (useParam) {
+          selectedParamId = paramSelect.value || params[0].id;
+          paramSelect.value = selectedParamId;
+          setPrimitiveParamBinding(primitive, key, { type: paramType, paramId: selectedParamId });
+        } else {
+          setPrimitiveParamBinding(primitive, key, null);
+        }
+
+        onModeChange(useParam);
+      };
+
+      toggle.addEventListener("change", () => {
+        applyMode();
+        commit({ rerenderProps: true, refreshLibrary: false });
+      });
+
+      paramSelect.addEventListener("change", () => {
+        applyMode();
+        commit({ rerenderProps: true, refreshLibrary: false });
+      });
+
+      applyMode();
+    };
+
     const addNumber = (labelText, key, options = {}) => {
       const field = createPropField(labelText);
       const input = document.createElement("input");
@@ -408,12 +576,19 @@ export function createShapeManager({
         input.max = String(options.max);
       }
       input.step = String(options.step || 1);
-      input.value = String(toNumber(primitive[key], options.defaultValue || 0));
+      const defaultValue = options.defaultValue || 0;
+      input.value = String(toNumber(resolveFieldValue(key, "number", defaultValue), defaultValue));
       input.addEventListener("change", () => {
-        const normalized = normalizeNumber(input.value, options.defaultValue || 0, options.min, options.max);
+        const normalized = normalizeNumber(input.value, defaultValue, options.min, options.max);
         primitive[key] = normalized;
         input.value = String(normalized);
         commit();
+      });
+      attachParameterBinding(field, key, "number", (useParam) => {
+        input.disabled = useParam;
+        if (useParam) {
+          input.value = String(toNumber(resolveFieldValue(key, "number", defaultValue), defaultValue));
+        }
       });
       field.appendChild(input);
       container.appendChild(field);
@@ -423,13 +598,19 @@ export function createShapeManager({
       const field = createPropField(labelText);
       const input = document.createElement("input");
       input.type = "color";
-      input.value = safeColor(primitive[key] || fallback);
+      input.value = safeColor(resolveFieldValue(key, "color", fallback) || fallback);
       const applyColor = ({ refreshLibrary }) => {
         primitive[key] = safeColor(input.value);
         commit({ refreshLibrary });
       };
       input.addEventListener("input", () => applyColor({ refreshLibrary: false }));
       input.addEventListener("change", () => applyColor({ refreshLibrary: true }));
+      attachParameterBinding(field, key, "color", (useParam) => {
+        input.disabled = useParam;
+        if (useParam) {
+          input.value = safeColor(resolveFieldValue(key, "color", fallback) || fallback);
+        }
+      });
       field.appendChild(input);
       container.appendChild(field);
     };
@@ -451,9 +632,23 @@ export function createShapeManager({
       color.type = "color";
       color.value = safeColor(primitive[key] || "#2f5d9d");
 
-      const isNone = String(primitive[key] || "none") === "none";
-      select.value = isNone ? "none" : "custom";
-      color.disabled = isNone;
+      const syncFillFixedState = (useParam) => {
+        if (useParam) {
+          select.value = "custom";
+          select.disabled = true;
+          color.disabled = true;
+          color.value = safeColor(resolveFieldValue(key, "color", "#2f5d9d") || "#2f5d9d");
+          return;
+        }
+
+        const isNone = String(primitive[key] || "none") === "none";
+        select.disabled = false;
+        select.value = isNone ? "none" : "custom";
+        color.disabled = isNone;
+        color.value = safeColor(primitive[key] || "#2f5d9d");
+      };
+
+      syncFillFixedState(false);
 
       select.addEventListener("change", () => {
         if (select.value === "none") {
@@ -476,6 +671,10 @@ export function createShapeManager({
       color.addEventListener("input", () => applyColor({ refreshLibrary: false }));
       color.addEventListener("change", () => applyColor({ refreshLibrary: true }));
 
+      attachParameterBinding(field, key, "color", (useParam) => {
+        syncFillFixedState(useParam);
+      });
+
       field.appendChild(select);
       field.appendChild(color);
       container.appendChild(field);
@@ -485,16 +684,22 @@ export function createShapeManager({
       const field = createPropField(labelText);
       const input = document.createElement("input");
       input.type = "text";
-      input.value = String(primitive[key] ?? fallback);
+      input.value = String(resolveFieldValue(key, "text", fallback) ?? fallback);
       input.addEventListener("input", () => {
         primitive[key] = String(input.value || fallback);
         commit();
+      });
+      attachParameterBinding(field, key, "text", (useParam) => {
+        input.disabled = useParam;
+        if (useParam) {
+          input.value = String(resolveFieldValue(key, "text", fallback) ?? fallback);
+        }
       });
       field.appendChild(input);
       container.appendChild(field);
     };
 
-    const addToggle = (labelText, key, { rerenderProps = false, onChange } = {}) => {
+    const addToggle = (labelText, key, { rerenderProps = false, onChange, parameterizable = true } = {}) => {
       const field = createPropField(labelText);
       field.classList.add("shape-prop-toggle");
       const toggle = document.createElement("label");
@@ -502,11 +707,14 @@ export function createShapeManager({
       const input = document.createElement("input");
       input.type = "checkbox";
       input.className = "toggle-checkbox";
-      input.checked = Boolean(primitive[key]);
+      input.checked = Boolean(resolveFieldValue(key, "checkbox", primitive[key]));
       const slider = document.createElement("span");
       slider.className = "toggle-slider";
       slider.setAttribute("aria-hidden", "true");
       input.addEventListener("change", () => {
+        if (input.disabled) {
+          return;
+        }
         const checked = Boolean(input.checked);
         primitive[key] = checked;
         if (typeof onChange === "function") {
@@ -514,6 +722,15 @@ export function createShapeManager({
         }
         commit({ rerenderProps });
       });
+
+      if (parameterizable) {
+        attachParameterBinding(field, key, "checkbox", (useParam) => {
+          input.disabled = useParam;
+          if (useParam) {
+            input.checked = Boolean(resolveFieldValue(key, "checkbox", primitive[key]));
+          }
+        });
+      }
 
       toggle.appendChild(input);
       toggle.appendChild(slider);
@@ -627,19 +844,122 @@ export function createShapeManager({
   function renderParameterList(shape) {
     shapeParamList.innerHTML = "";
 
-    const params = Array.isArray(shape?.parameters) ? shape.parameters : [];
+    const params = normalizeShapeParameters(shape?.parameters);
+    if (shape) {
+      shape.parameters = params;
+    }
+
     if (!params.length) {
       const empty = document.createElement("div");
       empty.className = "shape-param-item";
-      empty.textContent = "暂无参数（可通过上方按钮添加）";
+      empty.textContent = "暂无参数（可通过上方下拉框选择类型后添加）";
       shapeParamList.appendChild(empty);
       return;
     }
 
-    params.forEach((param) => {
+    params.forEach((param, index) => {
       const row = document.createElement("div");
       row.className = "shape-param-item";
-      row.textContent = `${param.label} (${param.type})`;
+      row.dataset.paramIndex = String(index);
+
+      const head = document.createElement("div");
+      head.className = "shape-param-head";
+      const typeBadge = document.createElement("span");
+      typeBadge.className = "shape-param-type";
+      typeBadge.textContent = shapeParameterTypeDefinitions[param.type]?.label || "参数";
+      head.appendChild(typeBadge);
+
+      const dragHandle = document.createElement("button");
+      dragHandle.className = "param-drag-handle";
+      dragHandle.type = "button";
+      dragHandle.title = "拖拽排序";
+      dragHandle.setAttribute("data-drag-handle-index", String(index));
+      dragHandle.draggable = true;
+      dragHandle.innerHTML = `<img src="img/icon-drag-vertical.svg" alt="" />`;
+      head.appendChild(dragHandle);
+
+      const removeBtn = document.createElement("button");
+      removeBtn.className = "btn-ghost param-remove-btn";
+      removeBtn.type = "button";
+      removeBtn.textContent = "删除";
+      removeBtn.setAttribute("data-remove-param-index", String(index));
+
+      // determine if this parameter is referenced by any primitive
+      const isReferenced = (Array.isArray(shape.editableElements) ? shape.editableElements : []).some((prim) => {
+        const bindings = getPrimitiveParamBindings(prim);
+        return Object.values(bindings || {}).some((b) => String(b.paramId || "") === String(param.id));
+      });
+
+      removeBtn.disabled = isReferenced;
+      if (removeBtn.disabled) {
+        removeBtn.title = "该参数已被图元引用，无法删除";
+      }
+
+      // if disabled, wrap so tooltip appears
+      if (removeBtn.disabled) {
+        const wrapper = document.createElement("span");
+        wrapper.className = "disabled-wrapper";
+        wrapper.title = removeBtn.title || "该参数已被图元引用，无法删除";
+        wrapper.appendChild(removeBtn);
+        head.appendChild(wrapper);
+      } else {
+        head.appendChild(removeBtn);
+      }
+      row.appendChild(head);
+
+      const labelInput = document.createElement("input");
+      labelInput.type = "text";
+      labelInput.value = String(param.label || "参数");
+      labelInput.placeholder = "参数名称";
+      labelInput.addEventListener("change", () => {
+        param.label = String(labelInput.value || "参数").trim() || "参数";
+        labelInput.value = param.label;
+        persistShapeLibrary();
+        renderParameterList(shape);
+        renderPropertiesPanel(shape);
+      });
+      row.appendChild(labelInput);
+
+      const defaultBlock = document.createElement("div");
+      defaultBlock.className = "shape-param-default";
+      const defaultLabel = document.createElement("span");
+      defaultLabel.className = "shape-param-default-label";
+      defaultLabel.textContent = "默认值";
+      defaultBlock.appendChild(defaultLabel);
+
+      const commitDefault = ({ refreshLibrary = true } = {}) => {
+        syncShapeSvg(shape);
+        persistShapeLibrary();
+        renderEditorCanvas(shape);
+        renderPropertiesPanel(shape);
+        if (refreshLibrary) {
+          renderShapeLibraryList();
+          renderSubmenu();
+        }
+      };
+
+      const defaultInput = createParameterDefaultInput(param, commitDefault);
+      defaultBlock.appendChild(defaultInput);
+      row.appendChild(defaultBlock);
+
+      // drag/drop handlers
+      row.addEventListener("dragover", onParamDragOver);
+      row.addEventListener("drop", onParamDrop);
+      dragHandle.addEventListener("dragstart", onParamDragStart);
+      dragHandle.addEventListener("dragend", onParamDragEnd);
+
+      removeBtn.addEventListener("click", () => {
+        if (removeBtn.disabled) {
+          return;
+        }
+        const liveParams = normalizeShapeParameters(shape.parameters || []);
+        liveParams.splice(index, 1);
+        shape.parameters = liveParams;
+        persistShapeLibrary();
+        renderParameterList(shape);
+        renderPropertiesPanel(shape);
+      });
+
       shapeParamList.appendChild(row);
     });
   }
@@ -730,16 +1050,86 @@ export function createShapeManager({
       shape.parameters = [];
     }
 
-    const nextNo = shape.parameters.length + 1;
-    const label = type === "color"
-      ? `颜色参数 ${nextNo}`
-      : type === "text"
-        ? `文本参数 ${nextNo}`
-        : `勾选参数 ${nextNo}`;
+    const normalizedType = shapeParameterTypeDefinitions[type] ? type : "text";
 
-    shape.parameters.push({ type, label });
+    const nextNo = shape.parameters.length + 1;
+    const definition = shapeParameterTypeDefinitions[normalizedType] || shapeParameterTypeDefinitions.text;
+    const parameter = {
+      id: createShapeId(),
+      type: normalizedType,
+      label: `${definition.label} ${nextNo}`,
+      defaultValue: normalizeShapeParameterDefault(normalizedType, definition.defaultValue),
+      conditions: [],
+      extensions: {}
+    };
+
+    shape.parameters.push(parameter);
     persistShapeLibrary();
+    renderPropertiesPanel(shape);
     renderParameterList(shape);
+  }
+
+  function createParameterDefaultInput(param, commitDefault) {
+    if (param.type === "color") {
+      const input = document.createElement("input");
+      input.type = "color";
+      input.value = safeColor(param.defaultValue || "#2f5d9d");
+      input.addEventListener("input", () => {
+        param.defaultValue = safeColor(input.value);
+        commitDefault({ refreshLibrary: false });
+      });
+      input.addEventListener("change", () => {
+        param.defaultValue = safeColor(input.value);
+        commitDefault({ refreshLibrary: true });
+      });
+      return input;
+    }
+
+    if (param.type === "number") {
+      const input = document.createElement("input");
+      input.type = "number";
+      input.step = "0.1";
+      input.value = String(toNumber(param.defaultValue, 0));
+      input.addEventListener("change", () => {
+        const normalized = normalizeNumber(input.value, 0, -100000, 100000);
+        param.defaultValue = normalized;
+        input.value = String(normalized);
+        commitDefault({ refreshLibrary: true });
+      });
+      return input;
+    }
+
+    if (param.type === "checkbox") {
+      const wrapper = document.createElement("label");
+      wrapper.className = "toggle-switch";
+      const input = document.createElement("input");
+      input.type = "checkbox";
+      input.className = "toggle-checkbox";
+      input.checked = Boolean(param.defaultValue);
+      const slider = document.createElement("span");
+      slider.className = "toggle-slider";
+      slider.setAttribute("aria-hidden", "true");
+      input.addEventListener("change", () => {
+        param.defaultValue = Boolean(input.checked);
+        commitDefault({ refreshLibrary: true });
+      });
+      wrapper.appendChild(input);
+      wrapper.appendChild(slider);
+      return wrapper;
+    }
+
+    const input = document.createElement("input");
+    input.type = "text";
+    input.value = String(param.defaultValue || "");
+    input.addEventListener("input", () => {
+      param.defaultValue = String(input.value || "");
+      commitDefault({ refreshLibrary: false });
+    });
+    input.addEventListener("change", () => {
+      param.defaultValue = String(input.value || "");
+      commitDefault({ refreshLibrary: true });
+    });
+    return input;
   }
 
   function onCanvasClick(event) {
@@ -828,8 +1218,8 @@ export function createShapeManager({
         return;
       }
 
-      const viewBox = getCurrentViewBox();
-      const point = clientToCanvasPoint(event.clientX, event.clientY, viewBox);
+      const rawPoint = clientToCanvasPoint(event.clientX, event.clientY);
+      const point = applyAutoSnap(rawPoint, event, getSnapTargetsForShape(shape, handleState.primitiveIndex));
       if (updatePrimitiveByHandle(primitive, handleState.handleKey, point)) {
         handleState.dirty = true;
         handleState.moved = true;
@@ -853,7 +1243,8 @@ export function createShapeManager({
         return;
       }
 
-      const point = clientToCanvasPoint(event.clientX, event.clientY);
+      const rawPoint = clientToCanvasPoint(event.clientX, event.clientY);
+      const point = applyAutoSnap(rawPoint, event, getSnapTargetsForShape(shape, transformState.primitiveIndex));
       if (!point) {
         return;
       }
@@ -1430,6 +1821,169 @@ export function createShapeManager({
     return null;
   }
 
+  function createLayerActionButton(label, shape, direction, disabled) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "btn-ghost shape-layer-btn";
+    button.textContent = label;
+    button.disabled = Boolean(disabled);
+    button.addEventListener("click", () => {
+      moveSelectedPrimitive(shape, direction);
+    });
+    return button;
+  }
+
+  function moveSelectedPrimitive(shape, direction) {
+    if (!shape || !Array.isArray(shape.editableElements) || !shape.editableElements.length) {
+      return;
+    }
+
+    const length = shape.editableElements.length;
+    const index = clampPrimitiveIndex(state.shapeManager.selectedPrimitiveIndex, length);
+
+    let targetIndex = index;
+    if (direction === "up") {
+      targetIndex = Math.min(length - 1, index + 1);
+    } else if (direction === "down") {
+      targetIndex = Math.max(0, index - 1);
+    } else if (direction === "top") {
+      targetIndex = length - 1;
+    } else if (direction === "bottom") {
+      targetIndex = 0;
+    }
+
+    if (targetIndex === index) {
+      return;
+    }
+
+    const moved = shape.editableElements.splice(index, 1)[0];
+    shape.editableElements.splice(targetIndex, 0, moved);
+    state.shapeManager.selectedPrimitiveIndex = targetIndex;
+
+    syncShapeSvg(shape);
+    persistShapeLibrary();
+    renderEditorCanvas(shape);
+    renderPropertiesPanel(shape);
+    renderShapeLibraryList();
+    renderSubmenu();
+  }
+
+  function getSnapTargetsForShape(shape, excludeIndex) {
+    const targetsX = [snapConfig.axisX];
+    const targetsY = [snapConfig.axisY];
+
+    if (!Array.isArray(shape?.editableElements)) {
+      return { targetsX, targetsY };
+    }
+
+    shape.editableElements.forEach((primitive, index) => {
+      if (index === excludeIndex) {
+        return;
+      }
+
+      getPrimitiveSnapPoints(primitive).forEach((point) => {
+        targetsX.push(point.x);
+        targetsY.push(point.y);
+      });
+    });
+
+    return { targetsX, targetsY };
+  }
+
+  function getPrimitiveSnapPoints(primitive) {
+    if (!primitive || typeof primitive !== "object") {
+      return [];
+    }
+
+    if (primitive.type === "line") {
+      return [
+        { x: primitive.x1, y: primitive.y1 },
+        { x: primitive.x2, y: primitive.y2 },
+        { x: (primitive.x1 + primitive.x2) / 2, y: (primitive.y1 + primitive.y2) / 2 }
+      ];
+    }
+
+    if (primitive.type === "bezier") {
+      return [
+        { x: primitive.x1, y: primitive.y1 },
+        { x: primitive.cx1, y: primitive.cy1 },
+        { x: primitive.cx2, y: primitive.cy2 },
+        { x: primitive.x2, y: primitive.y2 },
+        { x: (primitive.x1 + primitive.x2) / 2, y: (primitive.y1 + primitive.y2) / 2 }
+      ];
+    }
+
+    if (primitive.type === "circle" || primitive.type === "hexagon" || primitive.type === "octagon") {
+      return [
+        { x: primitive.cx, y: primitive.cy },
+        { x: primitive.cx - primitive.r, y: primitive.cy - primitive.r },
+        { x: primitive.cx + primitive.r, y: primitive.cy + primitive.r }
+      ];
+    }
+
+    if (primitive.type === "rect") {
+      return [
+        { x: primitive.x, y: primitive.y },
+        { x: primitive.x + primitive.width, y: primitive.y + primitive.height },
+        { x: primitive.x + primitive.width / 2, y: primitive.y + primitive.height / 2 }
+      ];
+    }
+
+    if (primitive.type === "text") {
+      return [{ x: primitive.x, y: primitive.y }];
+    }
+
+    return [];
+  }
+
+  function applyAutoSnap(point, event, snapTargets) {
+    if (!point) {
+      return null;
+    }
+
+    if (event.altKey) {
+      return point;
+    }
+
+    const tolerance = getSnapToleranceInCanvas();
+    return {
+      x: snapValue(point.x, snapTargets?.targetsX || [], tolerance),
+      y: snapValue(point.y, snapTargets?.targetsY || [], tolerance)
+    };
+  }
+
+  function getSnapToleranceInCanvas() {
+    const rect = shapeEditorCanvas?.getBoundingClientRect();
+    if (!rect || !Number.isFinite(rect.width) || !Number.isFinite(rect.height) || rect.width <= 0 || rect.height <= 0) {
+      return 2;
+    }
+
+    const viewBox = getCurrentViewBox();
+    const unitX = viewBox.width / rect.width;
+    const unitY = viewBox.height / rect.height;
+    return Math.max(1, Math.max(unitX, unitY) * snapConfig.pixelTolerance);
+  }
+
+  function snapValue(value, targets, tolerance) {
+    const candidates = [...targets, Math.round(value / snapConfig.gridStep) * snapConfig.gridStep];
+    let bestValue = value;
+    let bestDistance = tolerance;
+
+    candidates.forEach((candidate) => {
+      if (!Number.isFinite(candidate)) {
+        return;
+      }
+
+      const distance = Math.abs(candidate - value);
+      if (distance <= bestDistance) {
+        bestDistance = distance;
+        bestValue = candidate;
+      }
+    });
+
+    return Number(bestValue.toFixed(2));
+  }
+
   function deleteCurrentSelection() {
     const shape = getSelectedShape();
     if (!shape) {
@@ -1552,6 +2106,9 @@ export function createShapeManager({
 
     state.shapeManager.primitiveType = state.shapeManager.primitiveType || "line";
     state.shapeManager.activeTab = state.shapeManager.activeTab || "props";
+    state.shapeManager.parameterType = shapeParameterTypeDefinitions[state.shapeManager.parameterType]
+      ? state.shapeManager.parameterType
+      : "color";
     state.shapeManager.selectedPrimitiveIndex = Number.isInteger(state.shapeManager.selectedPrimitiveIndex)
       ? state.shapeManager.selectedPrimitiveIndex
       : null;
@@ -1613,17 +2170,18 @@ export function createShapeManager({
         const editableElements = Array.isArray(shape.editableElements)
           ? normalizeEditableElements(shape.editableElements)
           : null;
+        const parameters = normalizeShapeParameters(shape.parameters);
 
         const safeShape = {
           id: String(shape.id || createShapeId()),
           name: String(shape.name || "图形").trim() || "图形",
           editableElements,
-          parameters: Array.isArray(shape.parameters) ? structuredClone(shape.parameters) : [],
+          parameters,
           imported: Boolean(shape.imported)
         };
 
         safeShape.svg = editableElements
-          ? buildSvgFromEditableElements(editableElements)
+          ? buildSvgFromEditableElements(resolveEditableElementsWithParameters(editableElements, parameters))
           : String(shape.svg || "");
 
         return safeShape;
@@ -1679,12 +2237,7 @@ export function createShapeManager({
       name: String(raw.name || "图形").trim() || "图形",
       svg,
       editableElements,
-      parameters: Array.isArray(raw.parameters)
-        ? raw.parameters.map((param) => ({
-          type: ["color", "text", "checkbox"].includes(param?.type) ? param.type : "text",
-          label: String(param?.label || "参数")
-        }))
-        : [],
+      parameters: normalizeShapeParameters(raw.parameters),
       imported: Boolean(raw.imported)
     };
   }
@@ -1694,8 +2247,9 @@ export function createShapeManager({
       return;
     }
 
-    shape.editableElements = normalizeEditableElements(shape.editableElements);
-    shape.svg = buildSvgFromEditableElements(shape.editableElements);
+    // Keep object references stable for active property panel listeners (e.g. color picker drag).
+    shape.parameters = normalizeShapeParameters(shape.parameters);
+    shape.svg = buildSvgFromEditableElements(resolveEditableElementsWithParameters(shape.editableElements, shape.parameters));
     shape.imported = false;
   }
 
@@ -1704,6 +2258,41 @@ export function createShapeManager({
     open,
     close
   };
+}
+
+export function getShapeParameterDefaults(shape) {
+  const defaults = {};
+  normalizeShapeParameters(shape?.parameters).forEach((param) => {
+    defaults[param.id] = normalizeShapeParameterDefault(param.type, param.defaultValue);
+  });
+  return defaults;
+}
+
+export function resolveShapeParametersWithValues(shape, paramValues) {
+  const values = paramValues && typeof paramValues === "object" ? paramValues : {};
+  return normalizeShapeParameters(shape?.parameters).map((param) => {
+    if (!Object.prototype.hasOwnProperty.call(values, param.id)) {
+      return param;
+    }
+
+    return {
+      ...param,
+      defaultValue: normalizeShapeParameterDefault(param.type, values[param.id])
+    };
+  });
+}
+
+export function buildRenderableShapeSvg(shape, paramValues) {
+  if (!shape || typeof shape !== "object") {
+    return "";
+  }
+
+  const resolvedParams = resolveShapeParametersWithValues(shape, paramValues);
+  if (Array.isArray(shape.editableElements)) {
+    return buildSvgFromEditableElements(resolveEditableElementsWithParameters(shape.editableElements, resolvedParams));
+  }
+
+  return normalizeImportedSvg(shape.svg || "");
 }
 
 function findPrimitiveIndex(target) {
@@ -1840,12 +2429,152 @@ function normalizeEditableElements(elements) {
     .filter(Boolean);
 }
 
+function normalizeShapeParameters(parameters) {
+  return (Array.isArray(parameters) ? parameters : [])
+    .map((param, index) => normalizeShapeParameter(param, index))
+    .filter(Boolean);
+}
+
+function normalizeShapeParameter(param, index) {
+  if (!param || typeof param !== "object") {
+    return null;
+  }
+
+  const type = shapeParameterTypeDefinitions[param.type] ? param.type : "text";
+  const definition = shapeParameterTypeDefinitions[type] || shapeParameterTypeDefinitions.text;
+
+  return {
+    id: String(param.id || `shape-param-${index + 1}`),
+    type,
+    label: String(param.label || `${definition.label} ${index + 1}`).trim() || `${definition.label} ${index + 1}`,
+    defaultValue: normalizeShapeParameterDefault(type, param.defaultValue),
+    conditions: Array.isArray(param.conditions) ? structuredClone(param.conditions) : [],
+    extensions: param.extensions && typeof param.extensions === "object" ? structuredClone(param.extensions) : {}
+  };
+}
+
+function normalizeShapeParameterDefault(type, value) {
+  if (type === "color") {
+    return safeColor(value || "#2f5d9d");
+  }
+
+  if (type === "number") {
+    return normalizeNumber(value, 0, -100000, 100000);
+  }
+
+  if (type === "checkbox") {
+    return Boolean(value);
+  }
+
+  return String(value || "");
+}
+
+function normalizePrimitiveParamBindings(rawBindings) {
+  if (!rawBindings || typeof rawBindings !== "object") {
+    return {};
+  }
+
+  const normalized = {};
+  Object.entries(rawBindings).forEach(([key, binding]) => {
+    if (!binding || typeof binding !== "object") {
+      return;
+    }
+
+    const type = shapeParameterTypeDefinitions[binding.type] ? binding.type : null;
+    const paramId = String(binding.paramId || "").trim();
+    if (!type || !paramId) {
+      return;
+    }
+
+    normalized[key] = { type, paramId };
+  });
+
+  return normalized;
+}
+
+function getPrimitiveParamBindings(primitive) {
+  if (!primitive || typeof primitive !== "object") {
+    return {};
+  }
+
+  if (!primitive.paramBindings || typeof primitive.paramBindings !== "object") {
+    primitive.paramBindings = {};
+  }
+
+  return primitive.paramBindings;
+}
+
+function getPrimitiveParamBinding(primitive, key, expectedType) {
+  const bindings = getPrimitiveParamBindings(primitive);
+  const binding = bindings[key];
+  if (!binding || typeof binding !== "object") {
+    return null;
+  }
+
+  if (expectedType && binding.type !== expectedType) {
+    return null;
+  }
+
+  return binding;
+}
+
+function setPrimitiveParamBinding(primitive, key, binding) {
+  const bindings = getPrimitiveParamBindings(primitive);
+
+  if (!binding) {
+    delete bindings[key];
+    return;
+  }
+
+  bindings[key] = {
+    type: binding.type,
+    paramId: String(binding.paramId || "")
+  };
+}
+
+function resolvePrimitiveFieldValue(primitive, parameters, key, paramType, fallback) {
+  const binding = getPrimitiveParamBinding(primitive, key, paramType);
+  if (!binding) {
+    return primitive?.[key] ?? fallback;
+  }
+
+  const param = (Array.isArray(parameters) ? parameters : []).find((item) => item.id === binding.paramId && item.type === paramType);
+  if (!param) {
+    return primitive?.[key] ?? fallback;
+  }
+
+  return normalizeShapeParameterDefault(paramType, param.defaultValue);
+}
+
+function resolvePrimitiveWithParameters(primitive, parameters) {
+  if (!primitive || typeof primitive !== "object") {
+    return primitive;
+  }
+
+  const result = { ...primitive };
+  const bindings = getPrimitiveParamBindings(primitive);
+  Object.entries(bindings).forEach(([key, binding]) => {
+    if (!binding?.type || !shapeParameterTypeDefinitions[binding.type]) {
+      return;
+    }
+
+    result[key] = resolvePrimitiveFieldValue(primitive, parameters, key, binding.type, primitive[key]);
+  });
+
+  return result;
+}
+
+function resolveEditableElementsWithParameters(elements, parameters) {
+  return (Array.isArray(elements) ? elements : []).map((primitive) => resolvePrimitiveWithParameters(primitive, parameters));
+}
+
 function normalizePrimitive(raw) {
   if (!raw || typeof raw !== "object") {
     return null;
   }
 
   const type = String(raw.type || "line").toLowerCase();
+  const paramBindings = normalizePrimitiveParamBindings(raw.paramBindings);
 
   if (type === "line") {
     return {
@@ -1857,7 +2586,8 @@ function normalizePrimitive(raw) {
       stroke: safeColor(raw.stroke),
       strokeWidth: normalizeNumber(raw.strokeWidth, 6, 0.1, 100),
       roundCap: Boolean(raw.roundCap),
-      rotation: toNumber(raw.rotation, 0)
+      rotation: toNumber(raw.rotation, 0),
+      paramBindings
     };
   }
 
@@ -1870,7 +2600,8 @@ function normalizePrimitive(raw) {
       fill: safeFill(raw.fill),
       stroke: safeColor(raw.stroke),
       strokeWidth: normalizeNumber(raw.strokeWidth, 6, 0.1, 100),
-      rotation: toNumber(raw.rotation, 0)
+      rotation: toNumber(raw.rotation, 0),
+      paramBindings
     };
   }
 
@@ -1889,7 +2620,8 @@ function normalizePrimitive(raw) {
       fill: safeFill(raw.fill),
       stroke: safeColor(raw.stroke),
       strokeWidth: normalizeNumber(raw.strokeWidth, 6, 0.1, 100),
-      rotation: toNumber(raw.rotation, 0)
+      rotation: toNumber(raw.rotation, 0),
+      paramBindings
     };
   }
 
@@ -1902,7 +2634,8 @@ function normalizePrimitive(raw) {
       fill: safeFill(raw.fill),
       stroke: safeColor(raw.stroke),
       strokeWidth: normalizeNumber(raw.strokeWidth, 6, 0.1, 100),
-      rotation: toNumber(raw.rotation, 0)
+      rotation: toNumber(raw.rotation, 0),
+      paramBindings
     };
   }
 
@@ -1920,7 +2653,8 @@ function normalizePrimitive(raw) {
       stroke: safeColor(raw.stroke),
       strokeWidth: normalizeNumber(raw.strokeWidth, 6, 0.1, 100),
       roundCap: Boolean(raw.roundCap),
-      rotation: toNumber(raw.rotation, 0)
+      rotation: toNumber(raw.rotation, 0),
+      paramBindings
     };
   }
 
@@ -1933,7 +2667,8 @@ function normalizePrimitive(raw) {
       fontSize: normalizeNumber(raw.fontSize, 26, 1, 240),
       fontFamily: String(raw.fontFamily || "Segoe UI"),
       fill: safeColor(raw.fill),
-      rotation: toNumber(raw.rotation, 0)
+      rotation: toNumber(raw.rotation, 0),
+      paramBindings
     };
   }
 
@@ -2291,7 +3026,7 @@ function primitiveTypeLabel(type) {
     rect: "方形",
     hexagon: "六边形",
     octagon: "八边形",
-    bezier: "贝叶斯曲线",
+    bezier: "贝塞尔曲线",
     text: "文本"
   };
   return map[type] || "图元";

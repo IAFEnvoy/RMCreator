@@ -18,6 +18,7 @@ export function serializeDrawing(state) {
     nodes: sanitizeNodes(state.nodes),
     edges: sanitizeEdges(state.edges),
     labels: sanitizeLabels(state.labels),
+    shapes: sanitizePlacedShapes(state.shapes),
     customLineTypes: sanitizeCustomLineTypes(state.lineTypes, state.edges)
   };
 }
@@ -49,8 +50,42 @@ export function normalizeDrawingData(raw) {
     nodes: sanitizeNodes(raw.nodes),
     edges: sanitizeEdges(raw.edges),
     labels: sanitizeLabels(raw.labels),
+    shapes: sanitizePlacedShapes(raw.shapes),
     customLineTypes: normalizeCustomLineTypes(raw.customLineTypes)
   };
+}
+
+function sanitizePlacedShapes(rawShapes) {
+  if (!Array.isArray(rawShapes)) {
+    return [];
+  }
+
+  return rawShapes
+    .map((shape) => {
+      const paramValues = {};
+      if (shape?.paramValues && typeof shape.paramValues === "object") {
+        Object.entries(shape.paramValues).forEach(([key, value]) => {
+          const paramKey = String(key || "").trim();
+          if (!paramKey) {
+            return;
+          }
+
+          if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+            paramValues[paramKey] = value;
+          }
+        });
+      }
+
+      return {
+        id: String(shape?.id || "").trim(),
+        shapeId: String(shape?.shapeId || "").trim(),
+        x: Number(shape?.x) || 0,
+        y: Number(shape?.y) || 0,
+        scale: clamp(Number(shape?.scale) || 0.25, 0.1, 10),
+        paramValues
+      };
+    })
+    .filter((shape) => shape.id.length > 0 && shape.shapeId.length > 0);
 }
 
 function normalizeViewport(viewport) {

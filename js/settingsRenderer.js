@@ -5,6 +5,11 @@ import {
   mergeColorAndAlpha,
   splitColorAndAlpha
 } from "./utils.js";
+import {
+  buildRenderableShapeSvg,
+  resolveShapeParametersWithValues,
+  shapeParameterTypeDefinitions
+} from "./shapeManager.js";
 
 export function createSettingsRenderer({
   state,
@@ -15,6 +20,7 @@ export function createSettingsRenderer({
   ensureEdgeColorList,
   renderStations,
   renderLines,
+  renderShapes,
   renderTexts,
   applyStationType,
   getStationTypeIndexByStation,
@@ -45,12 +51,17 @@ export function createSettingsRenderer({
       .map((entity) => state.labels.find((item) => item.id === entity.id))
       .filter(Boolean);
 
-    const typeCount = [selectedStations.length, selectedLines.length, selectedTexts.length]
+    const selectedShapes = selectedEntities
+      .filter((entity) => entity.type === "shape")
+      .map((entity) => state.shapes.find((item) => item.id === entity.id))
+      .filter(Boolean);
+
+    const typeCount = [selectedStations.length, selectedLines.length, selectedTexts.length, selectedShapes.length]
       .filter((count) => count > 0)
       .length;
 
     const summaryHtml = selectedEntities.length > 1
-      ? `<div class="kv">已选择：车站 ${selectedStations.length} 个，线条 ${selectedLines.length} 条，文本 ${selectedTexts.length} 个</div>`
+      ? `<div class="kv">已选择：车站 ${selectedStations.length} 个，线条 ${selectedLines.length} 条，文本 ${selectedTexts.length} 个，图形 ${selectedShapes.length} 个</div>`
       : "";
 
     if (typeCount > 1) {
@@ -81,6 +92,15 @@ export function createSettingsRenderer({
         renderSingleText(selectedTexts[0], summaryHtml);
       } else {
         settingsBody.innerHTML = `${summaryHtml}<div class="kv">文本多选暂不支持批量设置。</div>`;
+      }
+      return;
+    }
+
+    if (selectedShapes.length > 0) {
+      if (selectedShapes.length === 1) {
+        renderSingleShape(selectedShapes[0], summaryHtml);
+      } else {
+        settingsBody.innerHTML = `${summaryHtml}<div class="kv">图形多选暂不支持批量设置。</div>`;
       }
     }
   };
@@ -531,6 +551,115 @@ export function createSettingsRenderer({
       onStateChanged?.();
     });
   }
+
+  function renderSingleShape(shapeInstance, summaryHtml) {
+    const preset = state.shapeLibrary.find((item) => item.id === shapeInstance.shapeId);
+    if (!preset) {
+      settingsBody.innerHTML = `${summaryHtml}<div class="kv">组件类型: 图形</div><div class="kv">该图形引用的预制图形已不存在。</div>`;
+      return;
+    }
+
+    const safeScale = clamp(Number(shapeInstance.scale) || 1, 0.1, 10);
+    const resolvedParams = resolveShapeParametersWithValues(preset, shapeInstance.paramValues || {});
+
+    const paramFieldsHtml = resolvedParams
+      .map((param) => {
+        const controlId = `shapeParamValue-${escapeHtml(shapeInstance.id)}-${escapeHtml(param.id)}`;
+        const label = escapeHtml(param.label || shapeParameterTypeDefinitions[param.type]?.label || "参数");
+        const typeLabel = escapeHtml(shapeParameterTypeDefinitions[param.type]?.label || "参数");
+
+        if (param.type === "color") {
+          return `
+            <div class="field">
+              <label for="${controlId}">${label}（${typeLabel}）</label>
+              <input id="${controlId}" data-shape-param-id="${escapeHtml(param.id)}" type="color" value="${escapeHtml(String(param.defaultValue || "#2f5d9d"))}" />
+            </div>
+          `;
+        }
+
+        if (param.type === "number") {
+          return `
+            <div class="field">
+              <label for="${controlId}">${label}（${typeLabel}）</label>
+              <input id="${controlId}" data-shape-param-id="${escapeHtml(param.id)}" type="number" step="0.1" value="${Number(param.defaultValue) || 0}" />
+            </div>
+          `;
+        }
+
+        if (param.type === "checkbox") {
+          return `
+            <div class="field field-toggle">
+              <label for="${controlId}">${label}（${typeLabel}）</label>
+              <label class="toggle-switch" for="${controlId}">
+                <input id="${controlId}" data-shape-param-id="${escapeHtml(param.id)}" class="toggle-checkbox" type="checkbox" ${param.defaultValue ? "checked" : ""} />
+                <span class="toggle-slider" aria-hidden="true"></span>
+              </label>
+            </div>
+          `;
+        }
+
+        return `
+          <div class="field">
+            <label for="${controlId}">${label}（${typeLabel}）</label>
+            <input id="${controlId}" data-shape-param-id="${escapeHtml(param.id)}" type="text" value="${escapeHtml(String(param.defaultValue || ""))}" />
+          </div>
+        `;
+      })
+      .join("");
+
+    settingsBody.innerHTML = `
+      ${summaryHtml}
+      <div class="kv">组件类型: 图形</div>
+      <div class="kv">预制图形: ${escapeHtml(preset.name || "图形")}</div>
+      <div class="field">
+        <label for="shapeScaleInput">缩放比例</label>
+        <input id="shapeScaleInput" type="number" min="0.1" max="10" step="0.1" value="${safeScale}" />
+      </div>
+      <div class="field">
+        <label>参数预览</label>
+        <img class="menu-item-shape-preview" alt="图形预览" src="${escapeHtml(toSvgDataUrl(buildRenderableShapeSvg(preset, shapeInstance.paramValues || {})))}" />
+      </div>
+      ${paramFieldsHtml || '<div class="kv">该图形没有可配置参数。</div>'}
+      <div class="kv">提示：可再次按住并拖动该图形调整位置。</div>
+    `;
+
+    const scaleInput = document.getElementById("shapeScaleInput");
+    scaleInput?.addEventListener("change", () => {
+      shapeInstance.scale = clamp(Number(scaleInput.value) || 1, 0.1, 10);
+      scaleInput.value = String(shapeInstance.scale);
+      renderShapes();
+      onStateChanged?.();
+      renderSettings();
+    });
+
+    settingsBody.querySelectorAll("[data-shape-param-id]").forEach((inputEl) => {
+      const paramId = inputEl.getAttribute("data-shape-param-id");
+      const param = resolvedParams.find((item) => item.id === paramId);
+      if (!param) {
+        return;
+      }
+
+      const apply = () => {
+        if (!shapeInstance.paramValues || typeof shapeInstance.paramValues !== "object") {
+          shapeInstance.paramValues = {};
+        }
+
+        if (param.type === "checkbox") {
+          shapeInstance.paramValues[param.id] = Boolean(inputEl.checked);
+        } else if (param.type === "number") {
+          shapeInstance.paramValues[param.id] = Number(inputEl.value) || 0;
+        } else {
+          shapeInstance.paramValues[param.id] = inputEl.value;
+        }
+
+        renderShapes();
+        onStateChanged?.({ coalesceKey: "shape-params" });
+      };
+
+      inputEl.addEventListener("input", apply);
+      inputEl.addEventListener("change", apply);
+    });
+  }
 }
 
 function getCommonValue(items, getter) {
@@ -541,4 +670,8 @@ function getCommonValue(items, getter) {
   const first = getter(items[0]);
   const allSame = items.every((item) => getter(item) === first);
   return allSame ? first : "";
+}
+
+function toSvgDataUrl(svgText) {
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(String(svgText || ""))}`;
 }

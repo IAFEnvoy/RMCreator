@@ -8,6 +8,7 @@ export function createEventBinder({
   addStation,
   addLine,
   addText,
+  addShape,
   selectEntity,
   selectEntities,
   toggleEntitySelection,
@@ -24,6 +25,7 @@ export function createEventBinder({
     svg,
     viewport,
     lineLayer,
+    shapeLayer,
     textLayer,
     linePreview,
     selectionMarquee,
@@ -71,6 +73,9 @@ export function createEventBinder({
 
       renderer.setActiveToolButton();
       renderer.renderSubmenu();
+      if (state.activeTool !== "shape" || !state.menuSelection.shape) {
+        renderer.hideShapeGhost?.();
+      }
       renderer.updateDragCursor();
     });
   }
@@ -216,6 +221,7 @@ export function createEventBinder({
 
     const stationEl = target.closest("[data-station-id]");
     const lineEl = target.closest("[data-line-id]");
+    const shapeEl = target.closest("[data-shape-id]");
     const textEl = target.closest("[data-text-id]");
 
     if (stationEl) {
@@ -248,6 +254,16 @@ export function createEventBinder({
       return;
     }
 
+    if (shapeEl) {
+      const entity = { type: "shape", id: shapeEl.dataset.shapeId };
+      if (multiSelect) {
+        toggleEntitySelection(entity);
+      } else {
+        selectEntity(entity);
+      }
+      return;
+    }
+
     if (state.activeTool === "station" && state.menuSelection.station !== null) {
       addStation(point.x, point.y, state.menuSelection.station);
       return;
@@ -255,6 +271,16 @@ export function createEventBinder({
 
     if (state.activeTool === "text") {
       addText(point.x, point.y);
+      return;
+    }
+
+    if (state.activeTool === "shape" && state.menuSelection.shape) {
+      addShape(point.x, point.y, state.menuSelection.shape);
+      if (state.appSettings?.continuousShapeMode === false) {
+        state.menuSelection.shape = null;
+        renderer.hideShapeGhost?.();
+        renderer.renderSubmenu();
+      }
       return;
     }
 
@@ -272,6 +298,7 @@ export function createEventBinder({
 
     const target = event.target;
     const stationEl = target.closest("[data-station-id]");
+    const shapeEl = target.closest("[data-shape-id]");
     const textEl = target.closest("[data-text-id]");
     const point = toCanvasPoint(event, svg, viewport);
     const multiSelect = event.ctrlKey || event.metaKey;
@@ -294,9 +321,11 @@ export function createEventBinder({
 
     const targetEntity = stationEl
       ? { type: "station", id: stationEl.dataset.stationId }
-      : textEl
-        ? { type: "text", id: textEl.dataset.textId }
-        : null;
+      : shapeEl
+        ? { type: "shape", id: shapeEl.dataset.shapeId }
+        : textEl
+          ? { type: "text", id: textEl.dataset.textId }
+          : null;
 
     if (targetEntity && !multiSelect) {
       if (!isEntitySelected(targetEntity.type, targetEntity.id)) {
@@ -316,7 +345,7 @@ export function createEventBinder({
       }
     }
 
-    if (!target.closest("[data-station-id],[data-line-id],[data-text-id]")) {
+    if (!target.closest("[data-station-id],[data-line-id],[data-shape-id],[data-text-id]")) {
       if (state.activeTool === "select") {
         state.drag.mode = "marquee";
         state.drag.marqueeStart = point;
@@ -324,6 +353,13 @@ export function createEventBinder({
         state.drag.didMove = false;
         drawSelectionMarquee(point, point);
         event.preventDefault();
+        return;
+      }
+
+      // In shape placement mode, blank click should place shape, not start panning.
+      if (state.activeTool === "shape" && state.menuSelection.shape) {
+        // Do not prevent default here: some SVG click flows may be swallowed,
+        // causing placement click to never fire.
         return;
       }
 
@@ -340,6 +376,12 @@ export function createEventBinder({
 
   function onCanvasMouseMove(event) {
     const point = toCanvasPoint(event, svg, viewport);
+
+    if (state.activeTool === "shape" && state.menuSelection.shape && !state.drag.mode) {
+      renderer.drawShapeGhost?.(point, state.menuSelection.shape);
+    } else {
+      renderer.hideShapeGhost?.();
+    }
 
     if (state.drag.mode === "pan") {
       if (Math.abs(event.clientX - state.drag.fromX) > 2 || Math.abs(event.clientY - state.drag.fromY) > 2) {
@@ -375,11 +417,21 @@ export function createEventBinder({
             label.x = entry.startX + dx;
             label.y = entry.startY + dy;
           }
+          return;
+        }
+
+        if (entry.type === "shape") {
+          const shape = state.shapes.find((item) => item.id === entry.id);
+          if (shape) {
+            shape.x = entry.startX + dx;
+            shape.y = entry.startY + dy;
+          }
         }
       });
 
       renderer.renderStations();
       renderer.renderLines();
+      renderer.renderShapes();
       renderer.renderTexts();
       return;
     }
@@ -466,6 +518,11 @@ export function createEventBinder({
 
     if (isSelectionMoveDrag && hadMove) {
       onStateChanged?.();
+      return;
+    }
+
+    if (dragMode === "pan" && hadMove) {
+      onStateChanged?.({ coalesceKey: "viewport" });
     }
   }
 
@@ -488,6 +545,7 @@ export function createEventBinder({
 
     renderer.updateViewportTransform();
     renderer.updateZoomIndicator();
+    onStateChanged?.({ coalesceKey: "viewport" });
   }
 
   function isEditableTarget(target) {
@@ -537,6 +595,19 @@ export function createEventBinder({
             id: label.id,
             startX: label.x,
             startY: label.y
+          });
+        }
+        return;
+      }
+
+      if (entity.type === "shape") {
+        const shape = state.shapes.find((item) => item.id === entity.id);
+        if (shape) {
+          moveEntities.push({
+            type: "shape",
+            id: shape.id,
+            startX: shape.x,
+            startY: shape.y
           });
         }
       }
@@ -635,6 +706,26 @@ export function createEventBinder({
 
         if (intersectsRect(rect, bbox)) {
           matches.push({ type: "text", id });
+        }
+      });
+    }
+
+    if (shapeLayer) {
+      shapeLayer.querySelectorAll("[data-shape-id]").forEach((shapeEl) => {
+        const id = shapeEl.getAttribute("data-shape-id");
+        if (!id) {
+          return;
+        }
+
+        let bbox;
+        try {
+          bbox = shapeEl.getBBox();
+        } catch {
+          return;
+        }
+
+        if (intersectsRect(rect, bbox)) {
+          matches.push({ type: "shape", id });
         }
       });
     }

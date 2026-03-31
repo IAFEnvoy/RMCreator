@@ -262,6 +262,15 @@ export function createLineManager({
       });
 
       const removeBtn = card.querySelector("[data-remove-index]");
+      removeBtn.disabled = draft.segments.length <= 1;
+      if (removeBtn.disabled) {
+        // wrap in span so tooltip still shows when button is disabled
+        const wrapper = document.createElement("span");
+        wrapper.className = "disabled-wrapper";
+        wrapper.title = "至少需要保留一个小线条，无法删除";
+        removeBtn.parentNode.replaceChild(wrapper, removeBtn);
+        wrapper.appendChild(removeBtn);
+      }
       removeBtn.addEventListener("click", () => {
         if (state.lineManager.draft.segments.length <= 1) {
           return;
@@ -357,10 +366,24 @@ export function createLineManager({
       }
 
       const removeBtn = row.querySelector("[data-remove-color-index]");
-      removeBtn.disabled = draft.colorList.length <= 1;
+      // disable if only one color or if any segment references this palette index
+      const isReferenced = (state.lineManager.draft?.segments || []).some((seg) => seg.colorMode === "palette" && Number(seg.paletteIndex || 0) === index);
+      removeBtn.disabled = draft.colorList.length <= 1 || isReferenced;
+      if (removeBtn.disabled) {
+        const wrapper = document.createElement("span");
+        wrapper.className = "disabled-wrapper";
+        wrapper.title = draft.colorList.length <= 1 ? "至少需要保留一种颜色" : "该颜色已被小线条引用，无法删除";
+        removeBtn.parentNode.replaceChild(wrapper, removeBtn);
+        wrapper.appendChild(removeBtn);
+      }
       removeBtn.addEventListener("click", () => {
         const liveDraft = state.lineManager.draft;
         if (!liveDraft || liveDraft.colorList.length <= 1) {
+          return;
+        }
+        // prevent deleting a color that is referenced
+        const stillReferenced = liveDraft.segments.some((seg) => seg.colorMode === "palette" && Number(seg.paletteIndex || 0) === index);
+        if (stillReferenced) {
           return;
         }
 
