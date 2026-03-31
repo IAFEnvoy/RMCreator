@@ -1,4 +1,4 @@
-import { rotatePoint } from "./utils.js";
+import { rotatePoint } from "../utils.js";
 
 export function getLinePoints(geometry, from, to, options = {}) {
   const flip = Boolean(options.flip);

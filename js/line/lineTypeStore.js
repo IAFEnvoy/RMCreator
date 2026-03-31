@@ -1,5 +1,5 @@
-import { lineStorageKey } from "./constants.js";
-import { clamp, normalizeColor } from "./utils.js";
+import { lineStorageKey } from "../constants.js";
+import { clamp, normalizeColor } from "../utils.js";
 
 export function createRandomLineTypeId(prefix = "custom-line") {
   const randomPart = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"

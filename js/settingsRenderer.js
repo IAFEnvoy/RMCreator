@@ -9,7 +9,7 @@ import {
   buildRenderableShapeSvg,
   resolveShapeParametersWithValues,
   shapeParameterTypeDefinitions
-} from "./shapeManager.js";
+} from "./shape/utils.js";
 
 export function createSettingsRenderer({
   state,

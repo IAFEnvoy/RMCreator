@@ -6,11 +6,11 @@ import {
   getLinePoints,
   getOffsetPolyline,
   getParallelOffsets
-} from "./lineGeometry.js";
-import { resolveSegmentColor } from "./lineTypeStore.js";
+} from "./line/geometry.js";
+import { resolveSegmentColor } from "./line/typeStore.js";
 import { clamp, normalizeColor } from "./utils.js";
 import { createSettingsRenderer } from "./settingsRenderer.js";
-import { buildRenderableShapeSvg } from "./shapeManager.js";
+import { buildRenderableShapeSvg } from "./shape/utils.js";
 
 export function createRenderer({
   state,

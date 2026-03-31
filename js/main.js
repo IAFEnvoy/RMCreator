@@ -7,9 +7,10 @@ import {
   loadCustomLineTypes,
   normalizeLineType,
   persistCustomLineTypes
-} from "./lineTypeStore.js";
-import { createLineManager } from "./lineManager.js";
-import { createShapeManager, getShapeParameterDefaults } from "./shapeManager.js";
+} from "./line/typeStore.js";
+import { createLineManager } from "./line/manager.js";
+import { createShapeManager } from "./shape/manager.js";
+import { getShapeParameterDefaults } from "./shape/utils.js";
 import { createRenderer } from "./render.js";
 import { createEventBinder } from "./event.js";
 import { parseDrawingJson, serializeDrawingToJson } from "./serialization.js";

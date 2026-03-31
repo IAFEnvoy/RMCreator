@@ -1,5 +1,5 @@
 import { clamp } from "./utils.js";
-import { normalizeLineType } from "./lineTypeStore.js";
+import { normalizeLineType } from "./line/typeStore.js";
 
 const drawingVersion = 1;
 

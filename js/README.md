@@ -11,8 +11,9 @@
 3. 历史管理：`historyManager.js`
 4. 画布与 UI 渲染：`render.js`、`settingsRenderer.js`
 5. 文件序列化：`serialization.js`
-6. 线条子系统：`lineManager.js`、`lineTypeStore.js`、`lineGeometry.js`
-7. 基础设施：`dom.js`、`constants.js`、`utils.js`
+6. 线条子系统：`line/manager.js`、`line/typeStore.js`、`line/geometry.js`
+7. 图形子系统：`shape/manager.js`、`shape/utils.js`
+8. 基础设施：`dom.js`、`constants.js`、`utils.js`
 
 ## 文件职责
 
@@ -56,18 +57,18 @@
 - 线条设置中包含几何、线型、翻转、圆角、端点偏移与颜色 alpha 编辑。
 - 修改设置后触发对应重绘（如 `renderLines`）。
 
-### `lineManager.js`
+### `line/manager.js`
 - 线条管理器（弹窗）逻辑。
 - 支持线条类型新建/编辑/删除、导入导出、颜色列表编辑、分段编辑与拖拽排序。
 - 负责自动保存到存储（通过 `lineTypeStore`）。
 - 与主画布联动：修改线型后可刷新菜单与画布效果。
 
-### `lineTypeStore.js`
+### `line/typeStore.js`
 - 线条类型的数据模型与持久化层。
 - 提供默认线型创建、线型标准化、颜色解析、`localStorage` 读写。
 - 对外提供 `resolveSegmentColor` 等能力，供渲染层直接使用。
 
-### `lineGeometry.js`
+### `line/geometry.js`
 - 纯几何计算模块。
 - 包括：
   - 不同连线几何（直线、转角等）点集生成
@@ -75,6 +76,16 @@
   - 并行偏移（多子线）
   - 路径字符串构建（圆角等）
 - 不依赖 DOM，适合单独测试与优化。
+
+### `shape/manager.js`
+- 图形管理器（弹窗）逻辑。
+- 管理图形库、图元编辑、参数列表、画布交互与属性面板。
+- 对外提供 `createShapeManager` 供主流程编排。
+
+### `shape/utils.js`
+- 图形相关的纯工具与数据规范化。
+- 提供图元/参数规范化、SVG 生成、图元解析、渲染辅助方法。
+- 对外导出 `shapeParameterTypeDefinitions`、`buildRenderableShapeSvg` 等通用能力。
 
 ### `dom.js`
 - DOM 引用集中管理。
@@ -93,10 +104,10 @@
 
 ## 依赖关系（简化）
 
-- `main.js` -> `event.js`、`historyManager.js`、`render.js`、`serialization.js`、`lineManager.js`、`lineTypeStore.js`
-- `render.js` -> `settingsRenderer.js`、`lineGeometry.js`、`lineTypeStore.js`
-- `settingsRenderer.js` -> `constants.js`、`utils.js`
-- `lineManager.js` -> `lineGeometry.js`、`lineTypeStore.js`、`utils.js`
+- `main.js` -> `event.js`、`historyManager.js`、`render.js`、`serialization.js`、`line/manager.js`、`line/typeStore.js`、`shape/manager.js`、`shape/utils.js`
+- `render.js` -> `settingsRenderer.js`、`line/geometry.js`、`line/typeStore.js`、`shape/utils.js`
+- `settingsRenderer.js` -> `constants.js`、`utils.js`、`shape/utils.js`
+- `line/manager.js` -> `line/geometry.js`、`line/typeStore.js`、`utils.js`
 - `event.js` -> `utils.js`
 
 ## 维护建议

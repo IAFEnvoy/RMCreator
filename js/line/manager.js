@@ -1,13 +1,13 @@
-import { svgNs } from "./dom.js";
-import { lineStyleMap } from "./constants.js";
-import { buildPathD, getOffsetPolyline, getParallelOffsets } from "./lineGeometry.js";
+import { svgNs } from "../dom.js";
+import { lineStyleMap } from "../constants.js";
+import { buildPathD, getOffsetPolyline, getParallelOffsets } from "./geometry.js";
 import {
   getLineTypeById,
   normalizeLineType,
   persistCustomLineTypes,
   resolveSegmentColor
-} from "./lineTypeStore.js";
-import { clamp, mergeColorAndAlpha, splitColorAndAlpha } from "./utils.js";
+} from "./typeStore.js";
+import { clamp, mergeColorAndAlpha, splitColorAndAlpha } from "../utils.js";
 
 export function createLineManager({
   state,
