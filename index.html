@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RMCreator</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+  <div class="app">
+    <section class="canvas-wrap">
+      <svg id="railwayCanvas" class="canvas" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <pattern id="grid" width="24" height="24" patternUnits="userSpaceOnUse">
+            <path d="M 24 0 L 0 0 0 24" fill="none" stroke="#eceff4" stroke-width="1" />
+          </pattern>
+        </defs>
+        <g id="viewport">
+          <rect id="canvasBg" x="-10000" y="-10000" width="20000" height="20000" fill="url(#grid)"></rect>
+          <g id="lineLayer"></g>
+          <g id="stationLayer"></g>
+          <g id="textLayer"></g>
+          <path id="linePreview" class="line-preview" d="" visibility="hidden"></path>
+          <rect id="selectionMarquee" class="selection-marquee" x="0" y="0" width="0" height="0" visibility="hidden">
+          </rect>
+        </g>
+      </svg>
+    </section>
+
+    <header class="topbar floating-panel">
+      <div class="brand">RMCreator</div>
+      <div class="file-menu" id="fileMenu">
+        <button class="tool-btn file-menu-btn" id="fileMenuBtn" type="button" aria-haspopup="true"
+          aria-expanded="false">
+          文件
+        </button>
+        <div class="file-menu-panel" id="fileMenuPanel" hidden>
+          <button class="file-menu-item" id="fileNewBtn" type="button">新建绘图</button>
+          <button class="file-menu-item" id="fileSaveBtn" type="button">保存绘图</button>
+          <button class="file-menu-item" id="fileLoadBtn" type="button">加载绘图</button>
+        </div>
+        <input id="fileLoadInput" type="file" accept="application/json,.json" hidden />
+      </div>
+      <div class="file-menu" id="editMenu">
+        <button class="tool-btn file-menu-btn" id="editMenuBtn" type="button" aria-haspopup="true"
+          aria-expanded="false">
+          编辑
+        </button>
+        <div class="file-menu-panel" id="editMenuPanel" hidden>
+          <button class="file-menu-item" id="fileUndoBtn" type="button">撤销 (Ctrl+Z)</button>
+          <button class="file-menu-item" id="fileRedoBtn" type="button">重做 (Ctrl+Shift+Z)</button>
+        </div>
+      </div>
+      <div class="tool-strip" id="toolStrip">
+        <button class="tool-btn" data-tool="select" aria-label="选择">
+          <img src="img/icon-select.svg" alt="选择" />
+          <span>选择</span>
+        </button>
+        <button class="tool-btn" data-tool="station" aria-label="车站">
+          <img src="img/icon-station.svg" alt="车站" />
+          <span>车站</span>
+        </button>
+        <button class="tool-btn" data-tool="line" aria-label="连线">
+          <img src="img/icon-line.svg" alt="连线" />
+          <span>连线</span>
+        </button>
+        <button class="tool-btn" data-tool="text" aria-label="文本">
+          <img src="img/icon-text.svg" alt="文本" />
+          <span>文本</span>
+        </button>
+        <button class="tool-btn" data-tool="shape" aria-label="图形">
+          <img src="img/icon-shape.svg" alt="图形" />
+          <span>图形</span>
+        </button>
+        <button class="tool-btn" data-tool="settings" aria-label="设置">
+          <img src="/img/icon-settings.svg" alt="设置" />
+          <span>设置</span>
+        </button>
+      </div>
+      <div class="zoom-indicator" id="zoomIndicator">100%</div>
+    </header>
+
+    <aside class="submenu floating-panel" id="submenuPanel">
+      <div class="submenu-title" id="submenuTitle">请选择工具</div>
+      <div class="submenu-items" id="submenuItems"></div>
+    </aside>
+
+    <aside class="settings floating-panel" id="settingsPanel" hidden>
+      <div class="settings-head">
+        <span>属性</span>
+      </div>
+      <div class="settings-body" id="settingsBody"></div>
+    </aside>
+
+    <div class="modal-backdrop" id="lineManagerModal" hidden>
+      <div class="line-manager-modal" role="dialog" aria-modal="true" aria-label="线条管理器">
+        <div class="modal-head">
+          <h2>线条管理器</h2>
+          <button class="btn-ghost" id="closeLineManagerBtn" type="button">关闭</button>
+        </div>
+        <div class="modal-body">
+          <section class="line-library">
+            <div class="line-library-head">
+              <span>线条库</span>
+              <button class="btn-main" id="newLineTypeBtn" type="button">新建</button>
+            </div>
+            <div class="line-library-list" id="lineLibraryList"></div>
+          </section>
+
+          <section class="line-editor" id="lineEditorPanel">
+            <div class="line-type-temp-warning" id="lineTypeTempNotice" hidden>
+              <div class="line-type-temp-warning-text">这是从外部文件导入的临时线条类型。新建或加载新绘图时会被清除。</div>
+              <button class="btn-main" id="makeLineTypePermanentBtn" type="button">转为永久</button>
+            </div>
+            <div class="field">
+              <label for="lineTypeName">名称</label>
+              <input id="lineTypeName" type="text" />
+            </div>
+            <div class="field">
+              <label>线条浏览</label>
+              <svg id="lineTypePreview" class="line-type-preview" viewBox="0 0 240 90"
+                xmlns="http://www.w3.org/2000/svg"></svg>
+            </div>
+            <div class="segments-head">
+              <span>颜色列表</span>
+              <button class="btn-main" id="addColorRefBtn" type="button">添加颜色</button>
+            </div>
+            <div class="color-list-editor" id="colorListEditor"></div>
+            <div class="segments-head">
+              <span>小线条列表</span>
+              <button class="btn-main" id="addSegmentBtn" type="button">添加小线条</button>
+            </div>
+            <div class="segments-list" id="segmentEditorList"></div>
+            <div class="modal-actions">
+              <button class="btn-ghost" id="deleteLineTypeBtn" type="button">删除</button>
+              <button class="btn-ghost" id="downloadLineTypeBtn" type="button">分享下载</button>
+              <button class="btn-ghost" id="importLineTypeBtn" type="button">导入JSON</button>
+              <input id="lineTypeImportInput" type="file" accept="application/json" hidden />
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-backdrop" id="shapeManagerModal" hidden>
+      <div class="line-manager-modal shape-manager-modal" role="dialog" aria-modal="true" aria-label="图形管理器">
+        <div class="modal-head">
+          <h2>图形管理器</h2>
+          <button class="btn-ghost" id="closeShapeManagerBtn" type="button">关闭</button>
+        </div>
+        <div class="modal-body shape-manager-body">
+          <section class="line-library shape-library-panel">
+            <div class="line-library-head">
+              <span>图形库</span>
+              <button class="btn-main" id="newShapeBtn" type="button">新建</button>
+            </div>
+            <div class="line-library-list" id="shapeLibraryList"></div>
+          </section>
+
+          <section class="shape-editor-panel">
+            <div class="shape-editor-toolbar">
+              <label for="shapePrimitiveSelect">图形类型</label>
+              <select id="shapePrimitiveSelect">
+                <option value="line">线段</option>
+                <option value="circle">圆形</option>
+                <option value="rect">方形</option>
+              </select>
+              <button class="btn-main" id="shapeAddPrimitiveBtn" type="button">添加图元</button>
+              <button class="btn-ghost" id="shapeImportSvgBtn" type="button">导入外部SVG</button>
+              <input id="shapeImportSvgInput" type="file" accept="image/svg+xml,.svg" hidden />
+            </div>
+            <svg id="shapeEditorCanvas" class="shape-editor-canvas" viewBox="0 0 240 240"
+              xmlns="http://www.w3.org/2000/svg"></svg>
+          </section>
+
+          <aside class="shape-params-panel">
+            <h3>参数区</h3>
+            <div class="shape-param-actions">
+              <button class="btn-main" id="addColorParamBtn" type="button">添加颜色参数</button>
+              <button class="btn-main" id="addTextParamBtn" type="button">添加文本参数</button>
+              <button class="btn-main" id="addCheckboxParamBtn" type="button">添加勾选参数</button>
+            </div>
+            <div class="shape-param-list" id="shapeParamList"></div>
+          </aside>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/main.js" type="module"></script>
+</body>
+
+</html>
