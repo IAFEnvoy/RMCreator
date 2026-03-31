@@ -19,6 +19,9 @@ export function createEventBinder({
   loadDrawingFromFile,
   undo,
   redo,
+  copySelection,
+  cutSelection,
+  pasteSelection,
   onStateChanged
 }) {
   const {
@@ -41,6 +44,9 @@ export function createEventBinder({
     fileLoadBtn,
     fileUndoBtn,
     fileRedoBtn,
+    fileCutBtn,
+    fileCopyBtn,
+    filePasteBtn,
     fileLoadInput
   } = elements;
 
@@ -105,6 +111,35 @@ export function createEventBinder({
         return;
       }
 
+      const hasModifier = event.ctrlKey || event.metaKey;
+      if (hasModifier && !event.altKey) {
+        if (isEditableTarget(event.target) || state.lineManager.isOpen || state.shapeManager?.isOpen) {
+          return;
+        }
+
+        const key = event.key.toLowerCase();
+        if (key === "c") {
+          if (copySelection?.()) {
+            event.preventDefault();
+          }
+          return;
+        }
+
+        if (key === "x") {
+          if (cutSelection?.()) {
+            event.preventDefault();
+          }
+          return;
+        }
+
+        if (key === "v") {
+          if (pasteSelection?.()) {
+            event.preventDefault();
+          }
+          return;
+        }
+      }
+
       if (event.key !== "Delete" && event.key !== "Backspace") {
         return;
       }
@@ -123,7 +158,17 @@ export function createEventBinder({
   }
 
   function bindFileMenu() {
-    if (!fileNewBtn || !fileSaveBtn || !fileLoadBtn || !fileUndoBtn || !fileRedoBtn || !fileLoadInput) {
+    if (
+      !fileNewBtn
+      || !fileSaveBtn
+      || !fileLoadBtn
+      || !fileUndoBtn
+      || !fileRedoBtn
+      || !fileCutBtn
+      || !fileCopyBtn
+      || !filePasteBtn
+      || !fileLoadInput
+    ) {
       return;
     }
 
@@ -195,6 +240,21 @@ export function createEventBinder({
       redo?.();
     });
 
+    fileCutBtn.addEventListener("click", () => {
+      closeAllMenus();
+      cutSelection?.();
+    });
+
+    fileCopyBtn.addEventListener("click", () => {
+      closeAllMenus();
+      copySelection?.();
+    });
+
+    filePasteBtn.addEventListener("click", () => {
+      closeAllMenus();
+      pasteSelection?.();
+    });
+
     fileLoadInput.addEventListener("change", async () => {
       const file = fileLoadInput.files?.[0];
       if (!file) {
@@ -218,6 +278,20 @@ export function createEventBinder({
     const point = toCanvasPoint(event, svg, viewport);
     const target = event.target;
     const multiSelect = event.ctrlKey || event.metaKey;
+    const continuousSelect = state.appSettings?.continuousSelectMode !== false && state.activeTool === "select";
+    const handleEntityClick = (entity) => {
+      if (multiSelect) {
+        toggleEntitySelection(entity);
+        return;
+      }
+
+      if (continuousSelect) {
+        selectEntities([entity], { additive: true });
+        return;
+      }
+
+      selectEntity(entity);
+    };
 
     const stationEl = target.closest("[data-station-id]");
     const lineEl = target.closest("[data-line-id]");
@@ -226,51 +300,45 @@ export function createEventBinder({
 
     if (stationEl) {
       const entity = { type: "station", id: stationEl.dataset.stationId };
-      if (multiSelect) {
-        toggleEntitySelection(entity);
-      } else {
-        selectEntity(entity);
-      }
+      handleEntityClick(entity);
       return;
     }
 
     if (lineEl) {
       const entity = { type: "line", id: lineEl.dataset.lineId };
-      if (multiSelect) {
-        toggleEntitySelection(entity);
-      } else {
-        selectEntity(entity);
-      }
+      handleEntityClick(entity);
       return;
     }
 
     if (textEl) {
       const entity = { type: "text", id: textEl.dataset.textId };
-      if (multiSelect) {
-        toggleEntitySelection(entity);
-      } else {
-        selectEntity(entity);
-      }
+      handleEntityClick(entity);
       return;
     }
 
     if (shapeEl) {
       const entity = { type: "shape", id: shapeEl.dataset.shapeId };
-      if (multiSelect) {
-        toggleEntitySelection(entity);
-      } else {
-        selectEntity(entity);
-      }
+      handleEntityClick(entity);
       return;
     }
 
     if (state.activeTool === "station" && state.menuSelection.station !== null) {
       addStation(point.x, point.y, state.menuSelection.station);
+      if (state.appSettings?.continuousStationMode === false) {
+        state.menuSelection.station = null;
+        renderer.renderSubmenu();
+      }
       return;
     }
 
     if (state.activeTool === "text") {
       addText(point.x, point.y);
+      if (state.appSettings?.continuousTextMode === false) {
+        state.activeTool = "select";
+        renderer.setActiveToolButton();
+        renderer.renderSubmenu();
+        renderer.updateDragCursor();
+      }
       return;
     }
 
@@ -651,10 +719,10 @@ export function createEventBinder({
     });
 
     if (lineLayer) {
-      const lineBoxes = new Map();
+      const hitLineIds = new Set();
       lineLayer.querySelectorAll("[data-line-id]").forEach((pathEl) => {
         const id = pathEl.getAttribute("data-line-id");
-        if (!id) {
+        if (!id || hitLineIds.has(id)) {
           return;
         }
 
@@ -665,26 +733,12 @@ export function createEventBinder({
           return;
         }
 
-        const existing = lineBoxes.get(id);
-        if (!existing) {
-          lineBoxes.set(id, bbox);
+        if (!intersectsRect(rect, bbox)) {
           return;
         }
 
-        const minX = Math.min(existing.x, bbox.x);
-        const minY = Math.min(existing.y, bbox.y);
-        const maxX = Math.max(existing.x + existing.width, bbox.x + bbox.width);
-        const maxY = Math.max(existing.y + existing.height, bbox.y + bbox.height);
-        lineBoxes.set(id, {
-          x: minX,
-          y: minY,
-          width: maxX - minX,
-          height: maxY - minY
-        });
-      });
-
-      lineBoxes.forEach((bbox, id) => {
-        if (intersectsRect(rect, bbox)) {
+        if (pathIntersectsRect(pathEl, rect)) {
+          hitLineIds.add(id);
           matches.push({ type: "line", id });
         }
       });
@@ -717,10 +771,8 @@ export function createEventBinder({
           return;
         }
 
-        let bbox;
-        try {
-          bbox = shapeEl.getBBox();
-        } catch {
+        const bbox = getTransformedBBox(shapeEl);
+        if (!bbox) {
           return;
         }
 
@@ -761,6 +813,96 @@ export function createEventBinder({
       || b.y > a.y + a.height
       || b.y + b.height < a.y
     );
+  }
+
+  function getTransformedBBox(element) {
+    if (!element || typeof element.getBBox !== "function") {
+      return null;
+    }
+
+    let bbox;
+    try {
+      bbox = element.getBBox();
+    } catch {
+      return null;
+    }
+
+    const elementMatrix = element.getScreenCTM?.();
+    const viewportMatrix = viewport?.getScreenCTM?.();
+    if (!elementMatrix || !viewportMatrix) {
+      return bbox;
+    }
+
+    const viewportInverse = viewportMatrix.inverse();
+    const ctm = viewportInverse.multiply(elementMatrix);
+
+    const x1 = bbox.x;
+    const y1 = bbox.y;
+    const x2 = bbox.x + bbox.width;
+    const y2 = bbox.y + bbox.height;
+
+    const p1 = applyMatrix(ctm, x1, y1);
+    const p2 = applyMatrix(ctm, x2, y1);
+    const p3 = applyMatrix(ctm, x2, y2);
+    const p4 = applyMatrix(ctm, x1, y2);
+
+    const minX = Math.min(p1.x, p2.x, p3.x, p4.x);
+    const minY = Math.min(p1.y, p2.y, p3.y, p4.y);
+    const maxX = Math.max(p1.x, p2.x, p3.x, p4.x);
+    const maxY = Math.max(p1.y, p2.y, p3.y, p4.y);
+
+    return {
+      x: minX,
+      y: minY,
+      width: maxX - minX,
+      height: maxY - minY
+    };
+  }
+
+  function applyMatrix(matrix, x, y) {
+    return {
+      x: matrix.a * x + matrix.c * y + matrix.e,
+      y: matrix.b * x + matrix.d * y + matrix.f
+    };
+  }
+
+  function pathIntersectsRect(pathEl, rect) {
+    if (!pathEl || typeof pathEl.getTotalLength !== "function") {
+      return false;
+    }
+
+    let totalLength = 0;
+    try {
+      totalLength = pathEl.getTotalLength();
+    } catch {
+      return false;
+    }
+
+    if (!Number.isFinite(totalLength) || totalLength <= 0) {
+      return false;
+    }
+
+    // Sample along the path to approximate intersection with the marquee.
+    const step = Math.max(4, Math.min(rect.width, rect.height) / 2);
+    for (let distance = 0; distance <= totalLength; distance += step) {
+      let point;
+      try {
+        point = pathEl.getPointAtLength(distance);
+      } catch {
+        return false;
+      }
+      if (containsPoint(rect, point.x, point.y)) {
+        return true;
+      }
+    }
+
+    // Ensure the end point is checked.
+    try {
+      const endPoint = pathEl.getPointAtLength(totalLength);
+      return containsPoint(rect, endPoint.x, endPoint.y);
+    } catch {
+      return false;
+    }
   }
 
   return {

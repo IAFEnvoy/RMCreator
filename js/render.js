@@ -211,10 +211,63 @@ export function createRenderer({
       const settingsCard = document.createElement("div");
       settingsCard.className = "submenu-settings-card";
 
+      const continuousTitle = document.createElement("div");
+      continuousTitle.className = "menu-group-title";
+      continuousTitle.textContent = "连续操作";
+      settingsCard.appendChild(continuousTitle);
+
+      const continuousSelectRow = document.createElement("div");
+      continuousSelectRow.className = "submenu-settings-row";
+      const continuousSelectText = document.createElement("span");
+      continuousSelectText.textContent = "连续选择";
+      const continuousSelectSwitch = document.createElement("label");
+      continuousSelectSwitch.className = "toggle-switch";
+      continuousSelectSwitch.setAttribute("for", "continuousSelectModeToggle");
+      const continuousSelectInput = document.createElement("input");
+      continuousSelectInput.id = "continuousSelectModeToggle";
+      continuousSelectInput.className = "toggle-checkbox";
+      continuousSelectInput.type = "checkbox";
+      continuousSelectInput.checked = state.appSettings?.continuousSelectMode !== false;
+      const continuousSelectSlider = document.createElement("span");
+      continuousSelectSlider.className = "toggle-slider";
+      continuousSelectSlider.setAttribute("aria-hidden", "true");
+      continuousSelectInput.addEventListener("change", () => {
+        onAppSettingsChanged?.({ continuousSelectMode: continuousSelectInput.checked });
+      });
+      continuousSelectSwitch.appendChild(continuousSelectInput);
+      continuousSelectSwitch.appendChild(continuousSelectSlider);
+      continuousSelectRow.appendChild(continuousSelectText);
+      continuousSelectRow.appendChild(continuousSelectSwitch);
+      settingsCard.appendChild(continuousSelectRow);
+
+      const continuousStationRow = document.createElement("div");
+      continuousStationRow.className = "submenu-settings-row";
+      const continuousStationText = document.createElement("span");
+      continuousStationText.textContent = "连续车站放置";
+      const continuousStationSwitch = document.createElement("label");
+      continuousStationSwitch.className = "toggle-switch";
+      continuousStationSwitch.setAttribute("for", "continuousStationModeToggle");
+      const continuousStationInput = document.createElement("input");
+      continuousStationInput.id = "continuousStationModeToggle";
+      continuousStationInput.className = "toggle-checkbox";
+      continuousStationInput.type = "checkbox";
+      continuousStationInput.checked = state.appSettings?.continuousStationMode !== false;
+      const continuousStationSlider = document.createElement("span");
+      continuousStationSlider.className = "toggle-slider";
+      continuousStationSlider.setAttribute("aria-hidden", "true");
+      continuousStationInput.addEventListener("change", () => {
+        onAppSettingsChanged?.({ continuousStationMode: continuousStationInput.checked });
+      });
+      continuousStationSwitch.appendChild(continuousStationInput);
+      continuousStationSwitch.appendChild(continuousStationSlider);
+      continuousStationRow.appendChild(continuousStationText);
+      continuousStationRow.appendChild(continuousStationSwitch);
+      settingsCard.appendChild(continuousStationRow);
+
       const continuousRow = document.createElement("div");
       continuousRow.className = "submenu-settings-row";
       const continuousText = document.createElement("span");
-      continuousText.textContent = "连续画线模式";
+      continuousText.textContent = "连续画线";
       const continuousSwitch = document.createElement("label");
       continuousSwitch.className = "toggle-switch";
       continuousSwitch.setAttribute("for", "continuousLineModeToggle");
@@ -235,15 +288,34 @@ export function createRenderer({
       continuousRow.appendChild(continuousSwitch);
       settingsCard.appendChild(continuousRow);
 
-      const continuousTip = document.createElement("div");
-      continuousTip.className = "submenu-settings-hint";
-      continuousTip.textContent = "关闭后，每次绘制一条线会自动取消当前线形选择。";
-      settingsCard.appendChild(continuousTip);
+      const continuousTextRow = document.createElement("div");
+      continuousTextRow.className = "submenu-settings-row";
+      const continuousTextLabel = document.createElement("span");
+      continuousTextLabel.textContent = "连续放置文本";
+      const continuousTextSwitch = document.createElement("label");
+      continuousTextSwitch.className = "toggle-switch";
+      continuousTextSwitch.setAttribute("for", "continuousTextModeToggle");
+      const continuousTextInput = document.createElement("input");
+      continuousTextInput.id = "continuousTextModeToggle";
+      continuousTextInput.className = "toggle-checkbox";
+      continuousTextInput.type = "checkbox";
+      continuousTextInput.checked = state.appSettings?.continuousTextMode !== false;
+      const continuousTextSlider = document.createElement("span");
+      continuousTextSlider.className = "toggle-slider";
+      continuousTextSlider.setAttribute("aria-hidden", "true");
+      continuousTextInput.addEventListener("change", () => {
+        onAppSettingsChanged?.({ continuousTextMode: continuousTextInput.checked });
+      });
+      continuousTextSwitch.appendChild(continuousTextInput);
+      continuousTextSwitch.appendChild(continuousTextSlider);
+      continuousTextRow.appendChild(continuousTextLabel);
+      continuousTextRow.appendChild(continuousTextSwitch);
+      settingsCard.appendChild(continuousTextRow);
 
       const shapeContinuousRow = document.createElement("div");
       shapeContinuousRow.className = "submenu-settings-row";
       const shapeContinuousText = document.createElement("span");
-      shapeContinuousText.textContent = "连续放置图形模式";
+      shapeContinuousText.textContent = "连续放置图形";
       const shapeContinuousSwitch = document.createElement("label");
       shapeContinuousSwitch.className = "toggle-switch";
       shapeContinuousSwitch.setAttribute("for", "continuousShapeModeToggle");
@@ -264,10 +336,10 @@ export function createRenderer({
       shapeContinuousRow.appendChild(shapeContinuousSwitch);
       settingsCard.appendChild(shapeContinuousRow);
 
-      const shapeContinuousTip = document.createElement("div");
-      shapeContinuousTip.className = "submenu-settings-hint";
-      shapeContinuousTip.textContent = "关闭后，每次放置一个图形会自动取消当前预制图形选择。";
-      settingsCard.appendChild(shapeContinuousTip);
+      const selectionTitle = document.createElement("div");
+      selectionTitle.className = "menu-group-title";
+      selectionTitle.textContent = "选择";
+      settingsCard.appendChild(selectionTitle);
 
       const glowRow = document.createElement("label");
       glowRow.className = "submenu-settings-row";
@@ -282,6 +354,34 @@ export function createRenderer({
       glowRow.appendChild(glowText);
       glowRow.appendChild(glowInput);
       settingsCard.appendChild(glowRow);
+
+      const glowSizeRow = document.createElement("label");
+      glowSizeRow.className = "submenu-settings-row submenu-settings-row-column";
+      const glowSizeText = document.createElement("span");
+      glowSizeText.textContent = "发光范围";
+      const glowSizeInput = document.createElement("input");
+      glowSizeInput.type = "number";
+      glowSizeInput.min = "1";
+      glowSizeInput.max = "30";
+      glowSizeInput.step = "1";
+      glowSizeInput.value = String(Number(state.appSettings?.selectionGlowSize || 4));
+      glowSizeInput.addEventListener("change", () => {
+        const raw = Number(glowSizeInput.value);
+        if (!Number.isFinite(raw)) {
+          glowSizeInput.value = String(Number(state.appSettings?.selectionGlowSize || 4));
+          return;
+        }
+        const clamped = Math.min(30, Math.max(1, raw));
+        onAppSettingsChanged?.({ selectionGlowSize: clamped });
+      });
+      glowSizeRow.appendChild(glowSizeText);
+      glowSizeRow.appendChild(glowSizeInput);
+      settingsCard.appendChild(glowSizeRow);
+
+      const miscTitle = document.createElement("div");
+      miscTitle.className = "menu-group-title";
+      miscTitle.textContent = "杂项";
+      settingsCard.appendChild(miscTitle);
 
       const geometryRow = document.createElement("label");
       geometryRow.className = "submenu-settings-row submenu-settings-row-column";

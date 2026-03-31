@@ -7,6 +7,7 @@
   --accent: #2f6de5;
   --soft: #eef4ff;
   --selection-glow-color: rgba(47, 109, 229, 0.45);
+  --selection-glow-size: 4px;
 }
 
 * {

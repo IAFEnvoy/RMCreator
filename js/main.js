@@ -13,15 +13,20 @@ import { createShapeManager, getShapeParameterDefaults } from "./shapeManager.js
 import { createRenderer } from "./render.js";
 import { createEventBinder } from "./event.js";
 import { parseDrawingJson, serializeDrawingToJson } from "./serialization.js";
+import { createMainClipboard } from "./clipboards.js";
 import { clamp, normalizeColor } from "./utils.js";
 import { appSettingsStorageKey, drawingStorageKey, geometryLabelMap } from "./constants.js";
 import { createHistoryManager } from "./historyManager.js";
 
 const { linePreview } = elements;
 const defaultAppSettings = Object.freeze({
+  continuousSelectMode: true,
+  continuousStationMode: true,
   continuousLineMode: true,
+  continuousTextMode: true,
   continuousShapeMode: true,
   selectionGlowColor: "#2f6de5",
+  selectionGlowSize: 4,
   defaultLineGeometry: "bend135",
   lineSpacingScale: 1
 });
@@ -70,6 +75,7 @@ const state = {
     isOpen: false,
     primitiveType: "line",
     selectedPrimitiveIndex: null,
+    selectedPrimitiveIndices: [],
     activeTab: "props",
     viewBox: { x: 0, y: 0, width: 240, height: 240 }
   },
@@ -112,8 +118,36 @@ shapeManager = createShapeManager({
   state,
   elements,
   createShapeId,
-  renderSubmenu: renderer.renderSubmenu
+  renderSubmenu: renderer.renderSubmenu,
+  onPlacedShapeDefaultsUpdated: commitStateChange
 });
+
+const mainClipboard = createMainClipboard({
+  state,
+  getNextId,
+  selectEntities,
+  rerenderScene,
+  commitStateChange,
+  deleteSelectedEntity
+});
+
+const clipboardController = {
+  copySelection: () => (
+    state.shapeManager?.isOpen
+      ? shapeManager?.copySelection?.()
+      : mainClipboard.copySelection()
+  ),
+  cutSelection: () => (
+    state.shapeManager?.isOpen
+      ? shapeManager?.cutSelection?.()
+      : mainClipboard.cutSelection()
+  ),
+  pasteSelection: () => (
+    state.shapeManager?.isOpen
+      ? shapeManager?.pasteSelection?.()
+      : mainClipboard.paste()
+  )
+};
 
 const eventBinder = createEventBinder({
   state,
@@ -134,6 +168,9 @@ const eventBinder = createEventBinder({
   loadDrawingFromFile,
   undo,
   redo,
+  copySelection: clipboardController.copySelection,
+  cutSelection: clipboardController.cutSelection,
+  pasteSelection: clipboardController.pasteSelection,
   onStateChanged: commitStateChange
 });
 
@@ -216,6 +253,10 @@ function persistAppSettings() {
 function applyAppSettings() {
   const glow = toRgba(state.appSettings.selectionGlowColor, 0.45);
   document.documentElement.style.setProperty("--selection-glow-color", glow);
+  document.documentElement.style.setProperty(
+    "--selection-glow-size",
+    `${state.appSettings.selectionGlowSize}px`
+  );
 }
 
 function sanitizeAppSettings(rawSettings) {
@@ -230,9 +271,13 @@ function sanitizeAppSettings(rawSettings) {
     : defaultAppSettings.defaultLineGeometry;
 
   return {
+    continuousSelectMode: Boolean(next.continuousSelectMode),
+    continuousStationMode: Boolean(next.continuousStationMode),
     continuousLineMode: Boolean(next.continuousLineMode),
+    continuousTextMode: Boolean(next.continuousTextMode),
     continuousShapeMode: Boolean(next.continuousShapeMode),
     selectionGlowColor: normalizeHexColor(next.selectionGlowColor, defaultAppSettings.selectionGlowColor),
+    selectionGlowSize: clamp(Number(next.selectionGlowSize) || defaultAppSettings.selectionGlowSize, 1, 30),
     defaultLineGeometry,
     lineSpacingScale: clamp(Number(next.lineSpacingScale) || 1, 0.5, 1.8)
   };

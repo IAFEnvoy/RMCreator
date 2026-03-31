@@ -1,4 +1,5 @@
 import { shapeStorageKey } from "./constants.js";
+import { createShapeManagerClipboard } from "./clipboards.js";
 import { svgNs } from "./dom.js";
 
 const defaultViewBox = Object.freeze({ x: 0, y: 0, width: 240, height: 240 });
@@ -20,7 +21,8 @@ export function createShapeManager({
   state,
   elements,
   createShapeId,
-  renderSubmenu
+  renderSubmenu,
+  onPlacedShapeDefaultsUpdated
 }) {
   const {
     shapeManagerModal,
@@ -73,6 +75,113 @@ export function createShapeManager({
     moved: false
   };
   let suppressCanvasClick = false;
+
+  const clipboard = createShapeManagerClipboard({
+    state,
+    createShapeId,
+    setSelectedPrimitiveIndices,
+    getSelectedShape,
+    ensureEditableShape,
+    getFirstPrimitiveIndex,
+    syncShapeSvg,
+    persistShapeLibrary,
+    renderShapeManager,
+    renderSubmenu,
+    resetViewToSelectedShape,
+    deleteCurrentSelection
+  });
+
+  function getSelectedPrimitiveIndices(shape) {
+    if (!shape || !Array.isArray(shape.editableElements)) {
+      return [];
+    }
+
+    const length = shape.editableElements.length;
+    const indices = Array.isArray(state.shapeManager.selectedPrimitiveIndices)
+      ? state.shapeManager.selectedPrimitiveIndices
+      : [];
+    const result = [];
+    const seen = new Set();
+
+    indices.forEach((index) => {
+      if (!Number.isInteger(index)) {
+        return;
+      }
+      const clamped = clampPrimitiveIndex(index, length);
+      if (seen.has(clamped)) {
+        return;
+      }
+      seen.add(clamped);
+      result.push(clamped);
+    });
+
+    if (Number.isInteger(state.shapeManager.selectedPrimitiveIndex)) {
+      const primary = clampPrimitiveIndex(state.shapeManager.selectedPrimitiveIndex, length);
+      if (!seen.has(primary)) {
+        result.push(primary);
+      }
+    }
+
+    return result;
+  }
+
+  function setSelectedPrimitiveIndices(shape, indices, options = {}) {
+    if (!shape || !Array.isArray(shape.editableElements)) {
+      state.shapeManager.selectedPrimitiveIndices = [];
+      state.shapeManager.selectedPrimitiveIndex = null;
+      return;
+    }
+
+    const length = shape.editableElements.length;
+    const result = [];
+    const seen = new Set();
+
+    (Array.isArray(indices) ? indices : []).forEach((index) => {
+      if (!Number.isInteger(index)) {
+        return;
+      }
+      const clamped = clampPrimitiveIndex(index, length);
+      if (seen.has(clamped)) {
+        return;
+      }
+      seen.add(clamped);
+      result.push(clamped);
+    });
+
+    let nextPrimary = null;
+    if (result.length) {
+      if (Number.isInteger(options.primaryIndex)) {
+        const primary = clampPrimitiveIndex(options.primaryIndex, length);
+        nextPrimary = primary;
+        if (!seen.has(primary)) {
+          result.push(primary);
+        }
+      } else if (
+        Number.isInteger(state.shapeManager.selectedPrimitiveIndex)
+        && seen.has(state.shapeManager.selectedPrimitiveIndex)
+      ) {
+        nextPrimary = state.shapeManager.selectedPrimitiveIndex;
+      } else {
+        nextPrimary = result[result.length - 1];
+      }
+    }
+
+    state.shapeManager.selectedPrimitiveIndices = result;
+    state.shapeManager.selectedPrimitiveIndex = result.length ? nextPrimary : null;
+  }
+
+  function setSingleSelectedPrimitive(shape, index) {
+    if (!Number.isInteger(index)) {
+      setSelectedPrimitiveIndices(shape, []);
+      return;
+    }
+    setSelectedPrimitiveIndices(shape, [index], { primaryIndex: index });
+  }
+
+  function getSingleSelectedPrimitiveIndex(shape) {
+    const indices = getSelectedPrimitiveIndices(shape);
+    return indices.length === 1 ? indices[0] : null;
+  }
 
   function bind() {
     if (
@@ -185,6 +294,7 @@ export function createShapeManager({
     shapeManagerModal.hidden = true;
     stopPanning();
     resetHandleDragState();
+    clipboard.clear();
   }
 
   function renderShapeManager() {
@@ -286,7 +396,7 @@ export function createShapeManager({
 
       item.addEventListener("click", () => {
         state.shapeManager.selectedId = shape.id;
-        state.shapeManager.selectedPrimitiveIndex = getFirstPrimitiveIndex(shape);
+        setSingleSelectedPrimitive(shape, getFirstPrimitiveIndex(shape));
         resetViewToSelectedShape();
         renderShapeManager();
       });
@@ -357,6 +467,7 @@ export function createShapeManager({
 
     if (Array.isArray(shape.editableElements)) {
       const layer = document.createElementNS(svgNs, "g");
+      const selectedSet = new Set(getSelectedPrimitiveIndices(shape));
       shape.editableElements.forEach((primitive, index) => {
         const effectivePrimitive = resolvePrimitiveWithParameters(primitive, shape.parameters);
         const node = createPrimitiveNode(effectivePrimitive);
@@ -366,7 +477,7 @@ export function createShapeManager({
 
         node.setAttribute("data-primitive-index", String(index));
         node.classList.add("shape-primitive");
-        if (index === state.shapeManager.selectedPrimitiveIndex) {
+        if (selectedSet.has(index)) {
           node.classList.add("shape-primitive-selected");
         }
 
@@ -420,13 +531,42 @@ export function createShapeManager({
       return;
     }
 
-    if (!Number.isInteger(state.shapeManager.selectedPrimitiveIndex)) {
+    const selectedIndices = getSelectedPrimitiveIndices(shape);
+    if (!selectedIndices.length) {
       appendInfo(shapePropsList, "已取消图元选择，可点击画布中的图元继续编辑。", "shape-prop-empty");
       return;
     }
+    const primitives = selectedIndices.map((index) => shape.editableElements[index]).filter(Boolean);
 
-    const index = clampPrimitiveIndex(state.shapeManager.selectedPrimitiveIndex, shape.editableElements.length);
-    state.shapeManager.selectedPrimitiveIndex = index;
+    if (selectedIndices.length > 1) {
+      const typeSet = new Set(primitives.map((item) => item.type));
+      if (typeSet.size !== 1) {
+        appendInfo(shapePropsList, "多选图元类型不同，无法批量编辑属性。", "shape-prop-empty");
+        return;
+      }
+
+      const type = primitives[0].type;
+      const title = document.createElement("div");
+      title.className = "shape-prop-title";
+      title.textContent = `批量编辑: ${primitiveTypeLabel(type)} (${selectedIndices.length})`;
+      shapePropsList.appendChild(title);
+
+      if (type === "line" || type === "bezier") {
+        appendInfo(shapePropsList, "可直接在中间画布拖拽控制点调整端点/控制点位置。", "shape-prop-tip");
+      }
+
+      appendInfo(shapePropsList, "拖拽支持自动吸附（网格/轴线/其他图元关键点），按住 Alt 可临时关闭吸附。", "shape-prop-tip");
+
+      const row = document.createElement("div");
+      row.className = "shape-prop-grid";
+      shapePropsList.appendChild(row);
+
+      renderPrimitiveFields(row, shape, selectedIndices, primitives);
+      return;
+    }
+
+    const index = selectedIndices[0];
+    setSingleSelectedPrimitive(shape, index);
     const primitive = shape.editableElements[index];
 
     const title = document.createElement("div");
@@ -452,12 +592,13 @@ export function createShapeManager({
     row.className = "shape-prop-grid";
     shapePropsList.appendChild(row);
 
-    renderPrimitiveFields(row, shape, index, primitive);
+    renderPrimitiveFields(row, shape, [index], [primitive]);
   }
 
-  function renderPrimitiveFields(container, shape, index, primitive) {
+  function renderPrimitiveFields(container, shape, indices, primitives) {
     const shapeParameters = normalizeShapeParameters(shape.parameters);
     shape.parameters = shapeParameters;
+    const primary = primitives[0];
 
     const commit = ({ rerenderProps = false, refreshLibrary = true } = {}) => {
       syncShapeSvg(shape);
@@ -473,7 +614,13 @@ export function createShapeManager({
     };
 
     const resolveFieldValue = (key, paramType, fallback) => {
-      return resolvePrimitiveFieldValue(primitive, shapeParameters, key, paramType, fallback);
+      return resolvePrimitiveFieldValue(primary, shapeParameters, key, paramType, fallback);
+    };
+
+    const applyPrimitiveValue = (key, value) => {
+      primitives.forEach((item) => {
+        item[key] = value;
+      });
     };
 
     const attachParameterBinding = (field, key, paramType, onModeChange) => {
@@ -524,9 +671,13 @@ export function createShapeManager({
       }
       field.appendChild(paramSelect);
 
-      const binding = getPrimitiveParamBinding(primitive, key, paramType);
-      let selectedParamId = binding?.paramId && params.some((param) => param.id === binding.paramId)
-        ? binding.paramId
+      const bindings = primitives.map((item) => getPrimitiveParamBinding(item, key, paramType));
+      const firstBinding = bindings[0] || null;
+      const allSame = bindings.every((binding) => (
+        (binding?.paramId ?? null) === (firstBinding?.paramId ?? null)
+      ));
+      let selectedParamId = firstBinding?.paramId && params.some((param) => param.id === firstBinding.paramId)
+        ? firstBinding.paramId
         : (params[0]?.id || "");
 
       if (selectedParamId) {
@@ -534,7 +685,7 @@ export function createShapeManager({
       }
 
       toggle.disabled = !params.length;
-      toggle.checked = Boolean(params.length && selectedParamId && binding);
+      toggle.checked = Boolean(params.length && selectedParamId && firstBinding && allSame);
 
       const applyMode = () => {
         const useParam = Boolean(toggle.checked && params.length);
@@ -544,9 +695,13 @@ export function createShapeManager({
         if (useParam) {
           selectedParamId = paramSelect.value || params[0].id;
           paramSelect.value = selectedParamId;
-          setPrimitiveParamBinding(primitive, key, { type: paramType, paramId: selectedParamId });
+          primitives.forEach((item) => {
+            setPrimitiveParamBinding(item, key, { type: paramType, paramId: selectedParamId });
+          });
         } else {
-          setPrimitiveParamBinding(primitive, key, null);
+          primitives.forEach((item) => {
+            setPrimitiveParamBinding(item, key, null);
+          });
         }
 
         onModeChange(useParam);
@@ -580,7 +735,7 @@ export function createShapeManager({
       input.value = String(toNumber(resolveFieldValue(key, "number", defaultValue), defaultValue));
       input.addEventListener("change", () => {
         const normalized = normalizeNumber(input.value, defaultValue, options.min, options.max);
-        primitive[key] = normalized;
+        applyPrimitiveValue(key, normalized);
         input.value = String(normalized);
         commit();
       });
@@ -600,7 +755,7 @@ export function createShapeManager({
       input.type = "color";
       input.value = safeColor(resolveFieldValue(key, "color", fallback) || fallback);
       const applyColor = ({ refreshLibrary }) => {
-        primitive[key] = safeColor(input.value);
+        applyPrimitiveValue(key, safeColor(input.value));
         commit({ refreshLibrary });
       };
       input.addEventListener("input", () => applyColor({ refreshLibrary: false }));
@@ -630,7 +785,7 @@ export function createShapeManager({
 
       const color = document.createElement("input");
       color.type = "color";
-      color.value = safeColor(primitive[key] || "#2f5d9d");
+      color.value = safeColor(primary[key] || "#2f5d9d");
 
       const syncFillFixedState = (useParam) => {
         if (useParam) {
@@ -641,21 +796,21 @@ export function createShapeManager({
           return;
         }
 
-        const isNone = String(primitive[key] || "none") === "none";
+        const isNone = String(primary[key] || "none") === "none";
         select.disabled = false;
         select.value = isNone ? "none" : "custom";
         color.disabled = isNone;
-        color.value = safeColor(primitive[key] || "#2f5d9d");
+        color.value = safeColor(primary[key] || "#2f5d9d");
       };
 
       syncFillFixedState(false);
 
       select.addEventListener("change", () => {
         if (select.value === "none") {
-          primitive[key] = "none";
+          applyPrimitiveValue(key, "none");
           color.disabled = true;
         } else {
-          primitive[key] = safeColor(color.value);
+          applyPrimitiveValue(key, safeColor(color.value));
           color.disabled = false;
         }
         commit();
@@ -663,7 +818,7 @@ export function createShapeManager({
 
       const applyColor = ({ refreshLibrary }) => {
         if (select.value !== "none") {
-          primitive[key] = safeColor(color.value);
+          applyPrimitiveValue(key, safeColor(color.value));
           commit({ refreshLibrary });
         }
       };
@@ -686,7 +841,7 @@ export function createShapeManager({
       input.type = "text";
       input.value = String(resolveFieldValue(key, "text", fallback) ?? fallback);
       input.addEventListener("input", () => {
-        primitive[key] = String(input.value || fallback);
+        applyPrimitiveValue(key, String(input.value || fallback));
         commit();
       });
       attachParameterBinding(field, key, "text", (useParam) => {
@@ -707,7 +862,7 @@ export function createShapeManager({
       const input = document.createElement("input");
       input.type = "checkbox";
       input.className = "toggle-checkbox";
-      input.checked = Boolean(resolveFieldValue(key, "checkbox", primitive[key]));
+      input.checked = Boolean(resolveFieldValue(key, "checkbox", primary[key]));
       const slider = document.createElement("span");
       slider.className = "toggle-slider";
       slider.setAttribute("aria-hidden", "true");
@@ -716,9 +871,11 @@ export function createShapeManager({
           return;
         }
         const checked = Boolean(input.checked);
-        primitive[key] = checked;
+        applyPrimitiveValue(key, checked);
         if (typeof onChange === "function") {
-          onChange(checked);
+          primitives.forEach((item) => {
+            onChange(checked, item);
+          });
         }
         commit({ rerenderProps });
       });
@@ -727,7 +884,7 @@ export function createShapeManager({
         attachParameterBinding(field, key, "checkbox", (useParam) => {
           input.disabled = useParam;
           if (useParam) {
-            input.checked = Boolean(resolveFieldValue(key, "checkbox", primitive[key]));
+            input.checked = Boolean(resolveFieldValue(key, "checkbox", primary[key]));
           }
         });
       }
@@ -739,7 +896,7 @@ export function createShapeManager({
       return input;
     };
 
-    if (primitive.type === "line") {
+    if (primary.type === "line") {
       addNumber("起点 X", "x1", { defaultValue: 40 });
       addNumber("起点 Y", "y1", { defaultValue: 60 });
       addNumber("终点 X", "x2", { defaultValue: 200 });
@@ -751,7 +908,7 @@ export function createShapeManager({
       return;
     }
 
-    if (primitive.type === "circle") {
+    if (primary.type === "circle") {
       addNumber("中心 X", "cx", { defaultValue: 120 });
       addNumber("中心 Y", "cy", { defaultValue: 120 });
       addNumber("半径", "r", { defaultValue: 40, min: 1, max: 300 });
@@ -762,16 +919,16 @@ export function createShapeManager({
       return;
     }
 
-    if (primitive.type === "rect") {
+    if (primary.type === "rect") {
       addNumber("左上 X", "x", { defaultValue: 56 });
       addNumber("左上 Y", "y", { defaultValue: 56 });
       addNumber("宽度", "width", { defaultValue: 128, min: 1, max: 500 });
       addNumber("高度", "height", { defaultValue: 128, min: 1, max: 500 });
       addToggle("圆角", "rounded", {
         rerenderProps: true,
-        onChange: (checked) => {
-          if (checked && toNumber(primitive.rx, 0) <= 0) {
-            primitive.rx = 10;
+        onChange: (checked, item) => {
+          if (checked && toNumber(item.rx, 0) <= 0) {
+            item.rx = 10;
           }
         }
       });
@@ -782,11 +939,11 @@ export function createShapeManager({
       rxInput.min = "0";
       rxInput.max = "200";
       rxInput.step = "1";
-      rxInput.value = String(toNumber(primitive.rx, 10));
-      rxInput.disabled = primitive.rounded === false;
+      rxInput.value = String(toNumber(primary.rx, 10));
+      rxInput.disabled = primary.rounded === false;
       rxInput.addEventListener("change", () => {
         const normalized = normalizeNumber(rxInput.value, 10, 0, 200);
-        primitive.rx = normalized;
+        applyPrimitiveValue("rx", normalized);
         rxInput.value = String(normalized);
         commit();
       });
@@ -800,7 +957,7 @@ export function createShapeManager({
       return;
     }
 
-    if (primitive.type === "hexagon" || primitive.type === "octagon") {
+    if (primary.type === "hexagon" || primary.type === "octagon") {
       addNumber("中心 X", "cx", { defaultValue: 120 });
       addNumber("中心 Y", "cy", { defaultValue: 120 });
       addNumber("半径", "r", { defaultValue: 52, min: 1, max: 400 });
@@ -811,7 +968,7 @@ export function createShapeManager({
       return;
     }
 
-    if (primitive.type === "bezier") {
+    if (primary.type === "bezier") {
       addNumber("起点 X", "x1", { defaultValue: 40 });
       addNumber("起点 Y", "y1", { defaultValue: 170 });
       addNumber("控制点1 X", "cx1", { defaultValue: 90 });
@@ -827,7 +984,7 @@ export function createShapeManager({
       return;
     }
 
-    if (primitive.type === "text") {
+    if (primary.type === "text") {
       addText("文本内容", "value", "文本");
       addText("字体", "fontFamily", "Segoe UI");
       addNumber("位置 X", "x", { defaultValue: 120 });
@@ -928,7 +1085,7 @@ export function createShapeManager({
       defaultBlock.appendChild(defaultLabel);
 
       const commitDefault = ({ refreshLibrary = true } = {}) => {
-        syncShapeSvg(shape);
+        syncShapeSvg(shape, { preserveParameters: true });
         persistShapeLibrary();
         renderEditorCanvas(shape);
         renderPropertiesPanel(shape);
@@ -938,7 +1095,12 @@ export function createShapeManager({
         }
       };
 
-      const defaultInput = createParameterDefaultInput(param, commitDefault);
+      const defaultInput = createParameterDefaultInput(param, commitDefault, (previousValue) => {
+        const changed = freezePlacedShapeDefaults(shape.id, param.id, param.type, previousValue);
+        if (changed) {
+          onPlacedShapeDefaultsUpdated?.({ coalesceKey: "shape-default-freeze" });
+        }
+      });
       defaultBlock.appendChild(defaultInput);
       row.appendChild(defaultBlock);
 
@@ -977,11 +1139,20 @@ export function createShapeManager({
     syncShapeSvg(shape);
     state.shapeLibrary.push(shape);
     state.shapeManager.selectedId = shape.id;
-    state.shapeManager.selectedPrimitiveIndex = null;
+    setSelectedPrimitiveIndices(shape, []);
     resetViewToSelectedShape();
     persistShapeLibrary();
     renderShapeManager();
     renderSubmenu();
+  }
+
+  function ensureEditableShape() {
+    let shape = getSelectedShape();
+    if (!shape || !Array.isArray(shape.editableElements)) {
+      createEmptyShape();
+      shape = getSelectedShape();
+    }
+    return shape || null;
   }
 
   function addPrimitiveToCurrentShape() {
@@ -996,7 +1167,7 @@ export function createShapeManager({
 
     const nextIndex = shape.editableElements.length;
     shape.editableElements.push(createPrimitiveElement(state.shapeManager.primitiveType, nextIndex));
-    state.shapeManager.selectedPrimitiveIndex = nextIndex;
+    setSingleSelectedPrimitive(shape, nextIndex);
     syncShapeSvg(shape);
 
     persistShapeLibrary();
@@ -1028,6 +1199,7 @@ export function createShapeManager({
 
       state.shapeLibrary.push(shape);
       state.shapeManager.selectedId = shape.id;
+      state.shapeManager.selectedPrimitiveIndices = [];
       state.shapeManager.selectedPrimitiveIndex = null;
       resetViewToSelectedShape();
       persistShapeLibrary();
@@ -1069,16 +1241,20 @@ export function createShapeManager({
     renderParameterList(shape);
   }
 
-  function createParameterDefaultInput(param, commitDefault) {
+  function createParameterDefaultInput(param, commitDefault, onBeforeDefaultChange) {
     if (param.type === "color") {
       const input = document.createElement("input");
       input.type = "color";
       input.value = safeColor(param.defaultValue || "#2f5d9d");
       input.addEventListener("input", () => {
+        const previous = param.defaultValue;
+        onBeforeDefaultChange?.(previous);
         param.defaultValue = safeColor(input.value);
-        commitDefault({ refreshLibrary: false });
+        commitDefault({ refreshLibrary: true });
       });
       input.addEventListener("change", () => {
+        const previous = param.defaultValue;
+        onBeforeDefaultChange?.(previous);
         param.defaultValue = safeColor(input.value);
         commitDefault({ refreshLibrary: true });
       });
@@ -1090,7 +1266,17 @@ export function createShapeManager({
       input.type = "number";
       input.step = "0.1";
       input.value = String(toNumber(param.defaultValue, 0));
+      input.addEventListener("input", () => {
+        const previous = param.defaultValue;
+        onBeforeDefaultChange?.(previous);
+        const normalized = normalizeNumber(input.value, 0, -100000, 100000);
+        param.defaultValue = normalized;
+        input.value = String(normalized);
+        commitDefault({ refreshLibrary: true });
+      });
       input.addEventListener("change", () => {
+        const previous = param.defaultValue;
+        onBeforeDefaultChange?.(previous);
         const normalized = normalizeNumber(input.value, 0, -100000, 100000);
         param.defaultValue = normalized;
         input.value = String(normalized);
@@ -1110,6 +1296,8 @@ export function createShapeManager({
       slider.className = "toggle-slider";
       slider.setAttribute("aria-hidden", "true");
       input.addEventListener("change", () => {
+        const previous = param.defaultValue;
+        onBeforeDefaultChange?.(previous);
         param.defaultValue = Boolean(input.checked);
         commitDefault({ refreshLibrary: true });
       });
@@ -1122,14 +1310,42 @@ export function createShapeManager({
     input.type = "text";
     input.value = String(param.defaultValue || "");
     input.addEventListener("input", () => {
+      const previous = param.defaultValue;
+      onBeforeDefaultChange?.(previous);
       param.defaultValue = String(input.value || "");
-      commitDefault({ refreshLibrary: false });
+      commitDefault({ refreshLibrary: true });
     });
     input.addEventListener("change", () => {
+      const previous = param.defaultValue;
+      onBeforeDefaultChange?.(previous);
       param.defaultValue = String(input.value || "");
       commitDefault({ refreshLibrary: true });
     });
     return input;
+  }
+
+  function freezePlacedShapeDefaults(shapeId, paramId, paramType, previousValue) {
+    const oldNormalized = normalizeShapeParameterDefault(paramType, previousValue);
+    let changed = false;
+
+    (Array.isArray(state.shapes) ? state.shapes : []).forEach((instance) => {
+      if (!instance || instance.shapeId !== shapeId) {
+        return;
+      }
+
+      if (!instance.paramValues || typeof instance.paramValues !== "object") {
+        instance.paramValues = {};
+      }
+
+      if (Object.prototype.hasOwnProperty.call(instance.paramValues, paramId)) {
+        return;
+      }
+
+      instance.paramValues[paramId] = oldNormalized;
+      changed = true;
+    });
+
+    return changed;
   }
 
   function onCanvasClick(event) {
@@ -1149,7 +1365,22 @@ export function createShapeManager({
     }
 
     const primitiveIndex = findPrimitiveIndex(event.target);
-    state.shapeManager.selectedPrimitiveIndex = primitiveIndex;
+    const multiSelect = event.ctrlKey || event.metaKey;
+    if (Number.isInteger(primitiveIndex)) {
+      if (multiSelect) {
+        const current = new Set(getSelectedPrimitiveIndices(shape));
+        if (current.has(primitiveIndex)) {
+          current.delete(primitiveIndex);
+        } else {
+          current.add(primitiveIndex);
+        }
+        setSelectedPrimitiveIndices(shape, Array.from(current), { primaryIndex: primitiveIndex });
+      } else {
+        setSingleSelectedPrimitive(shape, primitiveIndex);
+      }
+    } else if (!multiSelect) {
+      setSelectedPrimitiveIndices(shape, []);
+    }
     state.shapeManager.activeTab = "props";
     syncTabVisibility();
     renderEditorCanvas(shape);
@@ -1326,6 +1557,31 @@ export function createShapeManager({
       return;
     }
 
+    const hasModifier = event.ctrlKey || event.metaKey;
+    if (hasModifier && !event.altKey && !isTypingElement(event.target)) {
+      const key = event.key.toLowerCase();
+      if (key === "c") {
+        if (clipboard.copySelection()) {
+          event.preventDefault();
+        }
+        return;
+      }
+
+      if (key === "x") {
+        if (clipboard.cutSelection()) {
+          event.preventDefault();
+        }
+        return;
+      }
+
+      if (key === "v") {
+        if (clipboard.paste()) {
+          event.preventDefault();
+        }
+        return;
+      }
+    }
+
     if (event.key !== "Delete" && event.key !== "Backspace") {
       return;
     }
@@ -1346,6 +1602,10 @@ export function createShapeManager({
   }
 
   function startHandleDrag(primitiveIndex, handleKey) {
+    const shape = getSelectedShape();
+    if (shape) {
+      setSingleSelectedPrimitive(shape, primitiveIndex);
+    }
     handleState.isDragging = true;
     handleState.primitiveIndex = primitiveIndex;
     handleState.handleKey = handleKey;
@@ -1364,7 +1624,7 @@ export function createShapeManager({
       return;
     }
 
-    state.shapeManager.selectedPrimitiveIndex = primitiveIndex;
+    setSingleSelectedPrimitive(shape, primitiveIndex);
     persistShapeLibrary();
     renderShapeLibraryList();
     renderSubmenu();
@@ -1384,11 +1644,12 @@ export function createShapeManager({
       return;
     }
 
-    if (!Number.isInteger(state.shapeManager.selectedPrimitiveIndex)) {
+    const selectedIndex = getSingleSelectedPrimitiveIndex(shape);
+    if (!Number.isInteger(selectedIndex)) {
       return;
     }
 
-    const index = clampPrimitiveIndex(state.shapeManager.selectedPrimitiveIndex, shape.editableElements.length);
+    const index = clampPrimitiveIndex(selectedIndex, shape.editableElements.length);
     const primitive = shape.editableElements[index];
 
     if (primitive.type !== "line" && primitive.type !== "bezier") {
@@ -1615,7 +1876,7 @@ export function createShapeManager({
       return;
     }
 
-    state.shapeManager.selectedPrimitiveIndex = primitiveIndex;
+    setSingleSelectedPrimitive(shape, primitiveIndex);
 
     transformState.isDragging = true;
     transformState.mode = mode;
@@ -1639,7 +1900,7 @@ export function createShapeManager({
       return;
     }
 
-    state.shapeManager.selectedPrimitiveIndex = primitiveIndex;
+    setSingleSelectedPrimitive(shape, primitiveIndex);
     persistShapeLibrary();
     renderShapeLibraryList();
     renderSubmenu();
@@ -1839,7 +2100,11 @@ export function createShapeManager({
     }
 
     const length = shape.editableElements.length;
-    const index = clampPrimitiveIndex(state.shapeManager.selectedPrimitiveIndex, length);
+    const selectedIndex = getSingleSelectedPrimitiveIndex(shape);
+    if (!Number.isInteger(selectedIndex)) {
+      return;
+    }
+    const index = clampPrimitiveIndex(selectedIndex, length);
 
     let targetIndex = index;
     if (direction === "up") {
@@ -1858,7 +2123,7 @@ export function createShapeManager({
 
     const moved = shape.editableElements.splice(index, 1)[0];
     shape.editableElements.splice(targetIndex, 0, moved);
-    state.shapeManager.selectedPrimitiveIndex = targetIndex;
+    setSingleSelectedPrimitive(shape, targetIndex);
 
     syncShapeSvg(shape);
     persistShapeLibrary();
@@ -1990,21 +2255,29 @@ export function createShapeManager({
       return false;
     }
 
-    if (Array.isArray(shape.editableElements) && Number.isInteger(state.shapeManager.selectedPrimitiveIndex)) {
-      const index = clampPrimitiveIndex(state.shapeManager.selectedPrimitiveIndex, shape.editableElements.length);
-      shape.editableElements.splice(index, 1);
+    if (Array.isArray(shape.editableElements)) {
+      const selectedIndices = getSelectedPrimitiveIndices(shape);
+      if (selectedIndices.length) {
+        const sorted = [...selectedIndices].sort((a, b) => b - a);
+        sorted.forEach((index) => {
+          if (index >= 0 && index < shape.editableElements.length) {
+            shape.editableElements.splice(index, 1);
+          }
+        });
 
-      if (shape.editableElements.length) {
-        state.shapeManager.selectedPrimitiveIndex = Math.min(index, shape.editableElements.length - 1);
-      } else {
-        state.shapeManager.selectedPrimitiveIndex = null;
+        if (shape.editableElements.length) {
+          const nextIndex = Math.min(Math.min(...selectedIndices), shape.editableElements.length - 1);
+          setSingleSelectedPrimitive(shape, nextIndex);
+        } else {
+          setSelectedPrimitiveIndices(shape, []);
+        }
+
+        syncShapeSvg(shape);
+        persistShapeLibrary();
+        renderShapeManager();
+        renderSubmenu();
+        return true;
       }
-
-      syncShapeSvg(shape);
-      persistShapeLibrary();
-      renderShapeManager();
-      renderSubmenu();
-      return true;
     }
 
     const shapeIndex = state.shapeLibrary.findIndex((item) => item.id === shape.id);
@@ -2015,7 +2288,12 @@ export function createShapeManager({
     state.shapeLibrary.splice(shapeIndex, 1);
     const nextShape = state.shapeLibrary[Math.min(shapeIndex, state.shapeLibrary.length - 1)] || null;
     state.shapeManager.selectedId = nextShape?.id || null;
-    state.shapeManager.selectedPrimitiveIndex = getFirstPrimitiveIndex(nextShape);
+    if (nextShape) {
+      setSingleSelectedPrimitive(nextShape, getFirstPrimitiveIndex(nextShape));
+    } else {
+      state.shapeManager.selectedPrimitiveIndices = [];
+      state.shapeManager.selectedPrimitiveIndex = null;
+    }
     resetViewToSelectedShape();
 
     persistShapeLibrary();
@@ -2096,7 +2374,13 @@ export function createShapeManager({
     }
 
     state.shapeManager.selectedId = state.shapeLibrary[0]?.id || null;
-    state.shapeManager.selectedPrimitiveIndex = getFirstPrimitiveIndex(getSelectedShape());
+    const shape = getSelectedShape();
+    if (shape) {
+      setSingleSelectedPrimitive(shape, getFirstPrimitiveIndex(shape));
+    } else {
+      state.shapeManager.selectedPrimitiveIndices = [];
+      state.shapeManager.selectedPrimitiveIndex = null;
+    }
   }
 
   function ensureShapeManagerState() {
@@ -2109,9 +2393,17 @@ export function createShapeManager({
     state.shapeManager.parameterType = shapeParameterTypeDefinitions[state.shapeManager.parameterType]
       ? state.shapeManager.parameterType
       : "color";
-    state.shapeManager.selectedPrimitiveIndex = Number.isInteger(state.shapeManager.selectedPrimitiveIndex)
-      ? state.shapeManager.selectedPrimitiveIndex
-      : null;
+    const selection = Array.isArray(state.shapeManager.selectedPrimitiveIndices)
+      ? state.shapeManager.selectedPrimitiveIndices.filter((index) => Number.isInteger(index))
+      : [];
+    state.shapeManager.selectedPrimitiveIndices = selection;
+    if (Number.isInteger(state.shapeManager.selectedPrimitiveIndex)) {
+      if (!selection.includes(state.shapeManager.selectedPrimitiveIndex)) {
+        selection.push(state.shapeManager.selectedPrimitiveIndex);
+      }
+    } else {
+      state.shapeManager.selectedPrimitiveIndex = selection.length ? selection[selection.length - 1] : null;
+    }
 
     const vb = state.shapeManager.viewBox;
     if (!vb || !Number.isFinite(vb.x) || !Number.isFinite(vb.y) || !Number.isFinite(vb.width) || !Number.isFinite(vb.height)) {
@@ -2242,13 +2534,15 @@ export function createShapeManager({
     };
   }
 
-  function syncShapeSvg(shape) {
+  function syncShapeSvg(shape, options = {}) {
     if (!shape || !Array.isArray(shape.editableElements)) {
       return;
     }
 
     // Keep object references stable for active property panel listeners (e.g. color picker drag).
-    shape.parameters = normalizeShapeParameters(shape.parameters);
+    if (!options.preserveParameters) {
+      shape.parameters = normalizeShapeParameters(shape.parameters);
+    }
     shape.svg = buildSvgFromEditableElements(resolveEditableElementsWithParameters(shape.editableElements, shape.parameters));
     shape.imported = false;
   }
@@ -2256,7 +2550,12 @@ export function createShapeManager({
   return {
     bind,
     open,
-    close
+    close,
+    copySelection: clipboard.copySelection,
+    cutSelection: clipboard.cutSelection,
+    pasteSelection: clipboard.paste,
+    clearClipboard: clipboard.clear,
+    hasClipboard: clipboard.hasData
   };
 }
 
