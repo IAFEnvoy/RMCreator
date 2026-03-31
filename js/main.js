@@ -66,7 +66,10 @@ const state = {
   shapeManager: {
     selectedId: null,
     isOpen: false,
-    primitiveType: "line"
+    primitiveType: "line",
+    selectedPrimitiveIndex: null,
+    activeTab: "props",
+    viewBox: { x: 0, y: 0, width: 240, height: 240 }
   },
   counter: 1
 };

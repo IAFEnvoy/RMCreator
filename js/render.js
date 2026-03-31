@@ -398,12 +398,12 @@ export function createRenderer({
         path.setAttribute("d", buildPathD(offsetPoints, cornerRadius));
         path.setAttribute("stroke", color);
         path.setAttribute("stroke-width", String(segStyle.width));
-        path.setAttribute("stroke-linecap", "butt");
+        path.setAttribute("stroke-linecap", segStyle.roundCap ? "round" : "butt");
         path.setAttribute("stroke-linejoin", "round");
         path.setAttribute("fill", "none");
         path.setAttribute("class", "link-line");
         path.setAttribute("data-line-id", edge.id);
-        path.setAttribute("stroke-dasharray", lineStyleMap[segStyle.strokeStyle] || "");
+        path.setAttribute("stroke-dasharray", getSegmentDasharray(segStyle));
 
         if (isSelected("line", edge.id)) {
           path.classList.add("selected-shape");
@@ -472,7 +472,8 @@ export function createRenderer({
     linePreview.setAttribute("d", buildPathD(points));
     linePreview.setAttribute("stroke", resolveSegmentColor(first, lineType.colorList || []));
     linePreview.setAttribute("stroke-width", String(first.width));
-    linePreview.setAttribute("stroke-dasharray", lineStyleMap[first.strokeStyle] || "");
+    linePreview.setAttribute("stroke-linecap", first.roundCap ? "round" : "butt");
+    linePreview.setAttribute("stroke-dasharray", getSegmentDasharray(first));
     linePreview.setAttribute("fill", "none");
     linePreview.setAttribute("visibility", "visible");
   }
@@ -497,12 +498,31 @@ export function createRenderer({
       path.setAttribute("d", buildPathD(offsetLine));
       path.setAttribute("stroke", resolveSegmentColor(seg, lineType.colorList || []));
       path.setAttribute("stroke-width", String(seg.width));
-      path.setAttribute("stroke-linecap", "butt");
+      path.setAttribute("stroke-linecap", seg.roundCap ? "round" : "butt");
       path.setAttribute("stroke-linejoin", "round");
       path.setAttribute("fill", "none");
-      path.setAttribute("stroke-dasharray", lineStyleMap[seg.strokeStyle] || "");
+      path.setAttribute("stroke-dasharray", getSegmentDasharray(seg));
       svgEl.appendChild(path);
     });
+  }
+
+  function getSegmentDasharray(seg) {
+    if (seg.strokeStyle !== "dashed") {
+      return lineStyleMap.solid;
+    }
+
+    const solid = normalizePositiveDashLength(seg.dashSolidLength, 10);
+    const gap = normalizePositiveDashLength(seg.dashGapLength, 6);
+    return `${solid} ${gap}`;
+  }
+
+  function normalizePositiveDashLength(value, fallback) {
+    const n = Number(value);
+    if (!Number.isFinite(n) || n <= 0) {
+      return fallback;
+    }
+
+    return Math.min(200, Math.max(0.1, n));
   }
 
   function getSegmentOverlapGap(edge, baseLine) {

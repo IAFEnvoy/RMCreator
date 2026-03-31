@@ -197,7 +197,6 @@ export function createLineManager({
             <select data-field="strokeStyle" data-index="${index}">
               <option value="solid">实线</option>
               <option value="dashed">虚线</option>
-              <option value="dotted">点线</option>
             </select>
           </div>
           <div class="field-compact">
@@ -210,6 +209,23 @@ export function createLineManager({
           <button class="btn-ghost" data-remove-index="${index}" type="button">删除</button>
         </div>
         <div class="segment-subgrid">
+          ${segment.strokeStyle === "dashed" ? `
+            <div class="field-compact">
+              <label>虚线实段长度</label>
+              <input data-field="dashSolidLength" data-index="${index}" type="number" min="0.1" max="200" step="0.1" value="${formatPositiveNumber(segment.dashSolidLength, 10)}" />
+            </div>
+            <div class="field-compact">
+              <label>虚线虚段长度</label>
+              <input data-field="dashGapLength" data-index="${index}" type="number" min="0.1" max="200" step="0.1" value="${formatPositiveNumber(segment.dashGapLength, 6)}" />
+            </div>
+          ` : ""}
+          <div class="field-compact field-compact-toggle">
+            <label for="segmentRoundCap${index}">端点圆头</label>
+            <label class="toggle-switch" for="segmentRoundCap${index}">
+              <input id="segmentRoundCap${index}" class="toggle-checkbox" data-field="roundCap" data-index="${index}" type="checkbox" ${segment.roundCap ? "checked" : ""} />
+              <span class="toggle-slider" aria-hidden="true"></span>
+            </label>
+          </div>
           ${segment.colorMode === "palette" ? `
             <div class="field-compact">
               <label>引用颜色</label>
@@ -376,7 +392,14 @@ export function createLineManager({
     }
 
     if (field === "strokeStyle") {
-      segment.strokeStyle = input.value;
+      segment.strokeStyle = input.value === "dashed" ? "dashed" : "solid";
+      if (segment.strokeStyle === "dashed") {
+        segment.dashSolidLength = normalizePositiveNumber(segment.dashSolidLength, 10);
+        segment.dashGapLength = normalizePositiveNumber(segment.dashGapLength, 6);
+      }
+      autoSaveDraft();
+      renderLineEditor();
+      return;
     }
 
     if (field === "colorMode") {
@@ -418,6 +441,20 @@ export function createLineManager({
 
     if (field === "paletteIndex") {
       segment.paletteIndex = clamp(Number(input.value) || 0, 0, Math.max(0, state.lineManager.draft.colorList.length - 1));
+    }
+
+    if (field === "dashSolidLength") {
+      segment.dashSolidLength = normalizePositiveNumber(input.value, 10);
+      input.value = String(segment.dashSolidLength);
+    }
+
+    if (field === "dashGapLength") {
+      segment.dashGapLength = normalizePositiveNumber(input.value, 6);
+      input.value = String(segment.dashGapLength);
+    }
+
+    if (field === "roundCap") {
+      segment.roundCap = Boolean(input.checked);
     }
 
     renderLineTypePreviewEditor();
@@ -494,7 +531,10 @@ export function createLineManager({
     const latest = state.lineManager.draft.segments[state.lineManager.draft.segments.length - 1];
     state.lineManager.draft.segments.push({
       width: latest?.width || 5,
-      strokeStyle: latest?.strokeStyle || "solid",
+      strokeStyle: latest?.strokeStyle === "dashed" ? "dashed" : "solid",
+      dashSolidLength: normalizePositiveNumber(latest?.dashSolidLength, 10),
+      dashGapLength: normalizePositiveNumber(latest?.dashGapLength, 6),
+      roundCap: Boolean(latest?.roundCap),
       colorMode: latest?.colorMode || "palette",
       paletteIndex: clamp(Number(latest?.paletteIndex) || 0, 0, Math.max(0, state.lineManager.draft.colorList.length - 1)),
       fixedColor: latest?.fixedColor || "#2f5d9dff"
@@ -512,6 +552,9 @@ export function createLineManager({
       segments: [{
         width: 5,
         strokeStyle: "solid",
+        dashSolidLength: 10,
+        dashGapLength: 6,
+        roundCap: false,
         colorMode: "palette",
         paletteIndex: 0,
         fixedColor: "#2f5d9dff"
@@ -659,10 +702,10 @@ export function createLineManager({
       path.setAttribute("d", buildPathD(offsetLine));
       path.setAttribute("stroke", resolveSegmentColor(seg, lineType.colorList));
       path.setAttribute("stroke-width", String(seg.width));
-      path.setAttribute("stroke-linecap", "butt");
+      path.setAttribute("stroke-linecap", seg.roundCap ? "round" : "butt");
       path.setAttribute("stroke-linejoin", "round");
       path.setAttribute("fill", "none");
-      path.setAttribute("stroke-dasharray", lineStyleMap[seg.strokeStyle] || "");
+      path.setAttribute("stroke-dasharray", getSegmentDasharray(seg));
       svgEl.appendChild(path);
     });
   }
@@ -742,4 +785,27 @@ export function createLineManager({
     open,
     close
   };
+}
+
+function normalizePositiveNumber(value, fallback) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) {
+    return fallback;
+  }
+
+  return clamp(n, 0.1, 200);
+}
+
+function formatPositiveNumber(value, fallback) {
+  return normalizePositiveNumber(value, fallback).toString();
+}
+
+function getSegmentDasharray(seg) {
+  if (seg.strokeStyle !== "dashed") {
+    return lineStyleMap.solid;
+  }
+
+  const solid = normalizePositiveNumber(seg.dashSolidLength, 10);
+  const gap = normalizePositiveNumber(seg.dashGapLength, 6);
+  return `${solid} ${gap}`;
 }

@@ -66,11 +66,13 @@ export function normalizeLineType(raw) {
   const colorList = [...initialColorList];
 
   const normalizedSegments = segments.map((seg) => {
-    const strokeStyle = ["solid", "dashed", "dotted"].includes(seg.strokeStyle) ? seg.strokeStyle : "solid";
+    const strokeStyle = seg.strokeStyle === "dashed" ? "dashed" : "solid";
     const legacyColor = normalizeColor(seg.color);
     const fixedColorValue = typeof seg.fixedColor === "string"
       ? normalizeColor(seg.fixedColor)
       : normalizeColor(seg.fixedColorValue || legacyColor);
+    const dashSolidLength = normalizePositiveDashLength(seg.dashSolidLength ?? seg.dashLength, 10);
+    const dashGapLength = normalizePositiveDashLength(seg.dashGapLength ?? seg.gapLength, 6);
 
     let colorMode = ["fixed", "palette"].includes(seg.colorMode)
       ? seg.colorMode
@@ -96,6 +98,9 @@ export function normalizeLineType(raw) {
     return {
       width: clamp(Number(seg.width) || 5, 1, 20),
       strokeStyle,
+      dashSolidLength,
+      dashGapLength,
+      roundCap: Boolean(seg.roundCap),
       colorMode,
       paletteIndex,
       fixedColor: fixedColorValue
@@ -172,4 +177,13 @@ export function loadCustomLineTypes() {
 export function persistCustomLineTypes(lineTypes) {
   const customs = lineTypes.filter((item) => item.source === "custom" && !item.isTemporaryImported);
   localStorage.setItem(lineStorageKey, JSON.stringify(customs));
+}
+
+function normalizePositiveDashLength(value, fallback) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) {
+    return fallback;
+  }
+
+  return clamp(n, 0.1, 200);
 }

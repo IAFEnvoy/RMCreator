@@ -160,29 +160,48 @@
           </section>
 
           <section class="shape-editor-panel">
+            <div class="shape-editor-head field">
+              <label for="shapeNameInput">图形名称</label>
+              <input id="shapeNameInput" type="text" placeholder="输入图形名称" />
+            </div>
             <div class="shape-editor-toolbar">
               <label for="shapePrimitiveSelect">图形类型</label>
               <select id="shapePrimitiveSelect">
                 <option value="line">线段</option>
                 <option value="circle">圆形</option>
                 <option value="rect">方形</option>
+                <option value="hexagon">六边形</option>
+                <option value="octagon">八边形</option>
+                <option value="bezier">贝叶斯曲线</option>
+                <option value="text">文本</option>
               </select>
               <button class="btn-main" id="shapeAddPrimitiveBtn" type="button">添加图元</button>
-              <button class="btn-ghost" id="shapeImportSvgBtn" type="button">导入外部SVG</button>
+              <button class="btn-ghost" id="shapeResetViewBtn" type="button">复位视图</button>
+              <button class="btn-ghost" id="shapeImportSvgBtn" type="button">导入SVG</button>
               <input id="shapeImportSvgInput" type="file" accept="image/svg+xml,.svg" hidden />
             </div>
-            <svg id="shapeEditorCanvas" class="shape-editor-canvas" viewBox="0 0 240 240"
-              xmlns="http://www.w3.org/2000/svg"></svg>
+            <div class="shape-editor-canvas-wrap" id="shapeEditorCanvasWrap">
+              <svg id="shapeEditorCanvas" class="shape-editor-canvas" viewBox="0 0 240 240"
+                xmlns="http://www.w3.org/2000/svg"></svg>
+            </div>
           </section>
 
-          <aside class="shape-params-panel">
-            <h3>参数区</h3>
-            <div class="shape-param-actions">
-              <button class="btn-main" id="addColorParamBtn" type="button">添加颜色参数</button>
-              <button class="btn-main" id="addTextParamBtn" type="button">添加文本参数</button>
-              <button class="btn-main" id="addCheckboxParamBtn" type="button">添加勾选参数</button>
+          <aside class="shape-side-panel">
+            <div class="shape-side-tabs">
+              <button class="shape-tab-btn" id="shapeTabPropsBtn" type="button">图形属性</button>
+              <button class="shape-tab-btn" id="shapeTabParamsBtn" type="button">参数</button>
             </div>
-            <div class="shape-param-list" id="shapeParamList"></div>
+            <section class="shape-tab-panel" id="shapePropsPanel">
+              <div class="shape-prop-list" id="shapePropsList"></div>
+            </section>
+            <section class="shape-tab-panel" id="shapeParamsPanel" hidden>
+              <div class="shape-param-actions">
+                <button class="btn-main" id="addColorParamBtn" type="button">添加颜色参数</button>
+                <button class="btn-main" id="addTextParamBtn" type="button">添加文本参数</button>
+                <button class="btn-main" id="addCheckboxParamBtn" type="button">添加勾选参数</button>
+              </div>
+              <div class="shape-param-list" id="shapeParamList"></div>
+            </section>
           </aside>
         </div>
       </div>

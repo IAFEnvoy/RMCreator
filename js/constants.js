@@ -5,8 +5,7 @@ export const appSettingsStorageKey = "rmcreator.appSettings.v1";
 
 export const lineStyleMap = {
   solid: "",
-  dashed: "10 6",
-  dotted: "2 6"
+  dashed: "10 6"
 };
 
 export const geometryLabelMap = {
