@@ -148,3 +148,8 @@ body {
   padding: 10px;
   font-size: 14px;
 }
+
+.divBU {
+  text-decoration: underline;
+  font-weight: bold;
+}
