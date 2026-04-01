@@ -59,6 +59,7 @@ export function createRenderer({
       btn.classList.toggle("active", btn.dataset.tool === state.activeTool);
     });
 
+    svg.classList.toggle("select-tool-active", state.activeTool === "select");
     svg.classList.toggle("line-tool-active", state.activeTool === "line");
     svg.classList.toggle("text-tool-active", state.activeTool === "text");
   }
@@ -1095,6 +1096,7 @@ export function createRenderer({
   }
 
   function updateDragCursor() {
+    svg.classList.toggle("select-tool-active", state.activeTool === "select");
     svg.classList.toggle("line-tool-active", state.activeTool === "line");
     svg.classList.toggle("text-tool-active", state.activeTool === "text");
     svg.classList.toggle("dragging-pan", state.drag.mode === "pan");

@@ -418,6 +418,11 @@
   cursor: text;
 }
 
+.canvas.select-tool-active .station,
+.canvas.select-tool-active .placed-shape-instance {
+  cursor: move;
+}
+
 .canvas.dragging-pan,
 .canvas.dragging-station {
   cursor: move;
@@ -435,7 +440,7 @@
   fill: #ffffff;
   stroke: #203554;
   stroke-width: 2;
-  cursor: move;
+  cursor: inherit;
 }
 
 .station.interchange {
@@ -460,7 +465,7 @@
 }
 
 .placed-shape-instance {
-  cursor: move;
+  cursor: inherit;
 }
 
 .placed-shape-ghost {
