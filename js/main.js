@@ -28,6 +28,7 @@ import {
 } from "./utils.js";
 import { appSettingsStorageKey, drawingStorageKey, geometryLabelMap } from "./constants.js";
 import { createHistoryManager } from "./historyManager.js";
+import { preloadTemplates } from "./templateStore.js";
 
 const { linePreview, fileUndoBtn, fileRedoBtn, canvasBg } = elements;
 const defaultAppSettings = Object.freeze({
@@ -222,6 +223,7 @@ const historyManager = createHistoryManager({
 init();
 
 async function init() {
+  await preloadTemplates();
   await loadMenus();
   loadAppSettings();
   applyAppSettings();

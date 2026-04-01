@@ -212,6 +212,12 @@
   gap: 8px;
 }
 
+.submenu-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 .menu-item {
   border: 1px solid var(--line);
   border-radius: 8px;

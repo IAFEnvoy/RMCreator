@@ -19,6 +19,7 @@ import {
   normalizeStationTextCards,
   normalizeTextSlot
 } from "./station/textUtils.js";
+import { renderTemplate } from "./templateStore.js";
 
 export function createSettingsRenderer({
   state,
@@ -74,7 +75,10 @@ export function createSettingsRenderer({
       : "";
 
     if (typeCount > 1) {
-      settingsBody.innerHTML = `${summaryHtml}<div class="kv">当前包含多种类型，暂不提供批量属性设置。</div>`;
+      settingsBody.innerHTML = renderTemplate("settings-message", {
+        summaryHtml,
+        messageHtml: "<div class=\"kv\">当前包含多种类型，暂不提供批量属性设置。</div>"
+      });
       return;
     }
 
@@ -100,7 +104,10 @@ export function createSettingsRenderer({
       if (selectedTexts.length === 1) {
         renderSingleText(selectedTexts[0], summaryHtml);
       } else {
-        settingsBody.innerHTML = `${summaryHtml}<div class="kv">文本多选暂不支持批量设置。</div>`;
+        settingsBody.innerHTML = renderTemplate("settings-message", {
+          summaryHtml,
+          messageHtml: "<div class=\"kv\">文本多选暂不支持批量设置。</div>"
+        });
       }
       return;
     }
@@ -109,7 +116,10 @@ export function createSettingsRenderer({
       if (selectedShapes.length === 1) {
         renderSingleShape(selectedShapes[0], summaryHtml);
       } else {
-        settingsBody.innerHTML = `${summaryHtml}<div class="kv">图形多选暂不支持批量设置。</div>`;
+        settingsBody.innerHTML = renderTemplate("settings-message", {
+          summaryHtml,
+          messageHtml: "<div class=\"kv\">图形多选暂不支持批量设置。</div>"
+        });
       }
     }
   };
@@ -137,31 +147,31 @@ export function createSettingsRenderer({
         <div class="station-instance-text-panel">
           <div class="station-instance-text-title">站点文本</div>
           ${stationTextCards.map((card, index) => {
-            const cardId = escapeHtml(String(card.id || ""));
-            const controlId = `stationTextValue-${escapeHtml(station.id)}-${cardId}`;
-            const label = escapeHtml(String(card.label || `文本 ${index + 1}`));
-            const allowMultiline = Boolean(card.allowMultiline);
-            const textStyle = normalizeTextStyleFlags(station.textStyleValues?.[card.id], card);
-            const toolbarHtml = buildTextStyleToolbarHtml({
-              scope: "station",
-              targetId: cardId,
-              textStyle
-            });
-            const value = escapeHtml(normalizeStationTextContent(
-              station.textValues?.[card.id] ?? card.defaultValue ?? "",
-              allowMultiline
-            ));
-            const controlHtml = allowMultiline
-              ? `<textarea id="${controlId}" data-station-text-card-id="${cardId}" data-station-text-multiline="1">${value}</textarea>`
-              : `<input id="${controlId}" data-station-text-card-id="${cardId}" data-station-text-multiline="0" type="text" value="${value}" />`;
-            return `
+        const cardId = escapeHtml(String(card.id || ""));
+        const controlId = `stationTextValue-${escapeHtml(station.id)}-${cardId}`;
+        const label = escapeHtml(String(card.label || `文本 ${index + 1}`));
+        const allowMultiline = Boolean(card.allowMultiline);
+        const textStyle = normalizeTextStyleFlags(station.textStyleValues?.[card.id], card);
+        const toolbarHtml = buildTextStyleToolbarHtml({
+          scope: "station",
+          targetId: cardId,
+          textStyle
+        });
+        const value = escapeHtml(normalizeStationTextContent(
+          station.textValues?.[card.id] ?? card.defaultValue ?? "",
+          allowMultiline
+        ));
+        const controlHtml = allowMultiline
+          ? `<textarea id="${controlId}" data-station-text-card-id="${cardId}" data-station-text-multiline="1">${value}</textarea>`
+          : `<input id="${controlId}" data-station-text-card-id="${cardId}" data-station-text-multiline="0" type="text" value="${value}" />`;
+        return `
               <div class="station-instance-text-item">
                 <label class="station-instance-text-label" for="${controlId}">${label}</label>
                 ${toolbarHtml}
                 ${controlHtml}
               </div>
             `;
-          }).join("")}
+      }).join("")}
         </div>
       `
       : "<div class=\"kv\">当前车站类型没有可编辑文本。</div>";
@@ -230,17 +240,13 @@ export function createSettingsRenderer({
       })
       .join("");
 
-    settingsBody.innerHTML = `
-      ${summaryHtml}
-      <div class="kv">组件类型: 车站</div>
-      <div class="field">
-        <label for="stationTypeSelect">车站类型</label>
-        <select id="stationTypeSelect">${stationTypeOptions}</select>
-      </div>
-      ${textFieldsHtml}
-      ${anchorGridHtml}
-      ${paramFieldsHtml || '<div class="kv">当前车站类型没有可调整参数（已锁定参数不会显示）。</div>'}
-    `;
+    settingsBody.innerHTML = renderTemplate("settings-station-single", {
+      summaryHtml,
+      stationTypeOptions,
+      textFieldsHtml,
+      anchorGridHtml,
+      paramFieldsHtml: paramFieldsHtml || "<div class=\"kv\">当前车站类型没有可调整参数（已锁定参数不会显示）。</div>"
+    });
 
     const stationTypeSelect = document.getElementById("stationTypeSelect");
     stationTypeSelect.addEventListener("change", () => {
@@ -375,14 +381,10 @@ export function createSettingsRenderer({
       ...state.stationTypes.map((type, index) => `<option value="${index}" ${isSameType && index === first ? "selected" : ""}>${escapeHtml(type.name)}</option>`)
     ].join("");
 
-    settingsBody.innerHTML = `
-      ${summaryHtml}
-      <div class="kv">组件类型: 车站（批量设置）</div>
-      <div class="field">
-        <label for="batchStationTypeSelect">车站类型</label>
-        <select id="batchStationTypeSelect">${stationTypeOptions}</select>
-      </div>
-    `;
+    settingsBody.innerHTML = renderTemplate("settings-station-batch", {
+      summaryHtml,
+      stationTypeOptions
+    });
 
     const batchStationTypeSelect = document.getElementById("batchStationTypeSelect");
     batchStationTypeSelect.addEventListener("change", () => {
@@ -401,7 +403,10 @@ export function createSettingsRenderer({
   function renderSingleLine(edge, summaryHtml) {
     const lineType = findLineType(edge.lineTypeId);
     if (!lineType) {
-      settingsBody.innerHTML = `${summaryHtml}<div class="kv">组件类型: 线</div>`;
+      settingsBody.innerHTML = renderTemplate("settings-message", {
+        summaryHtml,
+        messageHtml: "<div class=\"kv\">组件类型: 线</div>"
+      });
       return;
     }
 
@@ -431,48 +436,17 @@ export function createSettingsRenderer({
       })
       .join("");
 
-    settingsBody.innerHTML = `
-      ${summaryHtml}
-      <div class="kv">组件类型: 线</div>
-      <div class="field">
-        <label for="lineTypeSelect">线条类型</label>
-        <select id="lineTypeSelect">${lineTypeOptions}</select>
-      </div>
-      <div class="field">
-        <label for="lineGeometrySelect">几何类型</label>
-        <select id="lineGeometrySelect">${geometryOptions}</select>
-      </div>
-      <div class="field field-toggle">
-        <label for="lineFlip">翻转形状</label>
-        <label class="toggle-switch" for="lineFlip">
-          <input id="lineFlip" class="toggle-checkbox" type="checkbox" ${edge.flip ? "checked" : ""} />
-          <span class="toggle-slider" aria-hidden="true"></span>
-        </label>
-      </div>
-      <div class="field field-toggle">
-        <label for="lineFlipColor">翻转颜色</label>
-        <label class="toggle-switch" for="lineFlipColor">
-          <input id="lineFlipColor" class="toggle-checkbox" type="checkbox" ${edge.flipColor ? "checked" : ""} />
-          <span class="toggle-slider" aria-hidden="true"></span>
-        </label>
-      </div>
-      <div class="field">
-        <label for="lineCornerRadius">转弯圆弧半径</label>
-        <input id="lineCornerRadius" type="number" min="0" max="120" step="1" value="${Number(edge.cornerRadius) || 0}" />
-      </div>
-      <div class="field">
-        <label for="lineStartOffset">起点偏移量</label>
-        <input id="lineStartOffset" type="number" min="-120" max="120" step="1" value="${Number(edge.startOffset) || 0}" />
-      </div>
-      <div class="field">
-        <label for="lineEndOffset">终点偏移量</label>
-        <input id="lineEndOffset" type="number" min="-120" max="120" step="1" value="${Number(edge.endOffset) || 0}" />
-      </div>
-      <div class="field">
-        <label>颜色列表</label>
-        <div class="line-settings-color-list">${colorListEditorHtml}</div>
-      </div>
-    `;
+    settingsBody.innerHTML = renderTemplate("settings-line-single", {
+      summaryHtml,
+      lineTypeOptions,
+      geometryOptions,
+      lineFlipChecked: edge.flip ? "checked" : "",
+      lineFlipColorChecked: edge.flipColor ? "checked" : "",
+      lineCornerRadius: String(Number(edge.cornerRadius) || 0),
+      lineStartOffset: String(Number(edge.startOffset) || 0),
+      lineEndOffset: String(Number(edge.endOffset) || 0),
+      colorListEditorHtml
+    });
 
     const lineTypeSelect = document.getElementById("lineTypeSelect");
     const lineGeometrySelect = document.getElementById("lineGeometrySelect");
@@ -594,47 +568,28 @@ export function createSettingsRenderer({
         .map(([value, label]) => `<option value="${value}" ${value === commonGeometry ? "selected" : ""}>${escapeHtml(label)}</option>`)
     ].join("");
 
-    settingsBody.innerHTML = `
-      ${summaryHtml}
-      <div class="kv">组件类型: 线（批量设置）</div>
-      <div class="field">
-        <label for="batchLineTypeSelect">线条类型</label>
-        <select id="batchLineTypeSelect">${lineTypeOptions}</select>
-      </div>
-      <div class="field">
-        <label for="batchLineGeometrySelect">几何类型</label>
-        <select id="batchLineGeometrySelect">${geometryOptions}</select>
-      </div>
-      <div class="field">
-        <label for="batchLineFlipSelect">翻转形状</label>
-        <select id="batchLineFlipSelect">
-          <option value="" ${commonFlip ? "" : "selected"}>保持当前（混合）</option>
-          <option value="true" ${commonFlip === "true" ? "selected" : ""}>是</option>
-          <option value="false" ${commonFlip === "false" ? "selected" : ""}>否</option>
-        </select>
-      </div>
-      <div class="field">
-        <label for="batchLineFlipColorSelect">翻转颜色</label>
-        <select id="batchLineFlipColorSelect">
-          <option value="" ${commonFlipColor ? "" : "selected"}>保持当前（混合）</option>
-          <option value="true" ${commonFlipColor === "true" ? "selected" : ""}>是</option>
-          <option value="false" ${commonFlipColor === "false" ? "selected" : ""}>否</option>
-        </select>
-      </div>
-      <div class="field">
-        <label for="batchLineCornerRadius">转弯圆弧半径</label>
-        <input id="batchLineCornerRadius" type="number" min="0" max="120" step="1" value="${commonCorner || ""}" placeholder="保持当前（混合）" />
-      </div>
-      <div class="field">
-        <label for="batchLineStartOffset">起点偏移量</label>
-        <input id="batchLineStartOffset" type="number" min="-120" max="120" step="1" value="${commonStartOffset || ""}" placeholder="保持当前（混合）" />
-      </div>
-      <div class="field">
-        <label for="batchLineEndOffset">终点偏移量</label>
-        <input id="batchLineEndOffset" type="number" min="-120" max="120" step="1" value="${commonEndOffset || ""}" placeholder="保持当前（混合）" />
-      </div>
-      <div class="kv">提示：批量模式下暂不支持颜色列表编辑。</div>
+    const flipOptions = `
+      <option value="" ${commonFlip ? "" : "selected"}>保持当前（混合）</option>
+      <option value="true" ${commonFlip === "true" ? "selected" : ""}>是</option>
+      <option value="false" ${commonFlip === "false" ? "selected" : ""}>否</option>
     `;
+
+    const flipColorOptions = `
+      <option value="" ${commonFlipColor ? "" : "selected"}>保持当前（混合）</option>
+      <option value="true" ${commonFlipColor === "true" ? "selected" : ""}>是</option>
+      <option value="false" ${commonFlipColor === "false" ? "selected" : ""}>否</option>
+    `;
+
+    settingsBody.innerHTML = renderTemplate("settings-line-batch", {
+      summaryHtml,
+      lineTypeOptions,
+      geometryOptions,
+      flipOptions,
+      flipColorOptions,
+      commonCorner: commonCorner || "",
+      commonStartOffset: commonStartOffset || "",
+      commonEndOffset: commonEndOffset || ""
+    });
 
     const batchLineTypeSelect = document.getElementById("batchLineTypeSelect");
     const batchLineGeometrySelect = document.getElementById("batchLineGeometrySelect");
@@ -740,32 +695,17 @@ export function createSettingsRenderer({
 
   function renderSingleText(label, summaryHtml) {
     const labelStyle = normalizeTextStyleFlags(label);
-    settingsBody.innerHTML = `
-      ${summaryHtml}
-      <div class="kv">组件类型: 文本</div>
-      <div class="field">
-        <label for="textValue">内容</label>
-        ${buildTextStyleToolbarHtml({ scope: "label", targetId: String(label.id || ""), textStyle: labelStyle })}
-        <textarea id="textValue">${escapeHtml(label.value)}</textarea>
-      </div>
-      <div class="field">
-        <label for="textFont">字体</label>
-        <select id="textFont">
-          <option value="Segoe UI">Segoe UI</option>
-          <option value="Microsoft YaHei">Microsoft YaHei</option>
-          <option value="SimSun">SimSun</option>
-          <option value="Arial">Arial</option>
-        </select>
-      </div>
-      <div class="field">
-        <label for="textColor">颜色</label>
-        <input id="textColor" type="color" value="${label.color}" />
-      </div>
-      <div class="field">
-        <label for="textFontSize">字号</label>
-        <input id="textFontSize" type="number" min="1" max="300" step="0.1" value="${Number(label.fontSize) || 20}" />
-      </div>
-    `;
+    settingsBody.innerHTML = renderTemplate("settings-text-single", {
+      summaryHtml,
+      textStyleToolbarHtml: buildTextStyleToolbarHtml({
+        scope: "label",
+        targetId: String(label.id || ""),
+        textStyle: labelStyle
+      }),
+      textValue: escapeHtml(label.value),
+      textColor: label.color,
+      textFontSize: String(Number(label.fontSize) || 20)
+    });
 
     const valueInput = document.getElementById("textValue");
     const fontSelect = document.getElementById("textFont");
@@ -836,7 +776,10 @@ export function createSettingsRenderer({
   function renderSingleShape(shapeInstance, summaryHtml) {
     const preset = state.shapeLibrary.find((item) => item.id === shapeInstance.shapeId);
     if (!preset) {
-      settingsBody.innerHTML = `${summaryHtml}<div class="kv">组件类型: 图形</div><div class="kv">该图形引用的预制图形已不存在。</div>`;
+      settingsBody.innerHTML = renderTemplate("settings-message", {
+        summaryHtml,
+        messageHtml: "<div class=\"kv\">组件类型: 图形</div><div class=\"kv\">该图形引用的预制图形已不存在。</div>"
+      });
       return;
     }
 
@@ -888,21 +831,13 @@ export function createSettingsRenderer({
       })
       .join("");
 
-    settingsBody.innerHTML = `
-      ${summaryHtml}
-      <div class="kv">组件类型: 图形</div>
-      <div class="kv">预制图形: ${escapeHtml(preset.name || "图形")}</div>
-      <div class="field">
-        <label for="shapeScaleInput">缩放比例</label>
-        <input id="shapeScaleInput" type="number" min="0.1" max="10" step="0.1" value="${safeScale}" />
-      </div>
-      <div class="field">
-        <label>参数预览</label>
-        <img class="menu-item-shape-preview" alt="图形预览" src="${escapeHtml(toSvgDataUrl(buildRenderableShapeSvg(preset, shapeInstance.paramValues || {})))}" />
-      </div>
-      ${paramFieldsHtml || '<div class="kv">该图形没有可配置参数。</div>'}
-      <div class="kv">提示：可再次按住并拖动该图形调整位置。</div>
-    `;
+    settingsBody.innerHTML = renderTemplate("settings-shape-single", {
+      summaryHtml,
+      presetName: escapeHtml(preset.name || "图形"),
+      safeScale: String(safeScale),
+      shapePreviewSrc: escapeHtml(toSvgDataUrl(buildRenderableShapeSvg(preset, shapeInstance.paramValues || {}))),
+      paramFieldsHtml: paramFieldsHtml || "<div class=\"kv\">该图形没有可配置参数。</div>"
+    });
 
     const scaleInput = document.getElementById("shapeScaleInput");
     scaleInput?.addEventListener("change", () => {

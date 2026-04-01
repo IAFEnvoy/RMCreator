@@ -15,6 +15,7 @@ import {
   normalizeTextStyleFlags
 } from "./utils.js";
 import { createSettingsRenderer } from "./settingsRenderer.js";
+import { getTemplate } from "./templateStore.js";
 import { buildRenderableShapeSvg } from "./shape/utils.js";
 import {
   appendStationTexts,
@@ -69,17 +70,12 @@ export function createRenderer({
 
     if (state.activeTool === "station") {
       submenuTitle.textContent = "车站样式";
+      submenuItems.innerHTML = getTemplate("submenu-station");
 
-      const managerBtn = document.createElement("button");
-      managerBtn.className = "menu-item menu-item-action";
-      managerBtn.textContent = "车站管理器";
-      managerBtn.addEventListener("click", () => openStationManager?.());
-      submenuItems.appendChild(managerBtn);
+      const managerBtn = submenuItems.querySelector("[data-action=\"open-station-manager\"]");
+      managerBtn?.addEventListener("click", () => openStationManager?.());
 
-      const stationTypeTitle = document.createElement("div");
-      stationTypeTitle.className = "menu-group-title";
-      stationTypeTitle.textContent = "车站类型";
-      submenuItems.appendChild(stationTypeTitle);
+      const stationList = submenuItems.querySelector("[data-list=\"station-types\"]") || submenuItems;
 
       state.stationTypes.forEach((item, index) => {
         const button = document.createElement("button");
@@ -91,24 +87,19 @@ export function createRenderer({
           hideStationGhost();
           renderSubmenu();
         });
-        submenuItems.appendChild(button);
+        stationList.appendChild(button);
       });
       return;
     }
 
     if (state.activeTool === "line") {
       submenuTitle.textContent = "连线工具";
+      submenuItems.innerHTML = getTemplate("submenu-line");
 
-      const managerBtn = document.createElement("button");
-      managerBtn.className = "menu-item menu-item-action";
-      managerBtn.textContent = "线条管理器";
-      managerBtn.addEventListener("click", () => openLineManager());
-      submenuItems.appendChild(managerBtn);
+      const managerBtn = submenuItems.querySelector("[data-action=\"open-line-manager\"]");
+      managerBtn?.addEventListener("click", () => openLineManager());
 
-      const geometryHint = document.createElement("div");
-      geometryHint.className = "menu-group-title";
-      geometryHint.textContent = "几何类型";
-      submenuItems.appendChild(geometryHint);
+      const geometryList = submenuItems.querySelector("[data-list=\"line-geometries\"]") || submenuItems;
 
       Object.entries(geometryLabelMap).forEach(([geometryKey, geometryLabel]) => {
         const button = document.createElement("button");
@@ -119,13 +110,10 @@ export function createRenderer({
           state.menuSelection.lineGeometry = state.menuSelection.lineGeometry === geometryKey ? null : geometryKey;
           renderSubmenu();
         });
-        submenuItems.appendChild(button);
+        geometryList.appendChild(button);
       });
 
-      const styleHint = document.createElement("div");
-      styleHint.className = "menu-group-title";
-      styleHint.textContent = "线条类型";
-      submenuItems.appendChild(styleHint);
+      const lineTypeList = submenuItems.querySelector("[data-list=\"line-types\"]") || submenuItems;
 
       const usageCountByTypeId = new Map();
       state.edges.forEach((edge) => {
@@ -159,43 +147,32 @@ export function createRenderer({
           state.menuSelection.lineType = state.menuSelection.lineType === item.id ? null : item.id;
           renderSubmenu();
         });
-        submenuItems.appendChild(button);
+        lineTypeList.appendChild(button);
       });
       return;
     }
 
     if (state.activeTool === "text") {
       submenuTitle.textContent = "文本工具已启用";
-      const tip = document.createElement("div");
-      tip.className = "kv";
-      tip.textContent = "点击画布任意位置可添加文本。";
-      submenuItems.appendChild(tip);
+      submenuItems.innerHTML = getTemplate("submenu-text");
       return;
     }
 
     if (state.activeTool === "shape") {
       submenuTitle.textContent = "图形工具";
+      submenuItems.innerHTML = getTemplate("submenu-shape");
 
-      const managerBtn = document.createElement("button");
-      managerBtn.className = "menu-item menu-item-action";
-      managerBtn.textContent = "图形管理器";
-      managerBtn.addEventListener("click", () => openShapeManager?.());
-      submenuItems.appendChild(managerBtn);
+      const managerBtn = submenuItems.querySelector("[data-action=\"open-shape-manager\"]");
+      managerBtn?.addEventListener("click", () => openShapeManager?.());
 
-      const libraryHint = document.createElement("div");
-      libraryHint.className = "menu-group-title";
-      libraryHint.textContent = "预制图形";
-      submenuItems.appendChild(libraryHint);
+      const shapeList = submenuItems.querySelector("[data-list=\"shape-library\"]") || submenuItems;
 
       if (state.menuSelection.shape && !state.shapeLibrary.some((item) => item.id === state.menuSelection.shape)) {
         state.menuSelection.shape = null;
       }
 
       if (!state.shapeLibrary.length) {
-        const empty = document.createElement("div");
-        empty.className = "kv";
-        empty.textContent = "当前没有预制图形，请先在图形管理器中创建或导入。";
-        submenuItems.appendChild(empty);
+        shapeList.innerHTML = getTemplate("submenu-shape-empty");
         return;
       }
 
@@ -225,7 +202,7 @@ export function createRenderer({
           renderSubmenu();
         });
 
-        submenuItems.appendChild(button);
+        shapeList.appendChild(button);
       });
 
       return;
@@ -233,275 +210,110 @@ export function createRenderer({
 
     if (state.activeTool === "settings") {
       submenuTitle.textContent = "设置";
+      submenuItems.innerHTML = getTemplate("submenu-settings");
 
-      const settingsCard = document.createElement("div");
-      settingsCard.className = "submenu-settings-card";
+      const continuousSelectInput = submenuItems.querySelector("#continuousSelectModeToggle");
+      if (continuousSelectInput) {
+        continuousSelectInput.checked = state.appSettings?.continuousSelectMode !== false;
+        continuousSelectInput.addEventListener("change", () => {
+          onAppSettingsChanged?.({ continuousSelectMode: continuousSelectInput.checked });
+        });
+      }
 
-      const continuousTitle = document.createElement("div");
-      continuousTitle.className = "menu-group-title";
-      continuousTitle.textContent = "连续操作";
-      settingsCard.appendChild(continuousTitle);
+      const continuousStationInput = submenuItems.querySelector("#continuousStationModeToggle");
+      if (continuousStationInput) {
+        continuousStationInput.checked = state.appSettings?.continuousStationMode !== false;
+        continuousStationInput.addEventListener("change", () => {
+          onAppSettingsChanged?.({ continuousStationMode: continuousStationInput.checked });
+        });
+      }
 
-      const continuousSelectRow = document.createElement("div");
-      continuousSelectRow.className = "submenu-settings-row";
-      const continuousSelectText = document.createElement("span");
-      continuousSelectText.textContent = "连续选择";
-      const continuousSelectSwitch = document.createElement("label");
-      continuousSelectSwitch.className = "toggle-switch";
-      continuousSelectSwitch.setAttribute("for", "continuousSelectModeToggle");
-      const continuousSelectInput = document.createElement("input");
-      continuousSelectInput.id = "continuousSelectModeToggle";
-      continuousSelectInput.className = "toggle-checkbox";
-      continuousSelectInput.type = "checkbox";
-      continuousSelectInput.checked = state.appSettings?.continuousSelectMode !== false;
-      const continuousSelectSlider = document.createElement("span");
-      continuousSelectSlider.className = "toggle-slider";
-      continuousSelectSlider.setAttribute("aria-hidden", "true");
-      continuousSelectInput.addEventListener("change", () => {
-        onAppSettingsChanged?.({ continuousSelectMode: continuousSelectInput.checked });
-      });
-      continuousSelectSwitch.appendChild(continuousSelectInput);
-      continuousSelectSwitch.appendChild(continuousSelectSlider);
-      continuousSelectRow.appendChild(continuousSelectText);
-      continuousSelectRow.appendChild(continuousSelectSwitch);
-      settingsCard.appendChild(continuousSelectRow);
+      const continuousInput = submenuItems.querySelector("#continuousLineModeToggle");
+      if (continuousInput) {
+        continuousInput.checked = state.appSettings?.continuousLineMode !== false;
+        continuousInput.addEventListener("change", () => {
+          onAppSettingsChanged?.({ continuousLineMode: continuousInput.checked });
+        });
+      }
 
-      const continuousStationRow = document.createElement("div");
-      continuousStationRow.className = "submenu-settings-row";
-      const continuousStationText = document.createElement("span");
-      continuousStationText.textContent = "连续车站放置";
-      const continuousStationSwitch = document.createElement("label");
-      continuousStationSwitch.className = "toggle-switch";
-      continuousStationSwitch.setAttribute("for", "continuousStationModeToggle");
-      const continuousStationInput = document.createElement("input");
-      continuousStationInput.id = "continuousStationModeToggle";
-      continuousStationInput.className = "toggle-checkbox";
-      continuousStationInput.type = "checkbox";
-      continuousStationInput.checked = state.appSettings?.continuousStationMode !== false;
-      const continuousStationSlider = document.createElement("span");
-      continuousStationSlider.className = "toggle-slider";
-      continuousStationSlider.setAttribute("aria-hidden", "true");
-      continuousStationInput.addEventListener("change", () => {
-        onAppSettingsChanged?.({ continuousStationMode: continuousStationInput.checked });
-      });
-      continuousStationSwitch.appendChild(continuousStationInput);
-      continuousStationSwitch.appendChild(continuousStationSlider);
-      continuousStationRow.appendChild(continuousStationText);
-      continuousStationRow.appendChild(continuousStationSwitch);
-      settingsCard.appendChild(continuousStationRow);
+      const continuousTextInput = submenuItems.querySelector("#continuousTextModeToggle");
+      if (continuousTextInput) {
+        continuousTextInput.checked = state.appSettings?.continuousTextMode !== false;
+        continuousTextInput.addEventListener("change", () => {
+          onAppSettingsChanged?.({ continuousTextMode: continuousTextInput.checked });
+        });
+      }
 
-      const continuousRow = document.createElement("div");
-      continuousRow.className = "submenu-settings-row";
-      const continuousText = document.createElement("span");
-      continuousText.textContent = "连续画线";
-      const continuousSwitch = document.createElement("label");
-      continuousSwitch.className = "toggle-switch";
-      continuousSwitch.setAttribute("for", "continuousLineModeToggle");
-      const continuousInput = document.createElement("input");
-      continuousInput.id = "continuousLineModeToggle";
-      continuousInput.className = "toggle-checkbox";
-      continuousInput.type = "checkbox";
-      continuousInput.checked = state.appSettings?.continuousLineMode !== false;
-      const continuousSlider = document.createElement("span");
-      continuousSlider.className = "toggle-slider";
-      continuousSlider.setAttribute("aria-hidden", "true");
-      continuousInput.addEventListener("change", () => {
-        onAppSettingsChanged?.({ continuousLineMode: continuousInput.checked });
-      });
-      continuousSwitch.appendChild(continuousInput);
-      continuousSwitch.appendChild(continuousSlider);
-      continuousRow.appendChild(continuousText);
-      continuousRow.appendChild(continuousSwitch);
-      settingsCard.appendChild(continuousRow);
+      const shapeContinuousInput = submenuItems.querySelector("#continuousShapeModeToggle");
+      if (shapeContinuousInput) {
+        shapeContinuousInput.checked = state.appSettings?.continuousShapeMode !== false;
+        shapeContinuousInput.addEventListener("change", () => {
+          onAppSettingsChanged?.({ continuousShapeMode: shapeContinuousInput.checked });
+        });
+      }
 
-      const continuousTextRow = document.createElement("div");
-      continuousTextRow.className = "submenu-settings-row";
-      const continuousTextLabel = document.createElement("span");
-      continuousTextLabel.textContent = "连续放置文本";
-      const continuousTextSwitch = document.createElement("label");
-      continuousTextSwitch.className = "toggle-switch";
-      continuousTextSwitch.setAttribute("for", "continuousTextModeToggle");
-      const continuousTextInput = document.createElement("input");
-      continuousTextInput.id = "continuousTextModeToggle";
-      continuousTextInput.className = "toggle-checkbox";
-      continuousTextInput.type = "checkbox";
-      continuousTextInput.checked = state.appSettings?.continuousTextMode !== false;
-      const continuousTextSlider = document.createElement("span");
-      continuousTextSlider.className = "toggle-slider";
-      continuousTextSlider.setAttribute("aria-hidden", "true");
-      continuousTextInput.addEventListener("change", () => {
-        onAppSettingsChanged?.({ continuousTextMode: continuousTextInput.checked });
-      });
-      continuousTextSwitch.appendChild(continuousTextInput);
-      continuousTextSwitch.appendChild(continuousTextSlider);
-      continuousTextRow.appendChild(continuousTextLabel);
-      continuousTextRow.appendChild(continuousTextSwitch);
-      settingsCard.appendChild(continuousTextRow);
+      const gridInput = submenuItems.querySelector("#showGridToggle");
+      if (gridInput) {
+        gridInput.checked = state.appSettings?.showGrid !== false;
+        gridInput.addEventListener("change", () => {
+          onAppSettingsChanged?.({ showGrid: gridInput.checked });
+        });
+      }
 
-      const shapeContinuousRow = document.createElement("div");
-      shapeContinuousRow.className = "submenu-settings-row";
-      const shapeContinuousText = document.createElement("span");
-      shapeContinuousText.textContent = "连续放置图形";
-      const shapeContinuousSwitch = document.createElement("label");
-      shapeContinuousSwitch.className = "toggle-switch";
-      shapeContinuousSwitch.setAttribute("for", "continuousShapeModeToggle");
-      const shapeContinuousInput = document.createElement("input");
-      shapeContinuousInput.id = "continuousShapeModeToggle";
-      shapeContinuousInput.className = "toggle-checkbox";
-      shapeContinuousInput.type = "checkbox";
-      shapeContinuousInput.checked = state.appSettings?.continuousShapeMode !== false;
-      const shapeContinuousSlider = document.createElement("span");
-      shapeContinuousSlider.className = "toggle-slider";
-      shapeContinuousSlider.setAttribute("aria-hidden", "true");
-      shapeContinuousInput.addEventListener("change", () => {
-        onAppSettingsChanged?.({ continuousShapeMode: shapeContinuousInput.checked });
-      });
-      shapeContinuousSwitch.appendChild(shapeContinuousInput);
-      shapeContinuousSwitch.appendChild(shapeContinuousSlider);
-      shapeContinuousRow.appendChild(shapeContinuousText);
-      shapeContinuousRow.appendChild(shapeContinuousSwitch);
-      settingsCard.appendChild(shapeContinuousRow);
+      const glowInput = submenuItems.querySelector("#selectionGlowColor");
+      if (glowInput) {
+        glowInput.value = state.appSettings?.selectionGlowColor || "#2f6de5";
+        glowInput.addEventListener("input", () => {
+          onAppSettingsChanged?.({ selectionGlowColor: glowInput.value });
+        });
+      }
 
-      const selectionTitle = document.createElement("div");
-      selectionTitle.className = "menu-group-title";
-      selectionTitle.textContent = "显示";
-      settingsCard.appendChild(selectionTitle);
+      const glowSizeInput = submenuItems.querySelector("#selectionGlowSize");
+      if (glowSizeInput) {
+        glowSizeInput.value = String(Number(state.appSettings?.selectionGlowSize || 4));
+        glowSizeInput.addEventListener("change", () => {
+          const raw = Number(glowSizeInput.value);
+          if (!Number.isFinite(raw)) {
+            glowSizeInput.value = String(Number(state.appSettings?.selectionGlowSize || 4));
+            return;
+          }
+          const clamped = Math.min(30, Math.max(1, raw));
+          onAppSettingsChanged?.({ selectionGlowSize: clamped });
+        });
+      }
 
-      const gridRow = document.createElement("div");
-      gridRow.className = "submenu-settings-row";
-      const gridText = document.createElement("span");
-      gridText.textContent = "显示网格";
-      const gridSwitch = document.createElement("label");
-      gridSwitch.className = "toggle-switch";
-      gridSwitch.setAttribute("for", "showGridToggle");
-      const gridInput = document.createElement("input");
-      gridInput.id = "showGridToggle";
-      gridInput.className = "toggle-checkbox";
-      gridInput.type = "checkbox";
-      gridInput.checked = state.appSettings?.showGrid !== false;
-      const gridSlider = document.createElement("span");
-      gridSlider.className = "toggle-slider";
-      gridSlider.setAttribute("aria-hidden", "true");
-      gridInput.addEventListener("change", () => {
-        onAppSettingsChanged?.({ showGrid: gridInput.checked });
-      });
-      gridSwitch.appendChild(gridInput);
-      gridSwitch.appendChild(gridSlider);
-      gridRow.appendChild(gridText);
-      gridRow.appendChild(gridSwitch);
-      settingsCard.appendChild(gridRow);
+      const geometrySelect = submenuItems.querySelector("#defaultLineGeometrySelect");
+      if (geometrySelect) {
+        geometrySelect.innerHTML = "";
+        Object.entries(geometryLabelMap).forEach(([key, label]) => {
+          const option = document.createElement("option");
+          option.value = key;
+          option.textContent = label;
+          geometrySelect.appendChild(option);
+        });
+        geometrySelect.value = state.appSettings?.defaultLineGeometry || "bend135";
+        geometrySelect.addEventListener("change", () => {
+          onAppSettingsChanged?.({ defaultLineGeometry: geometrySelect.value });
+        });
+      }
 
-      const glowRow = document.createElement("label");
-      glowRow.className = "submenu-settings-row";
-      const glowText = document.createElement("span");
-      glowText.textContent = "选择框颜色";
-      const glowInput = document.createElement("input");
-      glowInput.type = "color";
-      glowInput.value = state.appSettings?.selectionGlowColor || "#2f6de5";
-      glowInput.addEventListener("input", () => {
-        onAppSettingsChanged?.({ selectionGlowColor: glowInput.value });
-      });
-      glowRow.appendChild(glowText);
-      glowRow.appendChild(glowInput);
-      settingsCard.appendChild(glowRow);
-
-      const glowSizeRow = document.createElement("label");
-      glowSizeRow.className = "submenu-settings-row submenu-settings-row-column";
-      const glowSizeText = document.createElement("span");
-      glowSizeText.textContent = "发光范围";
-      const glowSizeInput = document.createElement("input");
-      glowSizeInput.type = "number";
-      glowSizeInput.min = "1";
-      glowSizeInput.max = "30";
-      glowSizeInput.step = "1";
-      glowSizeInput.value = String(Number(state.appSettings?.selectionGlowSize || 4));
-      glowSizeInput.addEventListener("change", () => {
-        const raw = Number(glowSizeInput.value);
-        if (!Number.isFinite(raw)) {
-          glowSizeInput.value = String(Number(state.appSettings?.selectionGlowSize || 4));
-          return;
-        }
-        const clamped = Math.min(30, Math.max(1, raw));
-        onAppSettingsChanged?.({ selectionGlowSize: clamped });
-      });
-      glowSizeRow.appendChild(glowSizeText);
-      glowSizeRow.appendChild(glowSizeInput);
-      settingsCard.appendChild(glowSizeRow);
-
-      const miscTitle = document.createElement("div");
-      miscTitle.className = "menu-group-title";
-      miscTitle.textContent = "杂项";
-      settingsCard.appendChild(miscTitle);
-
-      const geometryRow = document.createElement("label");
-      geometryRow.className = "submenu-settings-row submenu-settings-row-column";
-      const geometryText = document.createElement("span");
-      geometryText.textContent = "默认线条几何类型";
-      const geometrySelect = document.createElement("select");
-      Object.entries(geometryLabelMap).forEach(([key, label]) => {
-        const option = document.createElement("option");
-        option.value = key;
-        option.textContent = label;
-        geometrySelect.appendChild(option);
-      });
-      geometrySelect.value = state.appSettings?.defaultLineGeometry || "bend135";
-      geometrySelect.addEventListener("change", () => {
-        onAppSettingsChanged?.({ defaultLineGeometry: geometrySelect.value });
-      });
-      geometryRow.appendChild(geometryText);
-      geometryRow.appendChild(geometrySelect);
-      settingsCard.appendChild(geometryRow);
-
-      submenuItems.appendChild(settingsCard);
       return;
     }
 
     if (state.activeTool === "about") {
       submenuTitle.textContent = "关于";
-
-      const aboutCard = document.createElement("div");
-      aboutCard.className = "submenu-about-card";
-
-      const copyright = document.createElement("div");
-      copyright.className = "submenu-about-muted";
-      copyright.textContent = "Copyright © IAFEnvoy & Copilot";
-
-      const license = document.createElement("div");
-      license.className = "submenu-about-muted";
-      license.textContent = "Open Source Under GPL-3.0 License";
-
-      const githubLink = document.createElement("a");
-      githubLink.className = "submenu-about-link";
-      githubLink.href = "https://github.com/IAFEnvoy/RMCreator";
-      githubLink.target = "_blank";
-      githubLink.rel = "noopener";
-
-      const githubIcon = document.createElement("img");
-      githubIcon.src = "/img/icon-github.svg";
-      githubIcon.alt = "GitHub";
-      githubLink.appendChild(githubIcon);
-
-      aboutCard.appendChild(copyright);
-      aboutCard.appendChild(license);
-      aboutCard.appendChild(githubLink);
-      submenuItems.appendChild(aboutCard);
+      submenuItems.innerHTML = getTemplate("submenu-about");
       return;
     }
 
     if (state.activeTool === "select") {
       submenuTitle.textContent = "选择工具已启用";
-      const tip = document.createElement("div");
-      tip.className = "kv";
-      tip.textContent = "拖动可框选元素；按住 Ctrl 点击可多选或取消选中。";
-      submenuItems.appendChild(tip);
+      submenuItems.innerHTML = getTemplate("submenu-select-tip");
       return;
     }
 
     submenuTitle.textContent = "请选择工具";
-    const idleTip = document.createElement("div");
-    idleTip.className = "kv";
-    idleTip.textContent = "左侧选择工具后，这里会显示可选菜单项。";
-    submenuItems.appendChild(idleTip);
+    submenuItems.innerHTML = getTemplate("submenu-idle");
   }
 
   function renderStations() {

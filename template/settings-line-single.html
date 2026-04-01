@@ -1,0 +1,40 @@
+{{summaryHtml}}
+<div class="kv">组件类型: 线</div>
+<div class="field">
+  <label for="lineTypeSelect">线条类型</label>
+  <select id="lineTypeSelect">{{lineTypeOptions}}</select>
+</div>
+<div class="field">
+  <label for="lineGeometrySelect">几何类型</label>
+  <select id="lineGeometrySelect">{{geometryOptions}}</select>
+</div>
+<div class="field field-toggle">
+  <label for="lineFlip">翻转形状</label>
+  <label class="toggle-switch" for="lineFlip">
+    <input id="lineFlip" class="toggle-checkbox" type="checkbox" {{lineFlipChecked}} />
+    <span class="toggle-slider" aria-hidden="true"></span>
+  </label>
+</div>
+<div class="field field-toggle">
+  <label for="lineFlipColor">翻转颜色</label>
+  <label class="toggle-switch" for="lineFlipColor">
+    <input id="lineFlipColor" class="toggle-checkbox" type="checkbox" {{lineFlipColorChecked}} />
+    <span class="toggle-slider" aria-hidden="true"></span>
+  </label>
+</div>
+<div class="field">
+  <label for="lineCornerRadius">转弯圆弧半径</label>
+  <input id="lineCornerRadius" type="number" min="0" max="120" step="1" value="{{lineCornerRadius}}" />
+</div>
+<div class="field">
+  <label for="lineStartOffset">起点偏移量</label>
+  <input id="lineStartOffset" type="number" min="-120" max="120" step="1" value="{{lineStartOffset}}" />
+</div>
+<div class="field">
+  <label for="lineEndOffset">终点偏移量</label>
+  <input id="lineEndOffset" type="number" min="-120" max="120" step="1" value="{{lineEndOffset}}" />
+</div>
+<div class="field">
+  <label>颜色列表</label>
+  <div class="line-settings-color-list">{{colorListEditorHtml}}</div>
+</div>

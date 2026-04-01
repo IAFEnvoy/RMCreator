@@ -1,0 +1,24 @@
+{{summaryHtml}}
+<div class="kv">组件类型: 文本</div>
+<div class="field">
+  <label for="textValue">内容</label>
+  {{textStyleToolbarHtml}}
+  <textarea id="textValue">{{textValue}}</textarea>
+</div>
+<div class="field">
+  <label for="textFont">字体</label>
+  <select id="textFont">
+    <option value="Segoe UI">Segoe UI</option>
+    <option value="Microsoft YaHei">Microsoft YaHei</option>
+    <option value="SimSun">SimSun</option>
+    <option value="Arial">Arial</option>
+  </select>
+</div>
+<div class="field">
+  <label for="textColor">颜色</label>
+  <input id="textColor" type="color" value="{{textColor}}" />
+</div>
+<div class="field">
+  <label for="textFontSize">字号</label>
+  <input id="textFontSize" type="number" min="1" max="300" step="0.1" value="{{textFontSize}}" />
+</div>
