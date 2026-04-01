@@ -45,7 +45,9 @@ export function createShapeManager({
   elements,
   createShapeId,
   renderSubmenu,
-  onPlacedShapeDefaultsUpdated
+  onPlacedShapeDefaultsUpdated,
+  onStateChanged,
+  rerenderScene
 }) {
   const {
     shapeManagerModal,
@@ -69,7 +71,11 @@ export function createShapeManager({
     shapePropsList,
     shapeParamTypeSelect,
     shapeAddParamBtn,
-    shapeParamList
+    shapeParamList,
+    deleteShapeBtn,
+    downloadShapeBtn,
+    importShapeBtn,
+    shapeImportInput
   } = elements;
 
   const panState = {
@@ -237,6 +243,10 @@ export function createShapeManager({
       || !shapeParamTypeSelect
       || !shapeAddParamBtn
       || !shapeParamList
+      || !deleteShapeBtn
+      || !downloadShapeBtn
+      || !importShapeBtn
+      || !shapeImportInput
     ) {
       return;
     }
@@ -272,6 +282,10 @@ export function createShapeManager({
 
     shapeImportSvgBtn.addEventListener("click", () => shapeImportSvgInput.click());
     shapeImportSvgInput.addEventListener("change", importExternalSvgShape);
+    deleteShapeBtn.addEventListener("click", deleteSelectedShapeDefinition);
+    downloadShapeBtn.addEventListener("click", downloadSelectedShape);
+    importShapeBtn.addEventListener("click", () => shapeImportInput.click());
+    shapeImportInput.addEventListener("change", importShapesFromFile);
 
     shapeUndoBtn.addEventListener("click", undo);
     shapeRedoBtn.addEventListener("click", redo);
@@ -350,11 +364,150 @@ export function createShapeManager({
       ? state.shapeManager.parameterType || "color"
       : "color";
     shapeNameInput.value = selectedShape?.name || "";
+    deleteShapeBtn.disabled = !selectedShape;
+    downloadShapeBtn.disabled = !selectedShape;
 
     syncTabVisibility();
     renderEditorCanvas(selectedShape);
     renderPropertiesPanel(selectedShape);
     renderParameterList(selectedShape);
+  }
+
+  function deleteSelectedShapeDefinition() {
+    const shape = getSelectedShape();
+    if (!shape) {
+      return;
+    }
+
+    const placedUsageCount = Array.isArray(state.shapes)
+      ? state.shapes.filter((item) => item?.shapeId === shape.id).length
+      : 0;
+    const stationUsageCount = Array.isArray(state.stationLibrary)
+      ? state.stationLibrary.filter((preset) => preset?.shapeId === shape.id).length
+      : 0;
+
+    const warningLines = [`确定删除图形“${shape.name}”吗？`];
+    if (placedUsageCount > 0) {
+      warningLines.push(`当前绘图中有 ${placedUsageCount} 个图形实例在使用它，删除后这些图形实例会被一并删除。`);
+    }
+    if (stationUsageCount > 0) {
+      warningLines.push(`有 ${stationUsageCount} 个车站预设引用它，删除后这些预设将回退为无图形显示。`);
+    }
+    warningLines.push("此操作不可撤销，是否继续？");
+
+    const confirmed = window.confirm(warningLines.join("\n"));
+    if (!confirmed) {
+      return;
+    }
+
+    const removedShapeInstanceIds = new Set(
+      (Array.isArray(state.shapes) ? state.shapes : [])
+        .filter((item) => item?.shapeId === shape.id)
+        .map((item) => String(item.id))
+    );
+
+    const shapeIndex = state.shapeLibrary.findIndex((item) => item.id === shape.id);
+    if (shapeIndex < 0) {
+      return;
+    }
+
+    state.shapeLibrary.splice(shapeIndex, 1);
+    if (removedShapeInstanceIds.size) {
+      state.shapes = state.shapes.filter((item) => !removedShapeInstanceIds.has(String(item.id)));
+      if (Array.isArray(state.selectedEntities) && state.selectedEntities.length) {
+        state.selectedEntities = state.selectedEntities.filter((entity) => (
+          entity?.type !== "shape" || !removedShapeInstanceIds.has(String(entity.id))
+        ));
+      }
+    }
+
+    if (state.menuSelection?.shape === shape.id) {
+      state.menuSelection.shape = null;
+    }
+
+    const nextShape = state.shapeLibrary[Math.min(shapeIndex, state.shapeLibrary.length - 1)] || null;
+    state.shapeManager.selectedId = nextShape?.id || null;
+    if (nextShape) {
+      setSingleSelectedPrimitive(nextShape, getFirstPrimitiveIndex(nextShape));
+    } else {
+      state.shapeManager.selectedPrimitiveIndices = [];
+      state.shapeManager.selectedPrimitiveIndex = null;
+    }
+
+    resetViewToSelectedShape();
+    persistShapeLibrary();
+    renderShapeManager();
+    renderSubmenu();
+
+    if (placedUsageCount > 0 || stationUsageCount > 0) {
+      rerenderScene?.();
+    }
+    onStateChanged?.();
+  }
+
+  function downloadSelectedShape() {
+    const selectedShape = getSelectedShape();
+    if (!selectedShape) {
+      return;
+    }
+
+    const safeShape = sanitizeShape(selectedShape);
+    if (!safeShape) {
+      return;
+    }
+
+    const payload = {
+      name: safeShape.name,
+      svg: safeShape.svg,
+      editableElements: safeShape.editableElements,
+      parameters: safeShape.parameters,
+      imported: Boolean(safeShape.imported)
+    };
+
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${safeShape.name}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function importShapesFromFile(event) {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    try {
+      const text = await file.text();
+      const raw = JSON.parse(text);
+      const entries = Array.isArray(raw) ? raw : [raw];
+      const imported = entries
+        .map((item) => sanitizeShape(item))
+        .filter(Boolean)
+        .map((shape, index) => ({
+          ...shape,
+          id: createShapeId(),
+          name: String(shape.name || `图形 ${state.shapeLibrary.length + index + 1}`).trim() || `图形 ${state.shapeLibrary.length + index + 1}`
+        }));
+
+      if (!imported.length) {
+        return;
+      }
+
+      state.shapeLibrary.push(...imported);
+      state.shapeManager.selectedId = imported[0].id;
+      setSingleSelectedPrimitive(imported[0], getFirstPrimitiveIndex(imported[0]));
+      resetViewToSelectedShape();
+      persistShapeLibrary();
+      renderShapeManager();
+      renderSubmenu();
+    } catch {
+      window.alert("导入失败：JSON 文件格式无效。\n支持导入单个图形对象或图形数组。");
+    } finally {
+      shapeImportInput.value = "";
+    }
   }
 
   // param drag state handlers
@@ -411,6 +564,24 @@ export function createShapeManager({
       return;
     }
 
+    const placedUsageCountByShapeId = new Map();
+    (Array.isArray(state.shapes) ? state.shapes : []).forEach((item) => {
+      const key = String(item?.shapeId || "");
+      if (!key) {
+        return;
+      }
+      placedUsageCountByShapeId.set(key, (placedUsageCountByShapeId.get(key) || 0) + 1);
+    });
+
+    const stationUsageCountByShapeId = new Map();
+    (Array.isArray(state.stationLibrary) ? state.stationLibrary : []).forEach((preset) => {
+      const key = String(preset?.shapeId || "");
+      if (!key) {
+        return;
+      }
+      stationUsageCountByShapeId.set(key, (stationUsageCountByShapeId.get(key) || 0) + 1);
+    });
+
     state.shapeLibrary.forEach((shape) => {
       const item = document.createElement("button");
       item.type = "button";
@@ -422,7 +593,11 @@ export function createShapeManager({
 
       const title = document.createElement("span");
       title.className = "line-library-item-title";
-      title.textContent = shape.name;
+      const placedUsageCount = placedUsageCountByShapeId.get(shape.id) || 0;
+      const stationUsageCount = stationUsageCountByShapeId.get(shape.id) || 0;
+      const usageCount = placedUsageCount + stationUsageCount;
+      title.textContent = `${shape.name} (${usageCount})`;
+      title.title = `${shape.name}（总引用 ${usageCount}：图形实例 ${placedUsageCount}，车站预设 ${stationUsageCount}）`;
 
       const preview = document.createElement("img");
       preview.className = "shape-library-preview-inline";

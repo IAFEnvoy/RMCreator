@@ -141,14 +141,18 @@ shapeManager = createShapeManager({
   elements,
   createShapeId,
   renderSubmenu: renderer.renderSubmenu,
-  onPlacedShapeDefaultsUpdated: commitStateChange
+  onPlacedShapeDefaultsUpdated: commitStateChange,
+  onStateChanged: commitStateChange,
+  rerenderScene
 });
 
 stationManager = createStationManager({
   state,
   elements,
   createStationPresetId,
-  renderSubmenu: renderer.renderSubmenu
+  renderSubmenu: renderer.renderSubmenu,
+  onStateChanged: commitStateChange,
+  rerenderScene
 });
 
 const mainClipboard = createMainClipboard({

@@ -44,7 +44,9 @@ export function createStationManager({
   state,
   elements,
   createStationPresetId,
-  renderSubmenu
+  renderSubmenu,
+  onStateChanged,
+  rerenderScene
 }) {
   const {
     stationManagerModal,
@@ -73,7 +75,11 @@ export function createStationManager({
     stationAddParamBtn,
     stationCustomParamList,
     stationExistingParamList,
-    stationTextCardList
+    stationTextCardList,
+    deleteStationPresetBtn,
+    downloadStationPresetBtn,
+    importStationPresetBtn,
+    stationPresetImportInput
   } = elements;
 
   const previewState = {
@@ -113,6 +119,10 @@ export function createStationManager({
       || !stationCustomParamList
       || !stationExistingParamList
       || !stationTextCardList
+      || !deleteStationPresetBtn
+      || !downloadStationPresetBtn
+      || !importStationPresetBtn
+      || !stationPresetImportInput
     ) {
       return;
     }
@@ -153,6 +163,10 @@ export function createStationManager({
     });
 
     stationAddTextCardBtn.addEventListener("click", addTextCard);
+    deleteStationPresetBtn.addEventListener("click", deleteSelectedStationPreset);
+    downloadStationPresetBtn.addEventListener("click", downloadSelectedStationPreset);
+    importStationPresetBtn.addEventListener("click", () => stationPresetImportInput.click());
+    stationPresetImportInput.addEventListener("change", importStationPresetsFromFile);
 
     stationPresetNameInput.addEventListener("input", () => {
       const preset = getSelectedPreset();
@@ -222,6 +236,8 @@ export function createStationManager({
     syncTabVisibility();
 
     const preset = getSelectedPreset();
+    deleteStationPresetBtn.disabled = !preset;
+    downloadStationPresetBtn.disabled = !preset;
     stationShapeSearchInput.value = state.stationManager.shapeQuery || "";
     stationParamTypeSelect.value = shapeParameterTypeDefinitions[state.stationManager.paramType]
       ? state.stationManager.paramType
@@ -243,6 +259,184 @@ export function createStationManager({
     renderTextPlacementPanel(preset);
     renderParamsPanel(preset);
     renderPreview(preset);
+  }
+
+  function getStationUsageCountByPresetId(presetId) {
+    if (!presetId || !Array.isArray(state.nodes) || !Array.isArray(state.stationTypes)) {
+      return 0;
+    }
+
+    return state.nodes.filter((node) => {
+      const typeIndex = Number.isInteger(node?.stationTypeIndex) ? node.stationTypeIndex : -1;
+      const type = typeIndex >= 0 ? state.stationTypes[typeIndex] : null;
+      return type?.stationPresetId === presetId;
+    }).length;
+  }
+
+  function deleteSelectedStationPreset() {
+    const preset = getSelectedPreset();
+    if (!preset) {
+      return;
+    }
+
+    const presetIdByOldTypeIndex = (Array.isArray(state.stationTypes) ? state.stationTypes : [])
+      .map((type) => String(type?.stationPresetId || ""));
+
+    const removedStationIds = new Set(
+      (Array.isArray(state.nodes) ? state.nodes : [])
+        .filter((node) => {
+          const typeIndex = Number.isInteger(node?.stationTypeIndex) ? node.stationTypeIndex : -1;
+          const sourcePresetId = typeIndex >= 0 ? presetIdByOldTypeIndex[typeIndex] : "";
+          return sourcePresetId === preset.id;
+        })
+        .map((node) => String(node.id))
+    );
+    const usageCount = removedStationIds.size;
+
+    const removedEdgeIds = new Set(
+      (Array.isArray(state.edges) ? state.edges : [])
+        .filter((edge) => removedStationIds.has(String(edge?.fromStationId)) || removedStationIds.has(String(edge?.toStationId)))
+        .map((edge) => String(edge.id))
+    );
+
+    const warningLines = [`确定删除车站预设“${preset.name}”吗？`];
+    if (usageCount > 0) {
+      warningLines.push(`当前绘图中有 ${usageCount} 个车站在使用它，删除后这些车站会被一并删除。`);
+    }
+    if (removedEdgeIds.size > 0) {
+      warningLines.push(`与这些车站连接的 ${removedEdgeIds.size} 条线也会被删除。`);
+    }
+    warningLines.push("此操作不可撤销，是否继续？");
+
+    const confirmed = window.confirm(warningLines.join("\n"));
+    if (!confirmed) {
+      return;
+    }
+
+    const index = state.stationLibrary.findIndex((item) => item.id === preset.id);
+    if (index < 0) {
+      return;
+    }
+
+    if (removedStationIds.size > 0) {
+      state.nodes = state.nodes.filter((node) => !removedStationIds.has(String(node.id)));
+    }
+
+    if (removedEdgeIds.size > 0) {
+      state.edges = state.edges.filter((edge) => !removedEdgeIds.has(String(edge.id)));
+    }
+
+    if (Array.isArray(state.selectedEntities) && state.selectedEntities.length) {
+      state.selectedEntities = state.selectedEntities.filter((entity) => {
+        if (entity?.type === "station") {
+          return !removedStationIds.has(String(entity.id));
+        }
+        if (entity?.type === "line") {
+          return !removedEdgeIds.has(String(entity.id));
+        }
+        return true;
+      });
+    }
+
+    state.stationLibrary.splice(index, 1);
+    const nextPreset = state.stationLibrary[Math.min(index, state.stationLibrary.length - 1)] || null;
+    state.stationManager.selectedId = nextPreset?.id || null;
+    state.stationManager.selectedTextCardId = null;
+
+    persistStationLibrary();
+
+    const newTypeIndexByPresetId = new Map(
+      (Array.isArray(state.stationTypes) ? state.stationTypes : [])
+        .map((type, typeIndex) => [String(type?.stationPresetId || ""), typeIndex])
+    );
+
+    (Array.isArray(state.nodes) ? state.nodes : []).forEach((node) => {
+      const oldTypeIndex = Number.isInteger(node?.stationTypeIndex) ? node.stationTypeIndex : -1;
+      const oldPresetId = oldTypeIndex >= 0 ? presetIdByOldTypeIndex[oldTypeIndex] : "";
+
+      if (oldPresetId && newTypeIndexByPresetId.has(oldPresetId)) {
+        node.stationTypeIndex = newTypeIndexByPresetId.get(oldPresetId);
+        return;
+      }
+
+      const fallbackIndex = (Array.isArray(state.stationTypes) ? state.stationTypes : []).findIndex((type) => (
+        Number(type?.radius) === Number(node?.radius) && Boolean(type?.oval) === Boolean(node?.oval)
+      ));
+      node.stationTypeIndex = fallbackIndex >= 0 ? fallbackIndex : 0;
+    });
+
+    renderStationManager();
+    renderSubmenu?.();
+    rerenderScene?.();
+    onStateChanged?.();
+  }
+
+  function downloadSelectedStationPreset() {
+    const preset = getSelectedPreset();
+    if (!preset) {
+      return;
+    }
+
+    const safePreset = sanitizePreset(preset);
+    if (!safePreset) {
+      return;
+    }
+
+    const payload = {
+      name: safePreset.name,
+      shapeId: safePreset.shapeId,
+      textCards: safePreset.textCards,
+      textPlacement: safePreset.textPlacement,
+      radius: safePreset.radius,
+      oval: safePreset.oval,
+      shapeParamSettings: safePreset.shapeParamSettings,
+      params: safePreset.params
+    };
+
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${safePreset.name}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function importStationPresetsFromFile(event) {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    try {
+      const text = await file.text();
+      const raw = JSON.parse(text);
+      const entries = Array.isArray(raw) ? raw : [raw];
+      const imported = entries
+        .map((entry) => sanitizePreset(entry))
+        .filter(Boolean)
+        .map((entry, index) => ({
+          ...entry,
+          id: createStationPresetId(),
+          name: String(entry.name || `车站预设 ${state.stationLibrary.length + index + 1}`).trim() || `车站预设 ${state.stationLibrary.length + index + 1}`
+        }));
+
+      if (!imported.length) {
+        return;
+      }
+
+      state.stationLibrary.push(...imported);
+      state.stationManager.selectedId = imported[0].id;
+      state.stationManager.selectedTextCardId = null;
+      persistStationLibrary();
+      resetPreviewView(imported[0]);
+      renderStationManager();
+      renderSubmenu?.();
+    } catch {
+      window.alert("导入失败：JSON 文件格式无效。\n支持导入单个车站预设对象或预设数组。");
+    } finally {
+      stationPresetImportInput.value = "";
+    }
   }
 
   function renderStationLibraryList() {
@@ -267,7 +461,10 @@ export function createStationManager({
 
       const title = document.createElement("span");
       title.className = "line-library-item-title";
-      title.textContent = preset.name || "未命名车站";
+      const usageCount = getStationUsageCountByPresetId(preset.id);
+      const safeName = preset.name || "未命名车站";
+      title.textContent = `${safeName} (${usageCount})`;
+      title.title = `${safeName}（${usageCount} 个引用）`;
       row.appendChild(title);
 
       const previewSrc = buildLibraryPreviewDataUrl(preset);

@@ -142,8 +142,7 @@ export function createRenderer({
 
         const title = document.createElement("span");
         title.className = "menu-item-line-title";
-        const usageCount = usageCountByTypeId.get(item.id) || 0;
-        title.textContent = `${item.name} (${usageCount})`;
+        title.textContent = item.name;
         title.classList.toggle("temporary-imported", Boolean(item.isTemporaryImported));
 
         const preview = document.createElementNS(svgNs, "svg");
