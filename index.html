@@ -91,6 +91,10 @@
           <img src="/img/icon-settings.svg" alt="设置" />
           <span>设置</span>
         </button>
+        <button class="tool-btn" data-tool="about" aria-label="关于">
+          <img src="/img/icon-about.svg" alt="关于" />
+          <span>关于</span>
+        </button>
       </div>
       <div class="zoom-indicator-wrap">
         <button class="zoom-indicator" id="zoomIndicator" type="button" aria-haspopup="true"
@@ -127,8 +131,20 @@
         <div class="modal-body">
           <section class="line-library">
             <div class="line-library-head">
-              <span>线条库</span>
-              <button class="btn-main" id="newLineTypeBtn" type="button">新建</button>
+              <label class="manager-select-all" for="lineSelectAllInput">
+                <input id="lineSelectAllInput" class="library-select-all-checkbox" type="checkbox" />
+                <span>全选</span>
+              </label>
+              <span class="line-library-name">线条库</span>
+            </div>
+            <div class="manager-library-toolbar">
+              <div class="manager-bulk-actions">
+                <button class="btn-main" id="newLineTypeBtn" type="button">新建</button>
+                <button class="btn-ghost" id="downloadLineTypeBtn" type="button">分享</button>
+                <button class="btn-ghost" id="importLineTypeBtn" type="button">导入</button>
+                <button class="btn-ghost btn-danger" id="deleteLineTypeBtn" type="button">删除</button>
+                <input id="lineTypeImportInput" type="file" accept="application/json" hidden />
+              </div>
             </div>
             <div class="line-library-list" id="lineLibraryList"></div>
           </section>
@@ -157,12 +173,6 @@
               <button class="btn-main" id="addSegmentBtn" type="button">添加小线条</button>
             </div>
             <div class="segments-list" id="segmentEditorList"></div>
-            <div class="modal-actions">
-              <button class="btn-ghost" id="deleteLineTypeBtn" type="button">删除</button>
-              <button class="btn-ghost" id="downloadLineTypeBtn" type="button">分享下载</button>
-              <button class="btn-ghost" id="importLineTypeBtn" type="button">导入JSON</button>
-              <input id="lineTypeImportInput" type="file" accept="application/json" hidden />
-            </div>
           </section>
         </div>
       </div>
@@ -179,8 +189,20 @@
         <div class="modal-body shape-manager-body">
           <section class="line-library shape-library-panel">
             <div class="line-library-head">
-              <span>图形库</span>
-              <button class="btn-main" id="newShapeBtn" type="button">新建</button>
+              <label class="manager-select-all" for="shapeSelectAllInput">
+                <input id="shapeSelectAllInput" class="library-select-all-checkbox" type="checkbox" />
+                <span>全选</span>
+              </label>
+              <span class="line-library-name">图形库</span>
+            </div>
+            <div class="manager-library-toolbar">
+              <div class="manager-bulk-actions">
+                <button class="btn-main" id="newShapeBtn" type="button">新建</button>
+                <button class="btn-ghost" id="downloadShapeBtn" type="button">分享</button>
+                <button class="btn-ghost" id="importShapeBtn" type="button">导入</button>
+                <button class="btn-ghost btn-danger" id="deleteShapeBtn" type="button">删除</button>
+                <input id="shapeImportInput" type="file" accept="application/json,.json" hidden />
+              </div>
             </div>
             <div class="line-library-list" id="shapeLibraryList"></div>
           </section>
@@ -234,12 +256,6 @@
               </div>
               <div class="shape-param-list" id="shapeParamList"></div>
             </section>
-            <div class="modal-actions">
-              <button class="btn-ghost" id="deleteShapeBtn" type="button">删除</button>
-              <button class="btn-ghost" id="downloadShapeBtn" type="button">分享下载</button>
-              <button class="btn-ghost" id="importShapeBtn" type="button">导入JSON</button>
-              <input id="shapeImportInput" type="file" accept="application/json,.json" hidden />
-            </div>
           </aside>
         </div>
       </div>
@@ -256,8 +272,20 @@
         <div class="modal-body station-manager-body">
           <section class="line-library station-library-panel">
             <div class="line-library-head">
-              <span>车站库</span>
-              <button class="btn-main" id="newStationPresetBtn" type="button">新建</button>
+              <label class="manager-select-all" for="stationSelectAllInput">
+                <input id="stationSelectAllInput" class="library-select-all-checkbox" type="checkbox" />
+                <span>全选</span>
+              </label>
+              <span class="line-library-name">车站库</span>
+            </div>
+            <div class="manager-library-toolbar">
+              <div class="manager-bulk-actions">
+                <button class="btn-main" id="newStationPresetBtn" type="button">新建</button>
+                <button class="btn-ghost" id="downloadStationPresetBtn" type="button">分享</button>
+                <button class="btn-ghost" id="importStationPresetBtn" type="button">导入</button>
+                <button class="btn-ghost btn-danger" id="deleteStationPresetBtn" type="button">删除</button>
+                <input id="stationPresetImportInput" type="file" accept="application/json,.json" hidden />
+              </div>
             </div>
             <div class="line-library-list" id="stationLibraryList"></div>
           </section>
@@ -355,12 +383,6 @@
                 </section>
               </div>
             </section>
-            <div class="modal-actions">
-              <button class="btn-ghost" id="deleteStationPresetBtn" type="button">删除</button>
-              <button class="btn-ghost" id="downloadStationPresetBtn" type="button">分享下载</button>
-              <button class="btn-ghost" id="importStationPresetBtn" type="button">导入JSON</button>
-              <input id="stationPresetImportInput" type="file" accept="application/json,.json" hidden />
-            </div>
           </aside>
         </div>
       </div>

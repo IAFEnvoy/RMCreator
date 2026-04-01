@@ -39,8 +39,7 @@ const defaultAppSettings = Object.freeze({
   showGrid: true,
   selectionGlowColor: "#2f6de5",
   selectionGlowSize: 4,
-  defaultLineGeometry: "bend135",
-  lineSpacingScale: 1
+  defaultLineGeometry: "bend135"
 });
 
 const state = {
@@ -247,7 +246,6 @@ async function init() {
 
 function updateAppSettings(patch = {}) {
   const hasDefaultLineGeometryPatch = Object.prototype.hasOwnProperty.call(patch, "defaultLineGeometry");
-  const hasLineSpacingScalePatch = Object.prototype.hasOwnProperty.call(patch, "lineSpacingScale");
 
   state.appSettings = sanitizeAppSettings({ ...state.appSettings, ...patch });
   persistAppSettings();
@@ -256,13 +254,6 @@ function updateAppSettings(patch = {}) {
   if (hasDefaultLineGeometryPatch && state.activeTool === "line") {
     state.menuSelection.lineGeometry = state.appSettings.defaultLineGeometry;
     renderer.renderSubmenu();
-  }
-
-  if (hasLineSpacingScalePatch) {
-    renderer.renderLines();
-    if (state.activeTool === "settings") {
-      renderer.renderSubmenu();
-    }
   }
 }
 
@@ -322,8 +313,7 @@ function sanitizeAppSettings(rawSettings) {
     showGrid: next.showGrid !== false,
     selectionGlowColor: normalizeHexColor(next.selectionGlowColor, defaultAppSettings.selectionGlowColor),
     selectionGlowSize: clamp(Number(next.selectionGlowSize) || defaultAppSettings.selectionGlowSize, 1, 30),
-    defaultLineGeometry,
-    lineSpacingScale: clamp(Number(next.lineSpacingScale) || 1, 0.5, 1.8)
+    defaultLineGeometry
   };
 }
 

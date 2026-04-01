@@ -54,6 +54,7 @@ export function createShapeManager({
     closeShapeManagerBtn,
     newShapeBtn,
     shapeLibraryList,
+    shapeSelectAllInput,
     shapeNameInput,
     shapePrimitiveSelect,
     shapeAddPrimitiveBtn,
@@ -126,6 +127,52 @@ export function createShapeManager({
     maxEntries: 120,
     applySnapshot: applyShapeHistorySnapshot
   });
+
+  function getCheckedShapeIds() {
+    return Array.isArray(state.shapeManager.checkedIds)
+      ? state.shapeManager.checkedIds.map((id) => String(id))
+      : [];
+  }
+
+  function setCheckedShapeIds(ids) {
+    const validIds = new Set((Array.isArray(state.shapeLibrary) ? state.shapeLibrary : []).map((shape) => String(shape.id)));
+    const seen = new Set();
+    const next = [];
+    (Array.isArray(ids) ? ids : []).forEach((id) => {
+      const key = String(id || "");
+      if (!key || !validIds.has(key) || seen.has(key)) {
+        return;
+      }
+      seen.add(key);
+      next.push(key);
+    });
+    state.shapeManager.checkedIds = next;
+  }
+
+  function resolveShapeTargets() {
+    const checkedIds = getCheckedShapeIds();
+    if (checkedIds.length) {
+      return checkedIds
+        .map((id) => (Array.isArray(state.shapeLibrary) ? state.shapeLibrary : []).find((shape) => shape.id === id))
+        .filter(Boolean);
+    }
+
+    const selected = getSelectedShape();
+    return selected ? [selected] : [];
+  }
+
+  function syncShapeBulkActionState() {
+    const totalCount = Array.isArray(state.shapeLibrary) ? state.shapeLibrary.length : 0;
+    const checkedCount = getCheckedShapeIds().length;
+
+    shapeSelectAllInput.checked = totalCount > 0 && checkedCount === totalCount;
+    shapeSelectAllInput.indeterminate = checkedCount > 0 && checkedCount < totalCount;
+
+    const hasChecked = checkedCount > 0;
+    const selectedShape = getSelectedShape();
+    deleteShapeBtn.disabled = !(hasChecked || selectedShape);
+    downloadShapeBtn.disabled = !(hasChecked || selectedShape);
+  }
 
   function getSelectedPrimitiveIndices(shape) {
     if (!shape || !Array.isArray(shape.editableElements)) {
@@ -225,6 +272,7 @@ export function createShapeManager({
       || !closeShapeManagerBtn
       || !newShapeBtn
       || !shapeLibraryList
+      || !shapeSelectAllInput
       || !shapeNameInput
       || !shapePrimitiveSelect
       || !shapeAddPrimitiveBtn
@@ -253,6 +301,10 @@ export function createShapeManager({
 
     ensureShapeManagerState();
     loadShapeLibraryFromStorage();
+
+    if (!Array.isArray(state.shapeManager.checkedIds)) {
+      state.shapeManager.checkedIds = [];
+    }
 
     closeShapeManagerBtn.addEventListener("click", close);
     newShapeBtn.addEventListener("click", createEmptyShape);
@@ -286,6 +338,14 @@ export function createShapeManager({
     downloadShapeBtn.addEventListener("click", downloadSelectedShape);
     importShapeBtn.addEventListener("click", () => shapeImportInput.click());
     shapeImportInput.addEventListener("change", importShapesFromFile);
+    shapeSelectAllInput.addEventListener("change", () => {
+      if (shapeSelectAllInput.checked) {
+        setCheckedShapeIds((Array.isArray(state.shapeLibrary) ? state.shapeLibrary : []).map((shape) => shape.id));
+      } else {
+        setCheckedShapeIds([]);
+      }
+      renderShapeManager();
+    });
 
     shapeUndoBtn.addEventListener("click", undo);
     shapeRedoBtn.addEventListener("click", redo);
@@ -364,54 +424,49 @@ export function createShapeManager({
       ? state.shapeManager.parameterType || "color"
       : "color";
     shapeNameInput.value = selectedShape?.name || "";
-    deleteShapeBtn.disabled = !selectedShape;
-    downloadShapeBtn.disabled = !selectedShape;
 
     syncTabVisibility();
     renderEditorCanvas(selectedShape);
     renderPropertiesPanel(selectedShape);
     renderParameterList(selectedShape);
+    syncShapeBulkActionState();
   }
 
   function deleteSelectedShapeDefinition() {
-    const shape = getSelectedShape();
-    if (!shape) {
+    const targets = resolveShapeTargets();
+    if (!targets.length) {
       return;
     }
 
-    const placedUsageCount = Array.isArray(state.shapes)
-      ? state.shapes.filter((item) => item?.shapeId === shape.id).length
-      : 0;
-    const stationUsageCount = Array.isArray(state.stationLibrary)
-      ? state.stationLibrary.filter((preset) => preset?.shapeId === shape.id).length
-      : 0;
-
-    const warningLines = [`确定删除图形“${shape.name}”吗？`];
-    if (placedUsageCount > 0) {
-      warningLines.push(`当前绘图中有 ${placedUsageCount} 个图形实例在使用它，删除后这些图形实例会被一并删除。`);
-    }
-    if (stationUsageCount > 0) {
-      warningLines.push(`有 ${stationUsageCount} 个车站预设引用它，删除后这些预设将回退为无图形显示。`);
-    }
-    warningLines.push("此操作不可撤销，是否继续？");
-
-    const confirmed = window.confirm(warningLines.join("\n"));
-    if (!confirmed) {
-      return;
-    }
+    const removedShapeIds = new Set(targets.map((shape) => String(shape.id)));
 
     const removedShapeInstanceIds = new Set(
       (Array.isArray(state.shapes) ? state.shapes : [])
-        .filter((item) => item?.shapeId === shape.id)
+        .filter((item) => removedShapeIds.has(String(item?.shapeId || "")))
         .map((item) => String(item.id))
     );
 
-    const shapeIndex = state.shapeLibrary.findIndex((item) => item.id === shape.id);
-    if (shapeIndex < 0) {
+    const stationUsageCount = Array.isArray(state.stationLibrary)
+      ? state.stationLibrary.filter((preset) => removedShapeIds.has(String(preset?.shapeId || ""))).length
+      : 0;
+
+    const warningLines = [`将删除 ${targets.length} 个图形。`];
+    if (removedShapeInstanceIds.size > 0) {
+      warningLines.push(`当前绘图中有 ${removedShapeInstanceIds.size} 个图形实例在使用它们，删除后这些图形实例会被一并删除。`);
+    }
+    if (stationUsageCount > 0) {
+      warningLines.push(`有 ${stationUsageCount} 个车站预设引用它们，删除后这些预设将回退为无图形显示。`);
+    }
+    warningLines.push("此操作不可撤销，是否继续？");
+
+    if (!window.confirm(warningLines.join("\n"))) {
+      return;
+    }
+    if (!window.confirm("请再次确认删除：该操作执行后无法恢复。")) {
       return;
     }
 
-    state.shapeLibrary.splice(shapeIndex, 1);
+    state.shapeLibrary = state.shapeLibrary.filter((item) => !removedShapeIds.has(String(item.id)));
     if (removedShapeInstanceIds.size) {
       state.shapes = state.shapes.filter((item) => !removedShapeInstanceIds.has(String(item.id)));
       if (Array.isArray(state.selectedEntities) && state.selectedEntities.length) {
@@ -421,12 +476,18 @@ export function createShapeManager({
       }
     }
 
-    if (state.menuSelection?.shape === shape.id) {
+    if (removedShapeIds.has(String(state.menuSelection?.shape || ""))) {
       state.menuSelection.shape = null;
     }
 
-    const nextShape = state.shapeLibrary[Math.min(shapeIndex, state.shapeLibrary.length - 1)] || null;
-    state.shapeManager.selectedId = nextShape?.id || null;
+    setCheckedShapeIds(getCheckedShapeIds().filter((id) => !removedShapeIds.has(String(id))));
+
+    const hasSelected = state.shapeLibrary.some((item) => item.id === state.shapeManager.selectedId);
+    if (!hasSelected) {
+      state.shapeManager.selectedId = state.shapeLibrary[0]?.id || null;
+    }
+
+    const nextShape = getSelectedShape();
     if (nextShape) {
       setSingleSelectedPrimitive(nextShape, getFirstPrimitiveIndex(nextShape));
     } else {
@@ -439,36 +500,42 @@ export function createShapeManager({
     renderShapeManager();
     renderSubmenu();
 
-    if (placedUsageCount > 0 || stationUsageCount > 0) {
+    if (removedShapeInstanceIds.size > 0 || stationUsageCount > 0) {
       rerenderScene?.();
     }
     onStateChanged?.();
   }
 
   function downloadSelectedShape() {
-    const selectedShape = getSelectedShape();
-    if (!selectedShape) {
+    const targets = resolveShapeTargets();
+    if (!targets.length) {
       return;
     }
 
-    const safeShape = sanitizeShape(selectedShape);
-    if (!safeShape) {
+    const payloadList = targets
+      .map((shape) => sanitizeShape(shape))
+      .filter(Boolean)
+      .map((safeShape) => ({
+        name: safeShape.name,
+        svg: safeShape.svg,
+        editableElements: safeShape.editableElements,
+        parameters: safeShape.parameters,
+        imported: Boolean(safeShape.imported)
+      }));
+    if (!payloadList.length) {
       return;
     }
 
-    const payload = {
-      name: safeShape.name,
-      svg: safeShape.svg,
-      editableElements: safeShape.editableElements,
-      parameters: safeShape.parameters,
-      imported: Boolean(safeShape.imported)
-    };
+    const payload = payloadList.length === 1 ? payloadList[0] : payloadList;
+    const downloadName = payloadList.length === 1
+      ? `${payloadList[0].name}.json`
+      : "图形-批量导出.json";
 
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${safeShape.name}.json`;
+    a.download = downloadName;
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -555,6 +622,8 @@ export function createShapeManager({
 
   function renderShapeLibraryList() {
     shapeLibraryList.innerHTML = "";
+    setCheckedShapeIds(getCheckedShapeIds());
+    const checkedSet = new Set(getCheckedShapeIds());
 
     if (!state.shapeLibrary.length) {
       const empty = document.createElement("div");
@@ -591,6 +660,26 @@ export function createShapeManager({
       const row = document.createElement("div");
       row.className = "line-library-item-row";
 
+      const lead = document.createElement("div");
+      lead.className = "line-library-item-lead";
+
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.className = "library-item-checkbox";
+      checkbox.checked = checkedSet.has(shape.id);
+      checkbox.addEventListener("click", (event) => event.stopPropagation());
+      checkbox.addEventListener("change", (event) => {
+        event.stopPropagation();
+        const next = new Set(getCheckedShapeIds());
+        if (checkbox.checked) {
+          next.add(shape.id);
+        } else {
+          next.delete(shape.id);
+        }
+        setCheckedShapeIds([...next]);
+        syncShapeBulkActionState();
+      });
+
       const title = document.createElement("span");
       title.className = "line-library-item-title";
       const placedUsageCount = placedUsageCountByShapeId.get(shape.id) || 0;
@@ -604,7 +693,9 @@ export function createShapeManager({
       preview.alt = `${shape.name}预览`;
       preview.src = toSvgDataUrl(shape.svg);
 
-      row.appendChild(title);
+      lead.appendChild(checkbox);
+      lead.appendChild(title);
+      row.appendChild(lead);
       row.appendChild(preview);
       item.appendChild(row);
 
@@ -855,18 +946,21 @@ export function createShapeManager({
       label.parentNode.insertBefore(labelRow, label);
       labelRow.appendChild(label);
 
-      const toggleWrap = document.createElement("label");
+      const toggleWrap = document.createElement("div");
       toggleWrap.className = "shape-prop-param-toggle";
       const toggleText = document.createElement("span");
       toggleText.textContent = "参数";
       const toggle = document.createElement("input");
       toggle.type = "checkbox";
       toggle.className = "toggle-checkbox";
+      const toggleId = `shape-prop-param-toggle-${shape.id}-${key}-${Math.random().toString(36).slice(2, 8)}`;
+      toggle.id = toggleId;
       const slider = document.createElement("span");
       slider.className = "toggle-slider";
       slider.setAttribute("aria-hidden", "true");
-      const switchRoot = document.createElement("span");
+      const switchRoot = document.createElement("label");
       switchRoot.className = "toggle-switch";
+      switchRoot.setAttribute("for", toggleId);
       switchRoot.appendChild(toggle);
       switchRoot.appendChild(slider);
       toggleWrap.appendChild(toggleText);
@@ -904,6 +998,14 @@ export function createShapeManager({
       }
 
       toggle.disabled = !params.length;
+      if (!params.length) {
+        const typeLabel = shapeParameterTypeDefinitions[paramType]?.label || "同类型参数";
+        const disabledHint = `暂无可用${typeLabel}，请先在“参数列表”中添加。`;
+        toggleWrap.classList.add("is-disabled");
+        switchRoot.classList.add("is-disabled");
+        toggleWrap.title = disabledHint;
+        switchRoot.title = disabledHint;
+      }
       toggle.checked = Boolean(params.length && selectedParamId && firstBinding && allSame);
 
       const applyMode = () => {
@@ -2688,6 +2790,9 @@ export function createShapeManager({
     state.shapeManager.parameterType = shapeParameterTypeDefinitions[state.shapeManager.parameterType]
       ? state.shapeManager.parameterType
       : "color";
+    state.shapeManager.checkedIds = Array.isArray(state.shapeManager.checkedIds)
+      ? state.shapeManager.checkedIds.map((id) => String(id))
+      : [];
     const selection = Array.isArray(state.shapeManager.selectedPrimitiveIndices)
       ? state.shapeManager.selectedPrimitiveIndices.filter((index) => Number.isInteger(index))
       : [];

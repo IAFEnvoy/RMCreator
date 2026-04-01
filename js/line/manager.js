@@ -23,6 +23,7 @@ export function createLineManager({
     closeLineManagerBtn,
     newLineTypeBtn,
     lineLibraryList,
+    lineSelectAllInput,
     lineTypeTempNotice,
     makeLineTypePermanentBtn,
     lineTypeNameInput,
@@ -39,7 +40,68 @@ export function createLineManager({
 
   const findLineType = (id) => getLineTypeById(state.lineTypes, id);
 
+  function getCheckedLineTypeIds() {
+    return Array.isArray(state.lineManager.checkedIds)
+      ? state.lineManager.checkedIds.map((id) => String(id))
+      : [];
+  }
+
+  function setCheckedLineTypeIds(ids) {
+    const validIds = new Set(state.lineTypes.map((type) => String(type.id)));
+    const next = [];
+    const seen = new Set();
+    (Array.isArray(ids) ? ids : []).forEach((id) => {
+      const key = String(id || "");
+      if (!key || !validIds.has(key) || seen.has(key)) {
+        return;
+      }
+      seen.add(key);
+      next.push(key);
+    });
+    state.lineManager.checkedIds = next;
+  }
+
+  function resolveLineTypeTargets() {
+    const checkedIds = getCheckedLineTypeIds();
+    if (checkedIds.length) {
+      return checkedIds
+        .map((id) => findLineType(id))
+        .filter(Boolean);
+    }
+
+    const selected = findLineType(state.lineManager.selectedId);
+    return selected ? [selected] : [];
+  }
+
+  function syncLineBulkActionState() {
+    const totalCount = state.lineTypes.length;
+    const checkedIds = getCheckedLineTypeIds();
+    const checkedCount = checkedIds.length;
+
+    lineSelectAllInput.checked = totalCount > 0 && checkedCount === totalCount;
+    lineSelectAllInput.indeterminate = checkedCount > 0 && checkedCount < totalCount;
+
+    const selectedType = findLineType(state.lineManager.selectedId);
+    const hasChecked = checkedCount > 0;
+    const checkedTypes = checkedIds.map((id) => findLineType(id)).filter(Boolean);
+    const deletableCheckedCount = checkedTypes.filter((type) => type.source === "custom").length;
+
+    const canDelete = hasChecked
+      ? deletableCheckedCount > 0
+      : Boolean(selectedType && selectedType.source === "custom");
+    const canDownload = hasChecked
+      ? checkedTypes.length > 0
+      : Boolean(selectedType);
+
+    deleteLineTypeBtn.disabled = !canDelete;
+    downloadLineTypeBtn.disabled = !canDownload;
+  }
+
   function bind() {
+    if (!Array.isArray(state.lineManager.checkedIds)) {
+      state.lineManager.checkedIds = [];
+    }
+
     closeLineManagerBtn.addEventListener("click", close);
     newLineTypeBtn.addEventListener("click", startNewLineTypeDraft);
     addColorRefBtn.addEventListener("click", addDraftColor);
@@ -49,6 +111,14 @@ export function createLineManager({
     importLineTypeBtn.addEventListener("click", () => lineTypeImportInput.click());
     lineTypeImportInput.addEventListener("change", importLineTypesFromFile);
     makeLineTypePermanentBtn.addEventListener("click", makeSelectedLineTypePermanent);
+    lineSelectAllInput.addEventListener("change", () => {
+      if (lineSelectAllInput.checked) {
+        setCheckedLineTypeIds(state.lineTypes.map((type) => type.id));
+      } else {
+        setCheckedLineTypeIds([]);
+      }
+      renderLineManager();
+    });
 
     lineTypeNameInput.addEventListener("input", () => {
       if (!state.lineManager.draft) {
@@ -86,10 +156,13 @@ export function createLineManager({
   function renderLineManager() {
     renderLineLibraryList();
     renderLineEditor();
+    syncLineBulkActionState();
   }
 
   function renderLineLibraryList() {
     lineLibraryList.innerHTML = "";
+    setCheckedLineTypeIds(getCheckedLineTypeIds());
+    const checkedSet = new Set(getCheckedLineTypeIds());
 
     const usageCountByTypeId = new Map();
     state.edges.forEach((edge) => {
@@ -105,6 +178,26 @@ export function createLineManager({
 
       const row = document.createElement("div");
       row.className = "line-library-item-row";
+
+      const lead = document.createElement("div");
+      lead.className = "line-library-item-lead";
+
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.className = "library-item-checkbox";
+      checkbox.checked = checkedSet.has(type.id);
+      checkbox.addEventListener("click", (event) => event.stopPropagation());
+      checkbox.addEventListener("change", (event) => {
+        event.stopPropagation();
+        const next = new Set(getCheckedLineTypeIds());
+        if (checkbox.checked) {
+          next.add(type.id);
+        } else {
+          next.delete(type.id);
+        }
+        setCheckedLineTypeIds([...next]);
+        syncLineBulkActionState();
+      });
 
       const title = document.createElement("span");
       title.className = "line-library-item-title";
@@ -129,7 +222,9 @@ export function createLineManager({
       preview.setAttribute("class", "line-library-preview-inline");
       renderLineTypePreviewSvg(preview, type);
 
-      row.appendChild(title);
+      lead.appendChild(checkbox);
+      lead.appendChild(title);
+      row.appendChild(lead);
       row.appendChild(preview);
       item.appendChild(row);
       item.appendChild(tag);
@@ -291,7 +386,6 @@ export function createLineManager({
       segmentEditorList.appendChild(card);
     });
 
-    deleteLineTypeBtn.disabled = !(selectedType && selectedType.source === "custom");
   }
 
   function renderColorListEditor() {
@@ -602,28 +696,50 @@ export function createLineManager({
   }
 
   function deleteSelectedLineType() {
-    const selected = findLineType(state.lineManager.selectedId);
-    if (!selected || selected.source !== "custom") {
+    const targets = resolveLineTypeTargets();
+    if (!targets.length) {
       return;
     }
 
-    const usageCount = state.edges.filter((edge) => edge.lineTypeId === selected.id).length;
-    if (usageCount > 0) {
-      const confirmed = window.confirm(`当前绘图中有 ${usageCount} 条线在使用该线条类型，删除后这些线也会被删除。是否继续？`);
-      if (!confirmed) {
-        return;
-      }
+    const deletableTargets = targets.filter((type) => type.source === "custom");
+    if (!deletableTargets.length) {
+      window.alert("所选线条类型均为默认类型，无法删除。");
+      return;
     }
 
-    state.lineTypes = state.lineTypes.filter((item) => item.id !== selected.id);
-    state.edges = state.edges.filter((edge) => edge.lineTypeId !== selected.id);
+    const skippedCount = targets.length - deletableTargets.length;
+    const removedTypeIds = new Set(deletableTargets.map((type) => String(type.id)));
+    const usageCount = state.edges.filter((edge) => removedTypeIds.has(String(edge.lineTypeId))).length;
 
-    if (state.menuSelection.lineType === selected.id) {
+    const warningLines = [`将删除 ${deletableTargets.length} 个线条类型。`];
+    if (usageCount > 0) {
+      warningLines.push(`当前绘图中有 ${usageCount} 条线在使用这些类型，删除后这些线也会被删除。`);
+    }
+    if (skippedCount > 0) {
+      warningLines.push(`有 ${skippedCount} 个默认类型已自动跳过。`);
+    }
+    warningLines.push("此操作不可撤销，是否继续？");
+
+    if (!window.confirm(warningLines.join("\n"))) {
+      return;
+    }
+    if (!window.confirm("请再次确认删除：该操作执行后无法恢复。")) {
+      return;
+    }
+
+    state.lineTypes = state.lineTypes.filter((item) => !removedTypeIds.has(String(item.id)));
+    state.edges = state.edges.filter((edge) => !removedTypeIds.has(String(edge.lineTypeId)));
+
+    if (removedTypeIds.has(String(state.menuSelection.lineType || ""))) {
       state.menuSelection.lineType = null;
     }
 
+    setCheckedLineTypeIds([]);
+
     if (state.lineTypes.length) {
-      state.lineManager.selectedId = state.lineTypes[0].id;
+      if (!findLineType(state.lineManager.selectedId) || removedTypeIds.has(String(state.lineManager.selectedId || ""))) {
+        state.lineManager.selectedId = state.lineTypes[0].id;
+      }
       loadLineTypeDraft(state.lineManager.selectedId);
     } else {
       state.lineManager.selectedId = null;
@@ -638,22 +754,26 @@ export function createLineManager({
   }
 
   function downloadSelectedLineType() {
-    const selected = findLineType(state.lineManager.selectedId);
-    if (!selected) {
+    const targets = resolveLineTypeTargets();
+    if (!targets.length) {
       return;
     }
 
-    const payload = {
-      name: selected.name,
-      colorList: selected.colorList,
-      segments: selected.segments
-    };
+    const payloadList = targets.map((type) => ({
+      name: type.name,
+      colorList: type.colorList,
+      segments: type.segments
+    }));
+    const payload = payloadList.length === 1 ? payloadList[0] : payloadList;
+    const downloadName = payloadList.length === 1
+      ? `${payloadList[0].name}.json`
+      : "线条类型-批量导出.json";
 
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${selected.name}.json`;
+    a.download = downloadName;
     a.click();
     URL.revokeObjectURL(url);
   }

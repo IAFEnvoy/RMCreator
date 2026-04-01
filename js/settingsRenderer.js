@@ -240,7 +240,6 @@ export function createSettingsRenderer({
       ${textFieldsHtml}
       ${anchorGridHtml}
       ${paramFieldsHtml || '<div class="kv">当前车站类型没有可调整参数（已锁定参数不会显示）。</div>'}
-      <div class="kv">再次按住并拖动该车站，可调整位置。</div>
     `;
 
     const stationTypeSelect = document.getElementById("stationTypeSelect");

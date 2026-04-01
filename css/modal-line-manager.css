@@ -56,8 +56,50 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
   font-weight: 600;
+}
+
+.line-library-name {
+  margin-left: auto;
+  color: #334764;
+}
+
+.manager-library-toolbar {
+  display: block;
+  margin-bottom: 10px;
+}
+
+.manager-select-all {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #516784;
+}
+
+.library-select-all-checkbox,
+.library-item-checkbox {
+  width: 15px;
+  height: 15px;
+  accent-color: #2f6de5;
+}
+
+.library-item-checkbox {
+  cursor: pointer;
+}
+
+.manager-bulk-actions {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.manager-bulk-actions .btn-main,
+.manager-bulk-actions .btn-ghost {
+  width: 100%;
+  min-width: 0;
+  padding: 7px 4px;
 }
 
 .line-library-list {
@@ -132,6 +174,18 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+}
+
+.line-library-item-lead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+
+.line-library-item-lead .line-library-item-title {
+  min-width: 0;
 }
 
 .line-library-preview-inline {
@@ -285,6 +339,17 @@
 .btn-ghost[disabled] {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.btn-ghost.btn-danger {
+  color: #9f2020;
+  border-color: #e6aaaa;
+  background: #fff2f2;
+}
+
+.btn-ghost.btn-danger:hover {
+  background: #ffe5e5;
+  border-color: #dc8c8c;
 }
 
 .disabled-wrapper {

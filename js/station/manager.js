@@ -53,6 +53,7 @@ export function createStationManager({
     closeStationManagerBtn,
     newStationPresetBtn,
     stationLibraryList,
+    stationSelectAllInput,
     stationPresetNameInput,
     stationShapeSearchInput,
     stationShapeSelect,
@@ -90,12 +91,59 @@ export function createStationManager({
     startViewBox: { ...previewDefaultViewBox }
   };
 
+  function getCheckedPresetIds() {
+    return Array.isArray(state.stationManager.checkedIds)
+      ? state.stationManager.checkedIds.map((id) => String(id))
+      : [];
+  }
+
+  function setCheckedPresetIds(ids) {
+    const validIds = new Set((Array.isArray(state.stationLibrary) ? state.stationLibrary : []).map((preset) => String(preset.id)));
+    const seen = new Set();
+    const next = [];
+    (Array.isArray(ids) ? ids : []).forEach((id) => {
+      const key = String(id || "");
+      if (!key || !validIds.has(key) || seen.has(key)) {
+        return;
+      }
+      seen.add(key);
+      next.push(key);
+    });
+    state.stationManager.checkedIds = next;
+  }
+
+  function resolvePresetTargets() {
+    const checkedIds = getCheckedPresetIds();
+    if (checkedIds.length) {
+      return checkedIds
+        .map((id) => (Array.isArray(state.stationLibrary) ? state.stationLibrary : []).find((preset) => preset.id === id))
+        .filter(Boolean);
+    }
+
+    const selected = getSelectedPreset();
+    return selected ? [selected] : [];
+  }
+
+  function syncStationBulkActionState() {
+    const totalCount = Array.isArray(state.stationLibrary) ? state.stationLibrary.length : 0;
+    const checkedCount = getCheckedPresetIds().length;
+
+    stationSelectAllInput.checked = totalCount > 0 && checkedCount === totalCount;
+    stationSelectAllInput.indeterminate = checkedCount > 0 && checkedCount < totalCount;
+
+    const hasChecked = checkedCount > 0;
+    const selectedPreset = getSelectedPreset();
+    deleteStationPresetBtn.disabled = !(hasChecked || selectedPreset);
+    downloadStationPresetBtn.disabled = !(hasChecked || selectedPreset);
+  }
+
   function bind() {
     if (
       !stationManagerModal
       || !closeStationManagerBtn
       || !newStationPresetBtn
       || !stationLibraryList
+      || !stationSelectAllInput
       || !stationPresetNameInput
       || !stationShapeSearchInput
       || !stationShapeSelect
@@ -129,6 +177,10 @@ export function createStationManager({
 
     ensureStationManagerState();
     loadStationLibrary();
+
+    if (!Array.isArray(state.stationManager.checkedIds)) {
+      state.stationManager.checkedIds = [];
+    }
 
     closeStationManagerBtn.addEventListener("click", close);
     newStationPresetBtn.addEventListener("click", createEmptyPreset);
@@ -167,6 +219,14 @@ export function createStationManager({
     downloadStationPresetBtn.addEventListener("click", downloadSelectedStationPreset);
     importStationPresetBtn.addEventListener("click", () => stationPresetImportInput.click());
     stationPresetImportInput.addEventListener("change", importStationPresetsFromFile);
+    stationSelectAllInput.addEventListener("change", () => {
+      if (stationSelectAllInput.checked) {
+        setCheckedPresetIds((Array.isArray(state.stationLibrary) ? state.stationLibrary : []).map((preset) => preset.id));
+      } else {
+        setCheckedPresetIds([]);
+      }
+      renderStationManager();
+    });
 
     stationPresetNameInput.addEventListener("input", () => {
       const preset = getSelectedPreset();
@@ -236,8 +296,6 @@ export function createStationManager({
     syncTabVisibility();
 
     const preset = getSelectedPreset();
-    deleteStationPresetBtn.disabled = !preset;
-    downloadStationPresetBtn.disabled = !preset;
     stationShapeSearchInput.value = state.stationManager.shapeQuery || "";
     stationParamTypeSelect.value = shapeParameterTypeDefinitions[state.stationManager.paramType]
       ? state.stationManager.paramType
@@ -250,6 +308,7 @@ export function createStationManager({
       renderTextPlacementPanel(null);
       renderParamsPanel(null);
       renderPreview(null);
+      syncStationBulkActionState();
       return;
     }
 
@@ -259,6 +318,7 @@ export function createStationManager({
     renderTextPlacementPanel(preset);
     renderParamsPanel(preset);
     renderPreview(preset);
+    syncStationBulkActionState();
   }
 
   function getStationUsageCountByPresetId(presetId) {
@@ -274,10 +334,12 @@ export function createStationManager({
   }
 
   function deleteSelectedStationPreset() {
-    const preset = getSelectedPreset();
-    if (!preset) {
+    const targets = resolvePresetTargets();
+    if (!targets.length) {
       return;
     }
+
+    const removedPresetIds = new Set(targets.map((preset) => String(preset.id)));
 
     const presetIdByOldTypeIndex = (Array.isArray(state.stationTypes) ? state.stationTypes : [])
       .map((type) => String(type?.stationPresetId || ""));
@@ -287,7 +349,7 @@ export function createStationManager({
         .filter((node) => {
           const typeIndex = Number.isInteger(node?.stationTypeIndex) ? node.stationTypeIndex : -1;
           const sourcePresetId = typeIndex >= 0 ? presetIdByOldTypeIndex[typeIndex] : "";
-          return sourcePresetId === preset.id;
+          return removedPresetIds.has(sourcePresetId);
         })
         .map((node) => String(node.id))
     );
@@ -299,22 +361,19 @@ export function createStationManager({
         .map((edge) => String(edge.id))
     );
 
-    const warningLines = [`确定删除车站预设“${preset.name}”吗？`];
+    const warningLines = [`将删除 ${targets.length} 个车站预设。`];
     if (usageCount > 0) {
-      warningLines.push(`当前绘图中有 ${usageCount} 个车站在使用它，删除后这些车站会被一并删除。`);
+      warningLines.push(`当前绘图中有 ${usageCount} 个车站在使用它们，删除后这些车站会被一并删除。`);
     }
     if (removedEdgeIds.size > 0) {
       warningLines.push(`与这些车站连接的 ${removedEdgeIds.size} 条线也会被删除。`);
     }
     warningLines.push("此操作不可撤销，是否继续？");
 
-    const confirmed = window.confirm(warningLines.join("\n"));
-    if (!confirmed) {
+    if (!window.confirm(warningLines.join("\n"))) {
       return;
     }
-
-    const index = state.stationLibrary.findIndex((item) => item.id === preset.id);
-    if (index < 0) {
+    if (!window.confirm("请再次确认删除：该操作执行后无法恢复。")) {
       return;
     }
 
@@ -338,9 +397,13 @@ export function createStationManager({
       });
     }
 
-    state.stationLibrary.splice(index, 1);
-    const nextPreset = state.stationLibrary[Math.min(index, state.stationLibrary.length - 1)] || null;
-    state.stationManager.selectedId = nextPreset?.id || null;
+    state.stationLibrary = state.stationLibrary.filter((item) => !removedPresetIds.has(String(item.id)));
+    setCheckedPresetIds(getCheckedPresetIds().filter((id) => !removedPresetIds.has(String(id))));
+
+    const hasSelected = state.stationLibrary.some((item) => item.id === state.stationManager.selectedId);
+    if (!hasSelected) {
+      state.stationManager.selectedId = state.stationLibrary[0]?.id || null;
+    }
     state.stationManager.selectedTextCardId = null;
 
     persistStationLibrary();
@@ -372,32 +435,38 @@ export function createStationManager({
   }
 
   function downloadSelectedStationPreset() {
-    const preset = getSelectedPreset();
-    if (!preset) {
+    const targets = resolvePresetTargets();
+    if (!targets.length) {
       return;
     }
 
-    const safePreset = sanitizePreset(preset);
-    if (!safePreset) {
+    const payloadList = targets
+      .map((preset) => sanitizePreset(preset))
+      .filter(Boolean)
+      .map((safePreset) => ({
+        name: safePreset.name,
+        shapeId: safePreset.shapeId,
+        textCards: safePreset.textCards,
+        textPlacement: safePreset.textPlacement,
+        radius: safePreset.radius,
+        oval: safePreset.oval,
+        shapeParamSettings: safePreset.shapeParamSettings,
+        params: safePreset.params
+      }));
+    if (!payloadList.length) {
       return;
     }
 
-    const payload = {
-      name: safePreset.name,
-      shapeId: safePreset.shapeId,
-      textCards: safePreset.textCards,
-      textPlacement: safePreset.textPlacement,
-      radius: safePreset.radius,
-      oval: safePreset.oval,
-      shapeParamSettings: safePreset.shapeParamSettings,
-      params: safePreset.params
-    };
+    const payload = payloadList.length === 1 ? payloadList[0] : payloadList;
+    const downloadName = payloadList.length === 1
+      ? `${payloadList[0].name}.json`
+      : "车站预设-批量导出.json";
 
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${safePreset.name}.json`;
+    a.download = downloadName;
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -441,6 +510,8 @@ export function createStationManager({
 
   function renderStationLibraryList() {
     stationLibraryList.innerHTML = "";
+    setCheckedPresetIds(getCheckedPresetIds());
+    const checkedSet = new Set(getCheckedPresetIds());
 
     if (!Array.isArray(state.stationLibrary) || !state.stationLibrary.length) {
       const empty = document.createElement("div");
@@ -459,13 +530,35 @@ export function createStationManager({
       const row = document.createElement("div");
       row.className = "line-library-item-row";
 
+      const lead = document.createElement("div");
+      lead.className = "line-library-item-lead";
+
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.className = "library-item-checkbox";
+      checkbox.checked = checkedSet.has(preset.id);
+      checkbox.addEventListener("click", (event) => event.stopPropagation());
+      checkbox.addEventListener("change", (event) => {
+        event.stopPropagation();
+        const next = new Set(getCheckedPresetIds());
+        if (checkbox.checked) {
+          next.add(preset.id);
+        } else {
+          next.delete(preset.id);
+        }
+        setCheckedPresetIds([...next]);
+        syncStationBulkActionState();
+      });
+
       const title = document.createElement("span");
       title.className = "line-library-item-title";
       const usageCount = getStationUsageCountByPresetId(preset.id);
       const safeName = preset.name || "未命名车站";
       title.textContent = `${safeName} (${usageCount})`;
       title.title = `${safeName}（${usageCount} 个引用）`;
-      row.appendChild(title);
+      lead.appendChild(checkbox);
+      lead.appendChild(title);
+      row.appendChild(lead);
 
       const previewSrc = buildLibraryPreviewDataUrl(preset);
       if (previewSrc) {
@@ -1242,6 +1335,9 @@ export function createStationManager({
     state.stationManager.selectedId = state.stationManager.selectedId || null;
     state.stationManager.isOpen = Boolean(state.stationManager.isOpen);
     state.stationManager.shapeQuery = String(state.stationManager.shapeQuery || "");
+    state.stationManager.checkedIds = Array.isArray(state.stationManager.checkedIds)
+      ? state.stationManager.checkedIds.map((id) => String(id))
+      : [];
     state.stationManager.paramType = shapeParameterTypeDefinitions[state.stationManager.paramType]
       ? state.stationManager.paramType
       : "color";

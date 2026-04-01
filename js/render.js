@@ -452,36 +452,39 @@ export function createRenderer({
       geometryRow.appendChild(geometrySelect);
       settingsCard.appendChild(geometryRow);
 
-      const spacingRow = document.createElement("label");
-      spacingRow.className = "submenu-settings-row submenu-settings-row-column";
-      const spacingText = document.createElement("span");
-      spacingText.textContent = "线条间距系数（1.00 为当前基准）";
-      const spacingInput = document.createElement("input");
-      spacingInput.type = "number";
-      spacingInput.min = "0.5";
-      spacingInput.max = "1.8";
-      spacingInput.step = "0.05";
-      spacingInput.value = String(Number(state.appSettings?.lineSpacingScale || 1).toFixed(2));
-      spacingInput.addEventListener("change", () => {
-        const raw = Number(spacingInput.value);
-        if (!Number.isFinite(raw)) {
-          spacingInput.value = String(Number(state.appSettings?.lineSpacingScale || 1).toFixed(2));
-          return;
-        }
-
-        const clamped = Math.min(1.8, Math.max(0.5, raw));
-        onAppSettingsChanged?.({ lineSpacingScale: clamped });
-      });
-      spacingRow.appendChild(spacingText);
-      spacingRow.appendChild(spacingInput);
-      settingsCard.appendChild(spacingRow);
-
-      const spacingWarning = document.createElement("div");
-      spacingWarning.className = "submenu-settings-warning";
-      spacingWarning.textContent = "警告：该设置会大幅度影响线条绘制效果与既有图形观感，请谨慎调整。";
-      settingsCard.appendChild(spacingWarning);
-
       submenuItems.appendChild(settingsCard);
+      return;
+    }
+
+    if (state.activeTool === "about") {
+      submenuTitle.textContent = "关于";
+
+      const aboutCard = document.createElement("div");
+      aboutCard.className = "submenu-about-card";
+
+      const copyright = document.createElement("div");
+      copyright.className = "submenu-about-muted";
+      copyright.textContent = "Copyright © IAFEnvoy & Copilot";
+
+      const license = document.createElement("div");
+      license.className = "submenu-about-muted";
+      license.textContent = "Open Source Under GPL-3.0 License";
+
+      const githubLink = document.createElement("a");
+      githubLink.className = "submenu-about-link";
+      githubLink.href = "https://github.com/IAFEnvoy/RMCreator";
+      githubLink.target = "_blank";
+      githubLink.rel = "noopener";
+
+      const githubIcon = document.createElement("img");
+      githubIcon.src = "/img/icon-github.svg";
+      githubIcon.alt = "GitHub";
+      githubLink.appendChild(githubIcon);
+
+      aboutCard.appendChild(copyright);
+      aboutCard.appendChild(license);
+      aboutCard.appendChild(githubLink);
+      submenuItems.appendChild(aboutCard);
       return;
     }
 
@@ -1039,14 +1042,13 @@ export function createRenderer({
 
   function getSegmentOverlapGap(edge, baseLine) {
     const geometry = edge?.geometry || "straight";
-    const scale = Math.max(0.5, Number(state.appSettings?.lineSpacingScale) || 1);
 
     if (geometry === "bend90") {
-      return -0.35 * scale;
+      return -0.35;
     }
 
     if (geometry === "bend135") {
-      return -0.3 * scale;
+      return -0.3;
     }
 
     if (geometry === "bend90rot45") {
@@ -1063,10 +1065,10 @@ export function createRenderer({
       const ny = Math.abs(dy / len);
       const factor = Math.max(nx, ny);
 
-      return -0.55 * factor * scale;
+      return -0.55 * factor;
     }
 
-    return -0.8 * scale;
+    return -0.8;
   }
 
   function getTurnSign(polyline) {

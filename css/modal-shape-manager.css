@@ -160,6 +160,16 @@
   color: #60728f;
 }
 
+.shape-prop-param-toggle.is-disabled {
+  opacity: 0.6;
+}
+
+.shape-prop-param-toggle.is-disabled,
+.shape-prop-param-toggle.is-disabled .toggle-switch,
+.shape-prop-param-toggle.is-disabled .toggle-slider {
+  cursor: not-allowed;
+}
+
 .shape-prop-param-select {
   margin-top: 2px;
 }
@@ -197,7 +207,7 @@
   font-weight: 700;
 }
 
-.shape-prop-item input,
+.shape-prop-item input:not(.toggle-checkbox),
 .shape-prop-item select {
   border: 1px solid var(--line);
   border-radius: 7px;
@@ -331,7 +341,7 @@
   padding: 2px 8px;
 }
 
-.shape-param-item input,
+.shape-param-item input:not(.toggle-checkbox),
 .shape-param-item select {
   border: 1px solid var(--line);
   border-radius: 7px;
