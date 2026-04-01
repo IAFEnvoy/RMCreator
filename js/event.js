@@ -90,6 +90,9 @@ export function createEventBinder({
       if (state.activeTool !== "shape" || !state.menuSelection.shape) {
         renderer.hideShapeGhost?.();
       }
+      if (state.activeTool !== "station" || state.menuSelection.station === null) {
+        renderer.hideStationGhost?.();
+      }
       renderer.updateDragCursor();
     });
 
@@ -432,6 +435,7 @@ export function createEventBinder({
       addStation(point.x, point.y, state.menuSelection.station);
       if (state.appSettings?.continuousStationMode === false) {
         state.menuSelection.station = null;
+        renderer.hideStationGhost?.();
         renderer.renderSubmenu();
       }
       return;
@@ -550,6 +554,12 @@ export function createEventBinder({
 
   function onCanvasMouseMove(event) {
     const point = toCanvasPoint(event, svg, viewport);
+
+    if (state.activeTool === "station" && state.menuSelection.station !== null && !state.drag.mode) {
+      renderer.drawStationGhost?.(point, state.menuSelection.station);
+    } else {
+      renderer.hideStationGhost?.();
+    }
 
     if (state.activeTool === "shape" && state.menuSelection.shape && !state.drag.mode) {
       renderer.drawShapeGhost?.(point, state.menuSelection.shape);

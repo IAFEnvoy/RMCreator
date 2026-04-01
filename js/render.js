@@ -52,13 +52,15 @@ export function createRenderer({
   } = elements;
 
   let shapeGhostEl = null;
+  let stationGhostEl = null;
 
   function setActiveToolButton() {
     toolStrip.querySelectorAll(".tool-btn").forEach((btn) => {
       btn.classList.toggle("active", btn.dataset.tool === state.activeTool);
     });
 
-    svg.classList.toggle("select-tool-active", state.activeTool === "select");
+    svg.classList.toggle("line-tool-active", state.activeTool === "line");
+    svg.classList.toggle("text-tool-active", state.activeTool === "text");
   }
 
   function renderSubmenu() {
@@ -85,6 +87,7 @@ export function createRenderer({
         button.classList.toggle("active", state.menuSelection.station === index);
         button.addEventListener("click", () => {
           state.menuSelection.station = state.menuSelection.station === index ? null : index;
+          hideStationGhost();
           renderSubmenu();
         });
         submenuItems.appendChild(button);
@@ -848,11 +851,143 @@ export function createRenderer({
     shapeGhostEl = group;
   }
 
+  function drawStationGhost(point, stationTypeIndex) {
+    if (!stationLayer) {
+      return;
+    }
+
+    const sourceType = Number.isInteger(stationTypeIndex)
+      ? state.stationTypes[stationTypeIndex]
+      : null;
+    if (!sourceType) {
+      hideStationGhost();
+      return;
+    }
+
+    if (stationGhostEl?.parentNode) {
+      stationGhostEl.parentNode.removeChild(stationGhostEl);
+    }
+
+    const x = Number(point?.x) || 0;
+    const y = Number(point?.y) || 0;
+    const group = document.createElementNS(svgNs, "g");
+    group.setAttribute("class", "placed-station-ghost");
+    group.setAttribute("transform", `translate(${x} ${y})`);
+
+    const preset = getStationPresetByTypeIndex(stationTypeIndex);
+    const renderedByShape = renderStationGhostByShape(group, preset);
+    if (!renderedByShape) {
+      const radius = Math.max(2, Number(sourceType.radius) || 10);
+      const outer = document.createElementNS(svgNs, "circle");
+      outer.setAttribute("cx", "0");
+      outer.setAttribute("cy", "0");
+      outer.setAttribute("r", String(radius));
+      outer.setAttribute("class", sourceType.oval ? "station interchange" : "station");
+      outer.setAttribute("pointer-events", "none");
+      group.appendChild(outer);
+
+      if (sourceType.oval) {
+        const inner = document.createElementNS(svgNs, "circle");
+        inner.setAttribute("cx", "0");
+        inner.setAttribute("cy", "0");
+        inner.setAttribute("r", String(Math.max(2, radius - 4)));
+        inner.setAttribute("fill", "none");
+        inner.setAttribute("stroke", "#203554");
+        inner.setAttribute("stroke-width", "1.5");
+        inner.setAttribute("pointer-events", "none");
+        group.appendChild(inner);
+      }
+    }
+
+    if (preset) {
+      const runtimeParams = buildStationRuntimeParamMap({
+        preset,
+        shape: null,
+        stationParamValues: null
+      });
+      appendStationTexts({
+        container: group,
+        preset,
+        runtimeParamMap: runtimeParams,
+        centerX: 0,
+        centerY: 0,
+        pointerEvents: "none"
+      });
+    }
+
+    stationLayer.appendChild(group);
+    stationGhostEl = group;
+  }
+
+  function renderStationGhostByShape(group, preset) {
+    if (!group || !preset?.shapeId) {
+      return false;
+    }
+
+    const shape = state.shapeLibrary.find((item) => item.id === preset.shapeId);
+    if (!shape) {
+      return false;
+    }
+
+    const runtimeParams = buildStationRuntimeParamMap({
+      preset,
+      shape,
+      stationParamValues: null
+    });
+    const resolvedSvg = buildRenderableShapeSvg(shape, buildShapeParamValuesFromRuntime(shape, runtimeParams));
+    const parsed = parseShapeSvgContent(resolvedSvg);
+    if (!parsed || !parsed.nodes.length) {
+      return false;
+    }
+
+    const shapeRenderScale = 0.25;
+    const cx = parsed.minX + parsed.width / 2;
+    const cy = parsed.minY + parsed.height / 2;
+    const shapeGroup = document.createElementNS(svgNs, "g");
+    shapeGroup.setAttribute(
+      "transform",
+      `scale(${shapeRenderScale}) translate(${-cx} ${-cy})`
+    );
+    parsed.nodes.forEach((node) => shapeGroup.appendChild(node));
+    group.appendChild(shapeGroup);
+    return true;
+  }
+
   function hideShapeGhost() {
     if (shapeGhostEl?.parentNode) {
       shapeGhostEl.parentNode.removeChild(shapeGhostEl);
     }
     shapeGhostEl = null;
+  }
+
+  function hideStationGhost() {
+    if (stationGhostEl?.parentNode) {
+      stationGhostEl.parentNode.removeChild(stationGhostEl);
+    }
+    stationGhostEl = null;
+  }
+
+  function getStationPresetByTypeIndex(typeIndex) {
+    const sourceType = Number.isInteger(typeIndex)
+      ? state.stationTypes[typeIndex]
+      : null;
+    if (!sourceType) {
+      return null;
+    }
+
+    const presetId = sourceType.stationPresetId ? String(sourceType.stationPresetId) : "";
+    if (presetId) {
+      const byId = state.stationLibrary.find((item) => item.id === presetId);
+      if (byId) {
+        return byId;
+      }
+    }
+
+    if (typeIndex >= 0 && typeIndex < state.stationLibrary.length) {
+      return state.stationLibrary[typeIndex] || null;
+    }
+
+    return null;
   }
 
   function renderLineTypePreviewSvg(svgEl, lineType) {
@@ -960,7 +1095,8 @@ export function createRenderer({
   }
 
   function updateDragCursor() {
-    svg.classList.toggle("select-tool-active", state.activeTool === "select");
+    svg.classList.toggle("line-tool-active", state.activeTool === "line");
+    svg.classList.toggle("text-tool-active", state.activeTool === "text");
     svg.classList.toggle("dragging-pan", state.drag.mode === "pan");
     svg.classList.toggle("dragging-station", state.drag.mode === "station" || state.drag.mode === "selection-move");
   }
@@ -1044,6 +1180,8 @@ export function createRenderer({
     drawLinePreview,
     drawShapeGhost,
     hideShapeGhost,
+    drawStationGhost,
+    hideStationGhost,
     updateViewportTransform,
     updateDragCursor,
     updateZoomIndicator

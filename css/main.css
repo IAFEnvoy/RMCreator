@@ -410,8 +410,12 @@
   cursor: default;
 }
 
-.canvas.select-tool-active {
+.canvas.line-tool-active {
   cursor: crosshair;
+}
+
+.canvas.text-tool-active {
+  cursor: text;
 }
 
 .canvas.dragging-pan,
@@ -461,6 +465,12 @@
 
 .placed-shape-ghost {
   opacity: 0.4;
+  pointer-events: none;
+  filter: drop-shadow(0 0 2px rgba(47, 109, 229, 0.32));
+}
+
+.placed-station-ghost {
+  opacity: 0.42;
   pointer-events: none;
   filter: drop-shadow(0 0 2px rgba(47, 109, 229, 0.32));
 }
