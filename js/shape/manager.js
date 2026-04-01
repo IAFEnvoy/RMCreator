@@ -1,6 +1,6 @@
 import { shapeStorageKey } from "../constants.js";
 import { createShapeManagerClipboard } from "../clipboards.js";
-import { createHistoryManager } from "../historyManager.js";
+import { createHistoryManager } from "../history-manager.js";
 import { svgNs } from "../dom.js";
 import {
   boundsToViewBox,

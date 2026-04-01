@@ -7,7 +7,7 @@ import {
   loadCustomLineTypes,
   normalizeLineType,
   persistCustomLineTypes
-} from "./line/typeStore.js";
+} from "./line/type-store.js";
 import { createLineManager } from "./line/manager.js";
 import { createShapeManager } from "./shape/manager.js";
 import { createStationManager } from "./station/manager.js";
@@ -27,8 +27,8 @@ import {
   normalizeTextStyleFlags
 } from "./utils.js";
 import { appSettingsStorageKey, drawingStorageKey, geometryLabelMap } from "./constants.js";
-import { createHistoryManager } from "./historyManager.js";
-import { preloadTemplates } from "./templateStore.js";
+import { createHistoryManager } from "./history-manager.js";
+import { preloadTemplates } from "./template-store.js";
 
 const { linePreview, fileUndoBtn, fileRedoBtn, canvasBg } = elements;
 const defaultAppSettings = Object.freeze({

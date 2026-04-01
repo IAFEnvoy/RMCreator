@@ -18,8 +18,8 @@ import {
   normalizeStationTextContent,
   normalizeStationTextCards,
   normalizeTextSlot
-} from "./station/textUtils.js";
-import { renderTemplate } from "./templateStore.js";
+} from "./station/text-utils.js";
+import { renderTemplate } from "./template-store.js";
 
 export function createSettingsRenderer({
   state,

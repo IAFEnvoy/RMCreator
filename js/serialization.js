@@ -2,7 +2,7 @@ import {
   clamp,
   normalizeTextStyleFlags
 } from "./utils.js";
-import { normalizeLineType } from "./line/typeStore.js";
+import { normalizeLineType } from "./line/type-store.js";
 
 const drawingVersion = 1;
 const stationTextSlotSet = new Set(["nw", "n", "ne", "w", "e", "sw", "s", "se"]);

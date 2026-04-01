@@ -7,21 +7,21 @@ import {
   getOffsetPolyline,
   getParallelOffsets
 } from "./line/geometry.js";
-import { resolveSegmentColor } from "./line/typeStore.js";
+import { resolveSegmentColor } from "./line/type-store.js";
 import {
   clamp,
   getSvgTextDecoration,
   normalizeColor,
   normalizeTextStyleFlags
 } from "./utils.js";
-import { createSettingsRenderer } from "./settingsRenderer.js";
-import { getTemplate } from "./templateStore.js";
+import { createSettingsRenderer } from "./settings-renderer.js";
+import { getTemplate } from "./template-store.js";
 import { buildRenderableShapeSvg } from "./shape/utils.js";
 import {
   appendStationTexts,
   buildShapeParamValuesFromRuntime,
   buildStationRuntimeParamMap
-} from "./station/textUtils.js";
+} from "./station/text-utils.js";
 
 export function createRenderer({
   state,

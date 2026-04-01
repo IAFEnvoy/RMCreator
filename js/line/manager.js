@@ -6,7 +6,7 @@ import {
   normalizeLineType,
   persistCustomLineTypes,
   resolveSegmentColor
-} from "./typeStore.js";
+} from "./type-store.js";
 import { clamp, mergeColorAndAlpha, splitColorAndAlpha } from "../utils.js";
 
 export function createLineManager({

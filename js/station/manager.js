@@ -26,7 +26,7 @@ import {
   normalizeStationTextPlacement,
   normalizeTextBinding,
   normalizeTextSlot
-} from "./textUtils.js";
+} from "./text-utils.js";
 
 const previewDefaultViewBox = Object.freeze({ x: -120, y: -120, width: 480, height: 480 });
 const previewInitialScale = 0.25;
