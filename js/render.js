@@ -22,6 +22,7 @@ import {
   buildShapeParamValuesFromRuntime,
   buildStationRuntimeParamMap
 } from "./station/text-utils.js";
+import { loadVersion } from "./version.js";
 
 export function createRenderer({
   state,
@@ -304,6 +305,7 @@ export function createRenderer({
     if (state.activeTool === "about") {
       submenuTitle.textContent = "关于";
       submenuItems.innerHTML = getTemplate("submenu-about");
+      loadVersion();
       return;
     }
 
