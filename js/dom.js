@@ -8,6 +8,7 @@ export const elements = {
   lineLayer: document.getElementById("lineLayer"),
   shapeLayer: document.getElementById("shapeLayer"),
   textLayer: document.getElementById("textLayer"),
+  snapGuideLayer: document.getElementById("snapGuideLayer"),
   linePreview: document.getElementById("linePreview"),
   selectionMarquee: document.getElementById("selectionMarquee"),
   fileMenu: document.getElementById("fileMenu"),

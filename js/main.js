@@ -40,7 +40,13 @@ const defaultAppSettings = Object.freeze({
   showGrid: true,
   selectionGlowColor: "#2f6de5",
   selectionGlowSize: 4,
-  defaultLineGeometry: "bend135"
+  themeAccentColor: "#2f6de5",
+  defaultLineGeometry: "bend135",
+  snapOverlap: true,
+  snapAxisDiagonal: true,
+  snapEqualSpacing: true,
+  snapGrid: true,
+  snapEqualSpacingOffset: 25
 });
 
 const state = {
@@ -69,6 +75,9 @@ const state = {
     stationId: null,
     lineStartStationId: null,
     moveEntities: [],
+    snapTargets: null,
+    snapAnchor: null,
+    snapVisibleRect: null,
     marqueeStart: null,
     marqueeCurrent: null,
     didMove: false,
@@ -364,6 +373,23 @@ function applyAppSettings() {
     `${state.appSettings.selectionGlowSize}px`
   );
 
+  const accent = normalizeHexColor(
+    state.appSettings.themeAccentColor,
+    defaultAppSettings.themeAccentColor
+  );
+  const accentRgb = hexToRgb(accent);
+  const accentStrong = mixHexColors(accent, "#000000", 0.18);
+  const accentSoft = mixHexColors(accent, "#ffffff", 0.88);
+  const accentFocus = mixHexColors(accent, "#ffffff", 0.55);
+  const accentInk = mixHexColors(accent, "#000000", 0.55);
+  document.documentElement.style.setProperty("--accent", accent);
+  document.documentElement.style.setProperty("--accent-rgb", `${accentRgb.r}, ${accentRgb.g}, ${accentRgb.b}`);
+  document.documentElement.style.setProperty("--accent-strong", accentStrong);
+  document.documentElement.style.setProperty("--accent-soft", accentSoft);
+  document.documentElement.style.setProperty("--accent-focus", accentFocus);
+  document.documentElement.style.setProperty("--accent-ink", accentInk);
+  document.documentElement.style.setProperty("--soft", accentSoft);
+
   if (canvasBg) {
     canvasBg.setAttribute("visibility", state.appSettings.showGrid === false ? "hidden" : "visible");
   }
@@ -389,7 +415,13 @@ function sanitizeAppSettings(rawSettings) {
     showGrid: next.showGrid !== false,
     selectionGlowColor: normalizeHexColor(next.selectionGlowColor, defaultAppSettings.selectionGlowColor),
     selectionGlowSize: clamp(Number(next.selectionGlowSize) || defaultAppSettings.selectionGlowSize, 1, 30),
-    defaultLineGeometry
+    themeAccentColor: normalizeHexColor(next.themeAccentColor, defaultAppSettings.themeAccentColor),
+    defaultLineGeometry,
+    snapOverlap: next.snapOverlap !== false,
+    snapAxisDiagonal: next.snapAxisDiagonal !== false,
+    snapEqualSpacing: next.snapEqualSpacing !== false,
+    snapGrid: next.snapGrid !== false,
+    snapEqualSpacingOffset: clamp(Number(next.snapEqualSpacingOffset) || defaultAppSettings.snapEqualSpacingOffset, 4, 80)
   };
 }
 
@@ -399,6 +431,34 @@ function normalizeHexColor(input, fallback) {
     return value.toLowerCase();
   }
   return fallback;
+}
+
+function hexToRgb(hexColor) {
+  const normalized = normalizeHexColor(hexColor, "#000000");
+  const hex = normalized.length === 4
+    ? `#${normalized[1]}${normalized[1]}${normalized[2]}${normalized[2]}${normalized[3]}${normalized[3]}`
+    : normalized;
+
+  return {
+    r: Number.parseInt(hex.slice(1, 3), 16),
+    g: Number.parseInt(hex.slice(3, 5), 16),
+    b: Number.parseInt(hex.slice(5, 7), 16)
+  };
+}
+
+function clampColorChannel(value) {
+  return Math.max(0, Math.min(255, Math.round(value)));
+}
+
+function mixHexColors(baseColor, mixColor, mixRatio) {
+  const base = hexToRgb(baseColor);
+  const mix = hexToRgb(mixColor);
+  const ratio = clamp(Number(mixRatio) || 0, 0, 1);
+  const r = base.r + (mix.r - base.r) * ratio;
+  const g = base.g + (mix.g - base.g) * ratio;
+  const b = base.b + (mix.b - base.b) * ratio;
+  const toHex = (channel) => clampColorChannel(channel).toString(16).padStart(2, "0");
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
 }
 
 function toRgba(hexColor, alpha = 1) {

@@ -270,6 +270,14 @@ export function createRenderer({
         });
       }
 
+      const themeAccentInput = submenuItems.querySelector("#themeAccentColor");
+      if (themeAccentInput) {
+        themeAccentInput.value = state.appSettings?.themeAccentColor || "#2f6de5";
+        themeAccentInput.addEventListener("input", () => {
+          onAppSettingsChanged?.({ themeAccentColor: themeAccentInput.value });
+        });
+      }
+
       const glowSizeInput = submenuItems.querySelector("#selectionGlowSize");
       if (glowSizeInput) {
         glowSizeInput.value = String(Number(state.appSettings?.selectionGlowSize || 4));
@@ -281,6 +289,52 @@ export function createRenderer({
           }
           const clamped = Math.min(30, Math.max(1, raw));
           onAppSettingsChanged?.({ selectionGlowSize: clamped });
+        });
+      }
+
+      const equalSpacingOffsetInput = submenuItems.querySelector("#snapEqualSpacingOffset");
+      if (equalSpacingOffsetInput) {
+        equalSpacingOffsetInput.value = String(Number(state.appSettings?.snapEqualSpacingOffset || 12));
+        equalSpacingOffsetInput.addEventListener("change", () => {
+          const raw = Number(equalSpacingOffsetInput.value);
+          if (!Number.isFinite(raw)) {
+            equalSpacingOffsetInput.value = String(Number(state.appSettings?.snapEqualSpacingOffset || 12));
+            return;
+          }
+          const clamped = Math.min(80, Math.max(4, raw));
+          onAppSettingsChanged?.({ snapEqualSpacingOffset: clamped });
+        });
+      }
+
+      const snapOverlapInput = submenuItems.querySelector("#snapOverlapToggle");
+      if (snapOverlapInput) {
+        snapOverlapInput.checked = state.appSettings?.snapOverlap !== false;
+        snapOverlapInput.addEventListener("change", () => {
+          onAppSettingsChanged?.({ snapOverlap: snapOverlapInput.checked });
+        });
+      }
+
+      const snapAxisDiagonalInput = submenuItems.querySelector("#snapAxisDiagonalToggle");
+      if (snapAxisDiagonalInput) {
+        snapAxisDiagonalInput.checked = state.appSettings?.snapAxisDiagonal !== false;
+        snapAxisDiagonalInput.addEventListener("change", () => {
+          onAppSettingsChanged?.({ snapAxisDiagonal: snapAxisDiagonalInput.checked });
+        });
+      }
+
+      const snapEqualSpacingInput = submenuItems.querySelector("#snapEqualSpacingToggle");
+      if (snapEqualSpacingInput) {
+        snapEqualSpacingInput.checked = state.appSettings?.snapEqualSpacing !== false;
+        snapEqualSpacingInput.addEventListener("change", () => {
+          onAppSettingsChanged?.({ snapEqualSpacing: snapEqualSpacingInput.checked });
+        });
+      }
+
+      const snapGridInput = submenuItems.querySelector("#snapGridToggle");
+      if (snapGridInput) {
+        snapGridInput.checked = state.appSettings?.snapGrid !== false;
+        snapGridInput.addEventListener("change", () => {
+          onAppSettingsChanged?.({ snapGrid: snapGridInput.checked });
         });
       }
 

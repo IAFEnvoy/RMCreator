@@ -82,7 +82,7 @@
 .library-item-checkbox {
   width: 15px;
   height: 15px;
-  accent-color: #2f6de5;
+  accent-color: var(--accent);
 }
 
 .library-item-checkbox {

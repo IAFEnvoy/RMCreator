@@ -3,7 +3,7 @@ export const version = '1.0-beta.1';
 export async function loadVersion() {
   let commit = await fetch('/commit.json')
     .then(res => res.json())
-    .then(res => res.commit.substring(0, 6))
+    .then(res => res.commit.substring(0, 7))
     .catch(console.log);
   if (!commit) commit = 'dev';
   document.getElementById("rmcVersion").innerText = `v${version}-${commit}`;

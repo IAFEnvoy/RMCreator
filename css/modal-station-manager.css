@@ -84,8 +84,8 @@
 }
 
 .station-position-grid button.active {
-  background: #2f6de5;
-  border-color: #2f6de5;
+  background: var(--accent);
+  border-color: var(--accent);
   color: #ffffff;
 }
 
@@ -212,8 +212,8 @@
 }
 
 .station-text-card.active {
-  border-color: #2f6de5;
-  box-shadow: 0 0 0 1px rgba(47, 109, 229, 0.18);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px rgba(var(--accent-rgb), 0.18);
 }
 
 .station-text-card.dragging {
@@ -221,7 +221,7 @@
 }
 
 .station-text-card.drop-target {
-  outline: 2px dashed #2f6de5;
+  outline: 2px dashed var(--accent);
   outline-offset: 2px;
 }
 
@@ -240,7 +240,7 @@
   height: 20px;
   border-radius: 999px;
   border: 1px solid #ccd8ea;
-  background: #eef4ff;
+  background: var(--accent-soft);
   color: #4f6383;
   font-size: 10px;
   font-weight: 700;

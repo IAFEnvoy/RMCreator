@@ -174,16 +174,48 @@
   margin-top: 2px;
 }
 
-.shape-layer-actions {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 6px;
+.shape-layer-title {
+  margin: 6px 0 4px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #566781;
 }
 
-.shape-layer-btn {
-  min-height: 30px;
-  padding: 5px 6px;
-  font-size: 12px;
+.shape-layer-actions {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.shape-layer-action {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--text);
+  padding: 6px;
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.shape-layer-action:hover {
+  border-color: #b8c7df;
+  background: #f9fbff;
+}
+
+.shape-layer-action.active {
+  border-color: var(--accent-strong);
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+}
+
+.shape-layer-action img {
+  width: 18px;
+  height: 18px;
+  display: block;
 }
 
 .shape-prop-grid {
@@ -337,7 +369,7 @@
   color: #53698b;
   border: 1px solid #c9d6ea;
   border-radius: 999px;
-  background: #eef4ff;
+  background: var(--accent-soft);
   padding: 2px 8px;
 }
 
@@ -370,7 +402,7 @@
 }
 
 .shape-primitive-selected {
-  filter: drop-shadow(0 0 4px rgba(47, 109, 229, 0.45));
+  filter: drop-shadow(0 0 4px rgba(var(--accent-rgb), 0.45));
 }
 
 .shape-control-guide {
@@ -387,12 +419,12 @@
 
 .shape-control-handle-end {
   fill: #ffffff;
-  stroke: #2f6de5;
+  stroke: var(--accent);
 }
 
 .shape-control-handle-control {
   fill: #ffffff;
-  stroke: #5e86c6;
+  stroke: var(--accent-strong);
 }
 
 .shape-control-handles:active .shape-control-handle {
@@ -405,7 +437,7 @@
 
 .shape-transform-move {
   fill: transparent;
-  stroke: #2f6de5;
+  stroke: var(--accent);
   stroke-width: 1.4;
   stroke-dasharray: 6 4;
   cursor: move;
@@ -414,7 +446,7 @@
 
 .shape-transform-handle {
   fill: #ffffff;
-  stroke: #2f6de5;
+  stroke: var(--accent);
   stroke-width: 2;
   cursor: nwse-resize;
   pointer-events: all;

@@ -48,10 +48,48 @@
     <span>选择框颜色</span>
     <input id="selectionGlowColor" type="color" />
   </label>
+  <label class="submenu-settings-row">
+    <span>主题色</span>
+    <input id="themeAccentColor" type="color" />
+  </label>
   <label class="submenu-settings-row submenu-settings-row-column">
     <span>发光范围</span>
     <input id="selectionGlowSize" type="number" min="1" max="30" step="1" />
   </label>
+  <label class="submenu-settings-row submenu-settings-row-column">
+    <span>等距对齐线距离</span>
+    <input id="snapEqualSpacingOffset" type="number" min="4" max="80" step="1" />
+  </label>
+
+  <div class="menu-group-title">自动对齐</div>
+  <div class="submenu-settings-row">
+    <span>直接重合</span>
+    <label class="toggle-switch" for="snapOverlapToggle">
+      <input id="snapOverlapToggle" class="toggle-checkbox" type="checkbox" />
+      <span class="toggle-slider" aria-hidden="true"></span>
+    </label>
+  </div>
+  <div class="submenu-settings-row">
+    <span>同一行/列/对角线</span>
+    <label class="toggle-switch" for="snapAxisDiagonalToggle">
+      <input id="snapAxisDiagonalToggle" class="toggle-checkbox" type="checkbox" />
+      <span class="toggle-slider" aria-hidden="true"></span>
+    </label>
+  </div>
+  <div class="submenu-settings-row">
+    <span>等距对齐</span>
+    <label class="toggle-switch" for="snapEqualSpacingToggle">
+      <input id="snapEqualSpacingToggle" class="toggle-checkbox" type="checkbox" />
+      <span class="toggle-slider" aria-hidden="true"></span>
+    </label>
+  </div>
+  <div class="submenu-settings-row">
+    <span>格点（自动对齐）</span>
+    <label class="toggle-switch" for="snapGridToggle">
+      <input id="snapGridToggle" class="toggle-checkbox" type="checkbox" />
+      <span class="toggle-slider" aria-hidden="true"></span>
+    </label>
+  </div>
 
   <div class="menu-group-title">杂项</div>
   <label class="submenu-settings-row submenu-settings-row-column">

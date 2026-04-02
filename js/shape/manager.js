@@ -107,6 +107,7 @@ export function createShapeManager({
     moved: false
   };
   let suppressCanvasClick = false;
+  let layerMoveMode = null;
 
   const clipboard = createShapeManagerClipboard({
     state,
@@ -842,6 +843,9 @@ export function createShapeManager({
     }
 
     const selectedIndices = getSelectedPrimitiveIndices(shape);
+    if (selectedIndices.length !== 1) {
+      layerMoveMode = null;
+    }
     if (!selectedIndices.length) {
       appendInfo(shapePropsList, "已取消图元选择，可点击画布中的图元继续编辑。", "shape-prop-empty");
       return;
@@ -884,12 +888,59 @@ export function createShapeManager({
     title.textContent = `当前图元: ${primitiveTypeLabel(primitive.type)} #${index + 1}`;
     shapePropsList.appendChild(title);
 
+    const layerTitle = document.createElement("div");
+    layerTitle.className = "shape-layer-title";
+    layerTitle.textContent = "排列";
+    shapePropsList.appendChild(layerTitle);
+
     const layerActions = document.createElement("div");
     layerActions.className = "shape-layer-actions";
-    layerActions.appendChild(createLayerActionButton("置底", shape, "bottom", index <= 0));
-    layerActions.appendChild(createLayerActionButton("下移", shape, "down", index <= 0));
-    layerActions.appendChild(createLayerActionButton("上移", shape, "up", index >= shape.editableElements.length - 1));
-    layerActions.appendChild(createLayerActionButton("置顶", shape, "top", index >= shape.editableElements.length - 1));
+    const isMoveMode = layerMoveMode && layerMoveMode.sourceIndex === index;
+    const canTargetMove = shape.editableElements.length > 1;
+    layerActions.appendChild(createLayerActionButton({
+      label: "置顶",
+      shape,
+      action: "top",
+      icon: "/img/layer/icon-layer-bring-to-front.svg",
+      disabled: index >= shape.editableElements.length - 1
+    }));
+    layerActions.appendChild(createLayerActionButton({
+      label: "置底",
+      shape,
+      action: "bottom",
+      icon: "/img/layer/icon-layer-send-to-back.svg",
+      disabled: index <= 0
+    }));
+    layerActions.appendChild(createLayerActionButton({
+      label: "上移",
+      shape,
+      action: "up",
+      icon: "/img/layer/icon-layer-bring-forward.svg",
+      disabled: index >= shape.editableElements.length - 1
+    }));
+    layerActions.appendChild(createLayerActionButton({
+      label: "下移",
+      shape,
+      action: "down",
+      icon: "/img/layer/icon-layer-send-backward.svg",
+      disabled: index <= 0
+    }));
+    layerActions.appendChild(createLayerActionButton({
+      label: "移到下方",
+      shape,
+      action: "move-under",
+      icon: "/img/layer/icon-layer-down-to.svg",
+      active: Boolean(isMoveMode && layerMoveMode.mode === "below"),
+      disabled: !canTargetMove
+    }));
+    layerActions.appendChild(createLayerActionButton({
+      label: "移到上方",
+      shape,
+      action: "move-over",
+      icon: "/img/layer/icon-layer-up-to.svg",
+      active: Boolean(isMoveMode && layerMoveMode.mode === "above"),
+      disabled: !canTargetMove
+    }));
     shapePropsList.appendChild(layerActions);
 
     if (primitive.type === "line" || primitive.type === "bezier") {
@@ -1722,6 +1773,22 @@ export function createShapeManager({
 
     const primitiveIndex = findPrimitiveIndex(event.target);
     const multiSelect = event.ctrlKey || event.metaKey;
+
+    if (layerMoveMode) {
+      if (Number.isInteger(primitiveIndex)) {
+        if (primitiveIndex !== layerMoveMode.sourceIndex) {
+          movePrimitiveRelativeToTarget(shape, layerMoveMode.sourceIndex, primitiveIndex, layerMoveMode.mode);
+        }
+        layerMoveMode = null;
+        renderEditorCanvas(shape);
+        renderPropertiesPanel(shape);
+        return;
+      }
+
+      if (!multiSelect) {
+        layerMoveMode = null;
+      }
+    }
     if (Number.isInteger(primitiveIndex)) {
       if (multiSelect) {
         const current = new Set(getSelectedPrimitiveIndices(shape));
@@ -2477,14 +2544,48 @@ export function createShapeManager({
     return null;
   }
 
-  function createLayerActionButton(label, shape, direction, disabled) {
+  function createLayerActionButton({ label, shape, action, icon, disabled, active }) {
     const button = document.createElement("button");
     button.type = "button";
-    button.className = "btn-ghost shape-layer-btn";
-    button.textContent = label;
+    button.className = "shape-layer-action";
+    if (active) {
+      button.classList.add("active");
+    }
+    button.title = label;
+    button.setAttribute("aria-label", label);
     button.disabled = Boolean(disabled);
+    if (icon) {
+      const image = document.createElement("img");
+      image.src = icon;
+      image.alt = "";
+      button.appendChild(image);
+    } else {
+      button.textContent = label;
+    }
+
     button.addEventListener("click", () => {
-      moveSelectedPrimitive(shape, direction);
+      if (button.disabled) {
+        return;
+      }
+
+      if (action === "move-under" || action === "move-over") {
+        const selectedIndex = getSingleSelectedPrimitiveIndex(shape);
+        if (!Number.isInteger(selectedIndex)) {
+          return;
+        }
+
+        const mode = action === "move-under" ? "below" : "above";
+        if (layerMoveMode && layerMoveMode.sourceIndex === selectedIndex && layerMoveMode.mode === mode) {
+          layerMoveMode = null;
+        } else {
+          layerMoveMode = { sourceIndex: selectedIndex, mode };
+        }
+        renderPropertiesPanel(shape);
+        return;
+      }
+
+      layerMoveMode = null;
+      moveSelectedPrimitive(shape, action);
     });
     return button;
   }
@@ -2519,6 +2620,34 @@ export function createShapeManager({
     const moved = shape.editableElements.splice(index, 1)[0];
     shape.editableElements.splice(targetIndex, 0, moved);
     setSingleSelectedPrimitive(shape, targetIndex);
+
+    syncShapeSvg(shape);
+    persistShapeLibrary();
+    renderEditorCanvas(shape);
+    renderPropertiesPanel(shape);
+    renderShapeLibraryList();
+    renderSubmenu();
+  }
+
+  function movePrimitiveRelativeToTarget(shape, sourceIndex, targetIndex, mode) {
+    if (!shape || !Array.isArray(shape.editableElements) || !shape.editableElements.length) {
+      return;
+    }
+
+    const length = shape.editableElements.length;
+    const source = clampPrimitiveIndex(sourceIndex, length);
+    const target = clampPrimitiveIndex(targetIndex, length);
+    if (source === target) {
+      return;
+    }
+
+    const [moved] = shape.editableElements.splice(source, 1);
+    let insertIndex = mode === "above" ? target + 1 : target;
+    if (source < insertIndex) {
+      insertIndex -= 1;
+    }
+    shape.editableElements.splice(insertIndex, 0, moved);
+    setSingleSelectedPrimitive(shape, insertIndex);
 
     syncShapeSvg(shape);
     persistShapeLibrary();
@@ -2603,14 +2732,20 @@ export function createShapeManager({
       return null;
     }
 
-    if (event.altKey) {
+    if (event.altKey || state.appSettings?.snapOverlap === false) {
+      return point;
+    }
+
+    const useAlign = state.appSettings?.snapAxisDiagonal !== false;
+    const useGrid = state.appSettings?.snapGrid !== false;
+    if (!useAlign && !useGrid) {
       return point;
     }
 
     const tolerance = getSnapToleranceInCanvas();
     return {
-      x: snapValue(point.x, snapTargets?.targetsX || [], tolerance),
-      y: snapValue(point.y, snapTargets?.targetsY || [], tolerance)
+      x: snapValue(point.x, useAlign ? (snapTargets?.targetsX || []) : [], tolerance, useGrid),
+      y: snapValue(point.y, useAlign ? (snapTargets?.targetsY || []) : [], tolerance, useGrid)
     };
   }
 
@@ -2626,8 +2761,11 @@ export function createShapeManager({
     return Math.max(1, Math.max(unitX, unitY) * snapConfig.pixelTolerance);
   }
 
-  function snapValue(value, targets, tolerance) {
-    const candidates = [...targets, Math.round(value / snapConfig.gridStep) * snapConfig.gridStep];
+  function snapValue(value, targets, tolerance, useGrid) {
+    const candidates = [...targets];
+    if (useGrid) {
+      candidates.push(Math.round(value / snapConfig.gridStep) * snapConfig.gridStep);
+    }
     let bestValue = value;
     let bestDistance = tolerance;
 

@@ -5,6 +5,11 @@
   --text: #1e2a39;
   --muted: #62708a;
   --accent: #2f6de5;
+  --accent-strong: #2a61cb;
+  --accent-soft: #eef4ff;
+  --accent-focus: #7fa9ff;
+  --accent-ink: #1f4f9a;
+  --accent-rgb: 47, 109, 229;
   --soft: #eef4ff;
   --selection-glow-color: rgba(47, 109, 229, 0.45);
   --selection-glow-size: 4px;
@@ -73,8 +78,8 @@ body {
 }
 
 .toggle-checkbox:checked+.toggle-slider {
-  background: #2f6de5;
-  border-color: #2a61cb;
+  background: var(--accent);
+  border-color: var(--accent-strong);
 }
 
 .toggle-checkbox:checked+.toggle-slider::before {
@@ -82,7 +87,7 @@ body {
 }
 
 .toggle-checkbox:focus-visible+.toggle-slider {
-  outline: 2px solid #7fa9ff;
+  outline: 2px solid var(--accent-focus);
   outline-offset: 2px;
 }
 
