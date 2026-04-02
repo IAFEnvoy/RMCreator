@@ -57,15 +57,30 @@
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 6px;
+  justify-items: center;
+  align-items: center;
+  width: fit-content;
+  margin: 0 auto;
 }
 
 .station-position-grid button {
   border: 1px solid #c9d6ea;
-  border-radius: 7px;
+  border-radius: 4px;
   background: #ffffff;
   color: #2e4667;
-  min-height: 30px;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
+}
+
+.station-position-grid button img {
+  width: 16px;
+  height: 16px;
+  display: block;
 }
 
 .station-position-grid button.active {
@@ -82,13 +97,17 @@
 
 .station-distance-controls {
   display: grid;
-  grid-template-columns: 88px 1fr;
+  grid-template-columns: 88px auto 1fr 1fr;
   gap: 6px;
   align-items: center;
 }
 
 .station-line-gap-controls {
-  grid-template-columns: 88px 1fr;
+  grid-template-columns: 88px auto 1fr 1fr;
+}
+
+.station-distance-toggle {
+  justify-self: center;
 }
 
 .station-distance-controls label {

@@ -32,6 +32,7 @@ export function createRenderer({
   openShapeManager,
   openStationManager,
   onAppSettingsChanged,
+  moveLineInStack,
   applyStationType,
   getStationTypeIndexByStation,
   onStateChanged
@@ -407,7 +408,6 @@ export function createRenderer({
       centerY: 0,
       pointerEvents: "none",
       textValueMap: station.textValues,
-      textStyleMap: station.textStyleValues,
       placementOverride: station.textPlacement
     });
     return true;
@@ -456,7 +456,6 @@ export function createRenderer({
       centerY: Number(station.y) || 0,
       pointerEvents: "none",
       textValueMap: station.textValues,
-      textStyleMap: station.textStyleValues,
       placementOverride: station.textPlacement
     });
   }
@@ -607,6 +606,7 @@ export function createRenderer({
     renderLines,
     renderShapes,
     renderTexts,
+    moveLineInStack,
     applyStationType,
     getStationTypeIndexByStation,
     onStateChanged

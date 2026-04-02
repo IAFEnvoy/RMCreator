@@ -64,7 +64,11 @@ export function createDefaultStationTextPlacement() {
       value: defaultTextDistance,
       paramId: ""
     },
-    lineGap: defaultBlockGap
+    lineGapBinding: {
+      mode: "value",
+      value: defaultBlockGap,
+      paramId: ""
+    }
   };
 }
 
@@ -123,6 +127,7 @@ export function normalizeTextBinding(raw, type, fallbackValue) {
 
 export function normalizeStationTextPlacement(raw, fallback = createDefaultStationTextPlacement()) {
   const source = raw && typeof raw === "object" ? raw : {};
+  const fallbackLineGapValue = fallback?.lineGapBinding?.value ?? fallback?.lineGap ?? defaultBlockGap;
   return {
     slot: normalizeTextSlot(source.slot || fallback.slot),
     distanceBinding: normalizeTextBinding(
@@ -130,9 +135,14 @@ export function normalizeStationTextPlacement(raw, fallback = createDefaultStati
       "number",
       fallback.distanceBinding.value
     ),
-    lineGap: Number.isFinite(Number(source.lineGap ?? fallback.lineGap ?? defaultBlockGap))
-      ? Number(source.lineGap ?? fallback.lineGap ?? defaultBlockGap)
-      : defaultBlockGap
+    lineGapBinding: normalizeTextBinding(
+      source.lineGapBinding
+      || (Object.prototype.hasOwnProperty.call(source, "lineGap")
+        ? { mode: "value", value: source.lineGap }
+        : null),
+      "number",
+      fallbackLineGapValue
+    )
   };
 }
 
@@ -264,7 +274,7 @@ export function appendStationTexts({
     preset.textPlacement || {
       slot: cards[0]?.placement?.slot,
       distanceBinding: cards[0]?.placement?.distanceBinding,
-      lineGap: defaultBlockGap
+      lineGapBinding: { mode: "value", value: defaultBlockGap, paramId: "" }
     }
   );
   const placementSource = placementOverride && typeof placementOverride === "object"
@@ -313,7 +323,12 @@ export function appendStationTexts({
     };
   });
 
-  const blockGap = Number.isFinite(Number(placement.lineGap)) ? Number(placement.lineGap) : defaultBlockGap;
+  const blockGap = Math.max(0, Number(resolveTextBindingValue(
+    placement.lineGapBinding,
+    "number",
+    runtimeParamMap,
+    defaultBlockGap
+  )) || defaultBlockGap);
   const totalHeight = blocks.reduce((sum, block, index) => {
     return sum + block.metrics.height + (index < blocks.length - 1 ? blockGap : 0);
   }, 0);

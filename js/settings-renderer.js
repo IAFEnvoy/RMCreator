@@ -32,6 +32,7 @@ export function createSettingsRenderer({
   renderLines,
   renderShapes,
   renderTexts,
+  moveLineInStack,
   applyStationType,
   getStationTypeIndexByStation,
   onStateChanged
@@ -65,6 +66,10 @@ export function createSettingsRenderer({
       .filter((entity) => entity.type === "shape")
       .map((entity) => state.shapes.find((item) => item.id === entity.id))
       .filter(Boolean);
+
+    if (selectedLines.length !== 1) {
+      state.lineMoveMode = null;
+    }
 
     const typeCount = [selectedStations.length, selectedLines.length, selectedTexts.length, selectedShapes.length]
       .filter((count) => count > 0)
@@ -135,7 +140,6 @@ export function createSettingsRenderer({
     const stationPreset = getStationPresetByTypeIndex(currentTypeIndex);
     const stationTextCards = normalizeStationTextCards(stationPreset?.textCards);
     ensureStationTextValues(station, stationTextCards);
-    ensureStationTextStyleValues(station, stationTextCards);
     ensureStationTextPlacement(station, stationPreset);
     const activeTextSlot = normalizeTextSlot(station.textPlacement?.slot);
 
@@ -151,12 +155,7 @@ export function createSettingsRenderer({
         const controlId = `stationTextValue-${escapeHtml(station.id)}-${cardId}`;
         const label = escapeHtml(String(card.label || `文本 ${index + 1}`));
         const allowMultiline = Boolean(card.allowMultiline);
-        const textStyle = normalizeTextStyleFlags(station.textStyleValues?.[card.id], card);
-        const toolbarHtml = buildTextStyleToolbarHtml({
-          scope: "station",
-          targetId: cardId,
-          textStyle
-        });
+        const textStyle = normalizeTextStyleFlags(card, card);
         const value = escapeHtml(normalizeStationTextContent(
           station.textValues?.[card.id] ?? card.defaultValue ?? "",
           allowMultiline
@@ -167,7 +166,6 @@ export function createSettingsRenderer({
         return `
               <div class="station-instance-text-item">
                 <label class="station-instance-text-label" for="${controlId}">${label}</label>
-                ${toolbarHtml}
                 ${controlHtml}
               </div>
             `;
@@ -180,15 +178,31 @@ export function createSettingsRenderer({
       <div class="field">
         <label>文本锚点</label>
         <div class="station-position-grid station-instance-anchor-grid" role="group" aria-label="文本锚点">
-          <button type="button" data-station-text-slot="nw" class="${activeTextSlot === "nw" ? "active" : ""}">↖</button>
-          <button type="button" data-station-text-slot="n" class="${activeTextSlot === "n" ? "active" : ""}">↑</button>
-          <button type="button" data-station-text-slot="ne" class="${activeTextSlot === "ne" ? "active" : ""}">↗</button>
-          <button type="button" data-station-text-slot="w" class="${activeTextSlot === "w" ? "active" : ""}">←</button>
-          <button type="button" class="disabled" disabled>•</button>
-          <button type="button" data-station-text-slot="e" class="${activeTextSlot === "e" ? "active" : ""}">→</button>
-          <button type="button" data-station-text-slot="sw" class="${activeTextSlot === "sw" ? "active" : ""}">↙</button>
-          <button type="button" data-station-text-slot="s" class="${activeTextSlot === "s" ? "active" : ""}">↓</button>
-          <button type="button" data-station-text-slot="se" class="${activeTextSlot === "se" ? "active" : ""}">↘</button>
+          <button type="button" data-station-text-slot="nw" class="${activeTextSlot === "nw" ? "active" : ""}">
+            <img src="/img/arrow/icon-arrow-up-left.svg" alt="左上" />
+          </button>
+          <button type="button" data-station-text-slot="n" class="${activeTextSlot === "n" ? "active" : ""}">
+            <img src="/img/arrow/icon-arrow-up.svg" alt="上" />
+          </button>
+          <button type="button" data-station-text-slot="ne" class="${activeTextSlot === "ne" ? "active" : ""}">
+            <img src="/img/arrow/icon-arrow-up-right.svg" alt="右上" />
+          </button>
+          <button type="button" data-station-text-slot="w" class="${activeTextSlot === "w" ? "active" : ""}">
+            <img src="/img/arrow/icon-arrow-left.svg" alt="左" />
+          </button>
+          <button type="button" class="disabled" disabled></button>
+          <button type="button" data-station-text-slot="e" class="${activeTextSlot === "e" ? "active" : ""}">
+            <img src="/img/arrow/icon-arrow-right.svg" alt="右" />
+          </button>
+          <button type="button" data-station-text-slot="sw" class="${activeTextSlot === "sw" ? "active" : ""}">
+            <img src="/img/arrow/icon-arrow-down-left.svg" alt="左下" />
+          </button>
+          <button type="button" data-station-text-slot="s" class="${activeTextSlot === "s" ? "active" : ""}">
+            <img src="/img/arrow/icon-arrow-down.svg" alt="下" />
+          </button>
+          <button type="button" data-station-text-slot="se" class="${activeTextSlot === "se" ? "active" : ""}">
+            <img src="/img/arrow/icon-arrow-down-right.svg" alt="右下" />
+          </button>
         </div>
       </div>
     `;
@@ -264,7 +278,7 @@ export function createSettingsRenderer({
       }
 
       const sourceCard = stationTextCards.find((item) => String(item?.id || "") === cardId);
-      const textStyle = normalizeTextStyleFlags(station.textStyleValues?.[cardId], sourceCard);
+      const textStyle = normalizeTextStyleFlags(sourceCard, sourceCard);
       applyTextInputStyle(inputEl, textStyle);
 
       const apply = () => {
@@ -284,45 +298,6 @@ export function createSettingsRenderer({
 
       inputEl.addEventListener("input", apply);
       inputEl.addEventListener("change", apply);
-    });
-
-    settingsBody.querySelectorAll("[data-station-text-style-card-id][data-text-style-flag]").forEach((button) => {
-      button.addEventListener("click", () => {
-        const cardId = String(button.getAttribute("data-station-text-style-card-id") || "").trim();
-        const flag = String(button.getAttribute("data-text-style-flag") || "").trim();
-        if (!cardId || !isSupportedTextStyleFlag(flag)) {
-          return;
-        }
-
-        if (!station.textStyleValues || typeof station.textStyleValues !== "object") {
-          station.textStyleValues = {};
-        }
-
-        const sourceCard = stationTextCards.find((item) => String(item?.id || "") === cardId) || {};
-        const current = normalizeTextStyleFlags(station.textStyleValues[cardId], sourceCard);
-        const next = {
-          ...current,
-          [flag]: !current[flag]
-        };
-        station.textStyleValues[cardId] = next;
-
-        const control = settingsBody.querySelector(`[data-station-text-card-id="${cssEscapeAttr(cardId)}"]`);
-        if (control) {
-          applyTextInputStyle(control, next);
-        }
-
-        settingsBody
-          .querySelectorAll(`[data-station-text-style-card-id="${cssEscapeAttr(cardId)}"]`)
-          .forEach((toolbarButton) => {
-            const toolbarFlag = toolbarButton.getAttribute("data-text-style-flag");
-            const isActive = Boolean(toolbarFlag && next[toolbarFlag]);
-            toolbarButton.classList.toggle("active", isActive);
-            toolbarButton.setAttribute("aria-pressed", isActive ? "true" : "false");
-          });
-
-        renderStations();
-        onStateChanged?.({ coalesceKey: "station-text-style" });
-      });
     });
 
     settingsBody.querySelectorAll("[data-station-text-slot]").forEach((button) => {
@@ -410,6 +385,10 @@ export function createSettingsRenderer({
       return;
     }
 
+    if (state.lineMoveMode && state.lineMoveMode.sourceId !== edge.id) {
+      state.lineMoveMode = null;
+    }
+
     const lineTypeOptions = state.lineTypes
       .map((type) => `<option value="${escapeHtml(type.id)}" ${type.id === edge.lineTypeId ? "selected" : ""}>${escapeHtml(type.name)}</option>`)
       .join("");
@@ -446,6 +425,43 @@ export function createSettingsRenderer({
       lineStartOffset: String(Number(edge.startOffset) || 0),
       lineEndOffset: String(Number(edge.endOffset) || 0),
       colorListEditorHtml
+    });
+
+    const layerButtons = settingsBody.querySelectorAll("[data-line-layer-action]");
+    layerButtons.forEach((button) => {
+      const action = button.getAttribute("data-line-layer-action") || "";
+      const mode = button.getAttribute("data-line-layer-mode") || "";
+      const isActive = Boolean(
+        mode
+        && state.lineMoveMode
+        && state.lineMoveMode.sourceId === edge.id
+        && state.lineMoveMode.mode === mode
+      );
+
+      if (mode) {
+        button.classList.toggle("active", isActive);
+        button.setAttribute("aria-pressed", isActive ? "true" : "false");
+      }
+
+      button.addEventListener("click", () => {
+        if (action === "move-under" || action === "move-over") {
+          const nextMode = action === "move-under" ? "below" : "above";
+          if (state.lineMoveMode && state.lineMoveMode.sourceId === edge.id && state.lineMoveMode.mode === nextMode) {
+            state.lineMoveMode = null;
+          } else {
+            state.lineMoveMode = { sourceId: edge.id, mode: nextMode };
+          }
+          renderSettings();
+          return;
+        }
+
+        const moved = moveLineInStack?.({ sourceId: edge.id, mode: action });
+        if (moved) {
+          renderLines();
+          renderSettings();
+          onStateChanged?.({ coalesceKey: "line-order" });
+        }
+      });
     });
 
     const lineTypeSelect = document.getElementById("lineTypeSelect");

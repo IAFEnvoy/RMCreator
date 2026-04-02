@@ -310,28 +310,49 @@
                 <span id="stationPlacementTitle">文字位置</span>
               </div>
               <div class="station-position-grid" id="stationPositionGrid" role="group" aria-label="文字位置">
-                <button type="button" data-slot="nw">↖</button>
-                <button type="button" data-slot="n">↑</button>
-                <button type="button" data-slot="ne">↗</button>
-                <button type="button" data-slot="w">←</button>
-                <button type="button" class="disabled" disabled>•</button>
-                <button type="button" data-slot="e">→</button>
-                <button type="button" data-slot="sw">↙</button>
-                <button type="button" data-slot="s">↓</button>
-                <button type="button" data-slot="se">↘</button>
+                <button type="button" data-slot="nw">
+                  <img src="/img/arrow/icon-arrow-up-left.svg" alt="左上" />
+                </button>
+                <button type="button" data-slot="n">
+                  <img src="/img/arrow/icon-arrow-up.svg" alt="上" />
+                </button>
+                <button type="button" data-slot="ne">
+                  <img src="/img/arrow/icon-arrow-up-right.svg" alt="右上" />
+                </button>
+                <button type="button" data-slot="w">
+                  <img src="/img/arrow/icon-arrow-left.svg" alt="左" />
+                </button>
+                <button type="button" class="disabled" disabled></button>
+                <button type="button" data-slot="e">
+                  <img src="/img/arrow/icon-arrow-right.svg" alt="右" />
+                </button>
+                <button type="button" data-slot="sw">
+                  <img src="/img/arrow/icon-arrow-down-left.svg" alt="左下" />
+                </button>
+                <button type="button" data-slot="s">
+                  <img src="/img/arrow/icon-arrow-down.svg" alt="下" />
+                </button>
+                <button type="button" data-slot="se">
+                  <img src="/img/arrow/icon-arrow-down-right.svg" alt="右下" />
+                </button>
               </div>
               <div class="station-distance-controls">
-                <label for="stationTextDistanceMode">文字距离</label>
-                <select id="stationTextDistanceMode">
-                  <option value="value">固定值</option>
-                  <option value="param">参数引用</option>
-                </select>
+                <label for="stationTextDistanceValue">文字距离</label>
+                <label class="toggle-switch station-distance-toggle" for="stationTextDistanceUseParam" title="参数模式">
+                  <input id="stationTextDistanceUseParam" class="toggle-checkbox" type="checkbox" />
+                  <span class="toggle-slider" aria-hidden="true"></span>
+                </label>
                 <input id="stationTextDistanceValue" type="number" step="0.1" min="0" value="18" />
                 <select id="stationTextDistanceParamSelect"></select>
               </div>
               <div class="station-distance-controls station-line-gap-controls">
                 <label for="stationTextLineGap">文本间距</label>
+                <label class="toggle-switch station-distance-toggle" for="stationTextLineGapUseParam" title="参数模式">
+                  <input id="stationTextLineGapUseParam" class="toggle-checkbox" type="checkbox" />
+                  <span class="toggle-slider" aria-hidden="true"></span>
+                </label>
                 <input id="stationTextLineGap" type="number" step="0.1" value="4" />
+                <select id="stationTextLineGapParamSelect"></select>
               </div>
             </section>
             <div class="field">

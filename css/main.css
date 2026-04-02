@@ -9,7 +9,7 @@
   height: 62px;
   display: flex;
   align-items: center;
-  gap: 24px;
+  gap: 10px;
   padding: 0 16px;
   position: absolute;
   left: 12px;
@@ -629,6 +629,73 @@
 
 .station-instance-anchor-grid {
   margin-top: 2px;
+  justify-items: center;
+  align-items: center;
+  width: fit-content;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.station-instance-anchor-grid button {
+  width: 34px;
+  height: 34px;
+  border-radius: 4px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.station-instance-anchor-grid button img {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+
+.line-layer-actions {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+  margin: 6px 0 4px;
+}
+
+.line-layer-title {
+  margin-top: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #566781;
+}
+
+.line-layer-action {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--text);
+  padding: 6px;
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  justify-content: center;
+}
+
+.line-layer-action:hover {
+  border-color: #b8c7df;
+  background: #f9fbff;
+}
+
+.line-layer-action.active {
+  border-color: #5a8ef0;
+  background: #e9f1ff;
+  color: #1f4f9a;
+}
+
+.line-layer-action img {
+  width: 18px;
+  height: 18px;
+  display: block;
 }
 
 .export-modal {

@@ -63,6 +63,7 @@ const state = {
   shapeLibrary: [],
   stationLibrary: [],
   selectedEntities: [],
+  lineMoveMode: null,
   drag: {
     mode: null,
     stationId: null,
@@ -106,6 +107,77 @@ const createLineTypeId = () => createUniqueLineTypeId(new Set(state.lineTypes.ma
 const createShapeId = () => createRandomLineTypeId("shape");
 const createStationPresetId = () => createRandomLineTypeId("station-preset");
 
+function moveLineInStack({ sourceId, targetId, mode }) {
+  const edges = state.edges;
+  const sourceIndex = edges.findIndex((edge) => edge.id === sourceId);
+  if (sourceIndex < 0) {
+    return false;
+  }
+
+  if (mode === "to-front") {
+    if (sourceIndex === edges.length - 1) {
+      return false;
+    }
+    edges.push(edges.splice(sourceIndex, 1)[0]);
+    return true;
+  }
+
+  if (mode === "to-back") {
+    if (sourceIndex === 0) {
+      return false;
+    }
+    edges.unshift(edges.splice(sourceIndex, 1)[0]);
+    return true;
+  }
+
+  if (mode === "up") {
+    if (sourceIndex === edges.length - 1) {
+      return false;
+    }
+    const nextIndex = sourceIndex + 1;
+    [edges[sourceIndex], edges[nextIndex]] = [edges[nextIndex], edges[sourceIndex]];
+    return true;
+  }
+
+  if (mode === "down") {
+    if (sourceIndex === 0) {
+      return false;
+    }
+    const nextIndex = sourceIndex - 1;
+    [edges[sourceIndex], edges[nextIndex]] = [edges[nextIndex], edges[sourceIndex]];
+    return true;
+  }
+
+  if (mode === "below" || mode === "above") {
+    if (!targetId || targetId === sourceId) {
+      return false;
+    }
+
+    const targetIndex = edges.findIndex((edge) => edge.id === targetId);
+    if (targetIndex < 0) {
+      return false;
+    }
+
+    if (mode === "below" && sourceIndex === targetIndex - 1) {
+      return false;
+    }
+
+    if (mode === "above" && sourceIndex === targetIndex + 1) {
+      return false;
+    }
+
+    const [edge] = edges.splice(sourceIndex, 1);
+    let insertIndex = mode === "above" ? targetIndex + 1 : targetIndex;
+    if (sourceIndex < insertIndex) {
+      insertIndex -= 1;
+    }
+    edges.splice(insertIndex, 0, edge);
+    return true;
+  }
+
+  return false;
+}
+
 let defaultLineTypes = [];
 let lineManager = null;
 let shapeManager = null;
@@ -121,6 +193,7 @@ const renderer = createRenderer({
   openShapeManager: () => shapeManager?.open(),
   openStationManager: () => stationManager?.open(),
   onAppSettingsChanged: updateAppSettings,
+  moveLineInStack,
   applyStationType,
   getStationTypeIndexByStation,
   onStateChanged: commitStateChange
@@ -187,6 +260,7 @@ const eventBinder = createEventBinder({
   elements,
   renderer,
   findLineType,
+  moveLineInStack,
   addStation,
   addLine,
   addText,

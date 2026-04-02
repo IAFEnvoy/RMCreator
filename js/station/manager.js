@@ -60,10 +60,12 @@ export function createStationManager({
     stationTextPlacementPanel,
     stationPlacementTitle,
     stationPositionGrid,
-    stationTextDistanceMode,
+    stationTextDistanceUseParam,
     stationTextDistanceValue,
     stationTextDistanceParamSelect,
+    stationTextLineGapUseParam,
     stationTextLineGap,
+    stationTextLineGapParamSelect,
     stationPreviewResetBtn,
     stationPreviewCanvasWrap,
     stationPreviewCanvas,
@@ -150,10 +152,12 @@ export function createStationManager({
       || !stationTextPlacementPanel
       || !stationPlacementTitle
       || !stationPositionGrid
-      || !stationTextDistanceMode
+      || !stationTextDistanceUseParam
       || !stationTextDistanceValue
       || !stationTextDistanceParamSelect
+      || !stationTextLineGapUseParam
       || !stationTextLineGap
+      || !stationTextLineGapParamSelect
       || !stationPreviewResetBtn
       || !stationPreviewCanvasWrap
       || !stationPreviewCanvas
@@ -261,10 +265,12 @@ export function createStationManager({
     });
 
     stationPositionGrid.addEventListener("click", onPositionGridClicked);
-    stationTextDistanceMode.addEventListener("change", onTextDistanceChanged);
+    stationTextDistanceUseParam.addEventListener("change", onTextDistanceChanged);
     stationTextDistanceValue.addEventListener("change", onTextDistanceChanged);
     stationTextDistanceParamSelect.addEventListener("change", onTextDistanceChanged);
+    stationTextLineGapUseParam.addEventListener("change", onTextLineGapChanged);
     stationTextLineGap.addEventListener("change", onTextLineGapChanged);
+    stationTextLineGapParamSelect.addEventListener("change", onTextLineGapChanged);
 
     stationManagerModal.hidden = true;
   }
@@ -1124,11 +1130,16 @@ export function createStationManager({
         button.classList.remove("active");
         button.disabled = true;
       });
-      stationTextDistanceMode.disabled = true;
+      stationTextDistanceUseParam.disabled = true;
+      stationTextDistanceUseParam.checked = false;
       stationTextDistanceValue.disabled = true;
       stationTextDistanceParamSelect.disabled = true;
+      stationTextLineGapUseParam.disabled = true;
+      stationTextLineGapUseParam.checked = false;
       stationTextLineGap.disabled = true;
+      stationTextLineGapParamSelect.disabled = true;
       stationTextDistanceParamSelect.innerHTML = "<option value=\"\">暂无数字参数</option>";
+      stationTextLineGapParamSelect.innerHTML = "<option value=\"\">暂无数字参数</option>";
       return;
     }
 
@@ -1138,7 +1149,7 @@ export function createStationManager({
     preset.textPlacement = normalizeStationTextPlacement(preset.textPlacement || {
       slot: preset.textCards?.[0]?.placement?.slot,
       distanceBinding: preset.textCards?.[0]?.placement?.distanceBinding,
-      lineGap: 4
+      lineGapBinding: { mode: "value", value: 4, paramId: "" }
     });
     const slot = normalizeTextSlot(preset.textPlacement.slot);
     stationPositionGrid.querySelectorAll("button[data-slot]").forEach((button) => {
@@ -1152,32 +1163,47 @@ export function createStationManager({
     stationTextDistanceParamSelect.innerHTML = options.length
       ? options.map((option) => `<option value=\"${option.id}\">${option.label}</option>`).join("")
       : "<option value=\"\">暂无数字参数</option>";
+    stationTextLineGapParamSelect.innerHTML = options.length
+      ? options.map((option) => `<option value=\"${option.id}\">${option.label}</option>`).join("")
+      : "<option value=\"\">暂无数字参数</option>";
 
     const distanceBinding = normalizeTextBinding(preset.textPlacement?.distanceBinding, "number", 18);
+    const lineGapBinding = normalizeTextBinding(
+      preset.textPlacement?.lineGapBinding
+      || (Object.prototype.hasOwnProperty.call(preset.textPlacement || {}, "lineGap")
+        ? { mode: "value", value: preset.textPlacement.lineGap }
+        : null),
+      "number",
+      4
+    );
     preset.textPlacement = {
       slot,
       distanceBinding,
-      lineGap: Number.isFinite(Number(preset.textPlacement?.lineGap))
-        ? Number(preset.textPlacement.lineGap)
-        : 4
+      lineGapBinding
     };
 
-    stationTextDistanceMode.disabled = false;
-    stationTextDistanceMode.value = distanceBinding.mode;
+    const hasNumberParams = options.length > 0;
+    stationTextDistanceUseParam.disabled = !hasNumberParams;
+    stationTextDistanceUseParam.checked = hasNumberParams && distanceBinding.mode === "param";
     stationTextDistanceValue.value = Number.isFinite(Number(distanceBinding.value))
       ? String(Number(distanceBinding.value))
       : "18";
-    stationTextLineGap.disabled = false;
-    stationTextLineGap.value = Number.isFinite(Number(preset.textPlacement.lineGap))
-      ? String(Number(preset.textPlacement.lineGap))
-      : "4";
     stationTextDistanceParamSelect.value = options.some((item) => item.id === distanceBinding.paramId)
       ? distanceBinding.paramId
       : (options[0]?.id || "");
+    stationTextDistanceValue.disabled = stationTextDistanceUseParam.checked;
+    stationTextDistanceParamSelect.disabled = !stationTextDistanceUseParam.checked || !hasNumberParams;
 
-    const useParam = stationTextDistanceMode.value === "param";
-    stationTextDistanceValue.disabled = useParam;
-    stationTextDistanceParamSelect.disabled = !useParam || !options.length;
+    stationTextLineGapUseParam.disabled = !hasNumberParams;
+    stationTextLineGapUseParam.checked = hasNumberParams && lineGapBinding.mode === "param";
+    stationTextLineGap.value = Number.isFinite(Number(lineGapBinding.value))
+      ? String(Number(lineGapBinding.value))
+      : "4";
+    stationTextLineGapParamSelect.value = options.some((item) => item.id === lineGapBinding.paramId)
+      ? lineGapBinding.paramId
+      : (options[0]?.id || "");
+    stationTextLineGap.disabled = stationTextLineGapUseParam.checked;
+    stationTextLineGapParamSelect.disabled = !stationTextLineGapUseParam.checked || !hasNumberParams;
   }
 
   function onPositionGridClicked(event) {
@@ -1204,9 +1230,16 @@ export function createStationManager({
       return;
     }
 
+    const shape = getShapeById(preset.shapeId);
+    const options = buildStationTextParamOptions({ preset, shape }).filter((item) => item.type === "number");
+    const hasNumberParams = options.length > 0;
+    if (!hasNumberParams) {
+      stationTextDistanceUseParam.checked = false;
+    }
+
     preset.textPlacement = normalizeStationTextPlacement(preset.textPlacement);
     preset.textPlacement.distanceBinding = normalizeTextBinding({
-      mode: stationTextDistanceMode.value,
+      mode: stationTextDistanceUseParam.checked && hasNumberParams ? "param" : "value",
       value: Number(stationTextDistanceValue.value) || 18,
       paramId: stationTextDistanceParamSelect.value
     }, "number", 18);
@@ -1222,10 +1255,19 @@ export function createStationManager({
       return;
     }
 
+    const shape = getShapeById(preset.shapeId);
+    const options = buildStationTextParamOptions({ preset, shape }).filter((item) => item.type === "number");
+    const hasNumberParams = options.length > 0;
+    if (!hasNumberParams) {
+      stationTextLineGapUseParam.checked = false;
+    }
+
     preset.textPlacement = normalizeStationTextPlacement(preset.textPlacement);
-    preset.textPlacement.lineGap = Number.isFinite(Number(stationTextLineGap.value))
-      ? Number(stationTextLineGap.value)
-      : 0;
+    preset.textPlacement.lineGapBinding = normalizeTextBinding({
+      mode: stationTextLineGapUseParam.checked && hasNumberParams ? "param" : "value",
+      value: Number(stationTextLineGap.value) || 4,
+      paramId: stationTextLineGapParamSelect.value
+    }, "number", 4);
 
     persistStationLibrary();
     renderTextPlacementPanel(preset);

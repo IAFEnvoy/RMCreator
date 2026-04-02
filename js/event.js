@@ -5,6 +5,7 @@ export function createEventBinder({
   elements,
   renderer,
   findLineType,
+  moveLineInStack,
   addStation,
   addLine,
   addText,
@@ -406,6 +407,30 @@ export function createEventBinder({
     const lineEl = target.closest("[data-line-id]");
     const shapeEl = target.closest("[data-shape-id]");
     const textEl = target.closest("[data-text-id]");
+
+    if (state.lineMoveMode) {
+      if (lineEl) {
+        const targetLineId = lineEl.dataset.lineId;
+        if (targetLineId && targetLineId !== state.lineMoveMode.sourceId) {
+          const moved = moveLineInStack?.({
+            sourceId: state.lineMoveMode.sourceId,
+            targetId: targetLineId,
+            mode: state.lineMoveMode.mode
+          });
+          if (moved) {
+            renderer.renderLines();
+            renderer.renderSettings();
+            onStateChanged?.({ coalesceKey: "line-order" });
+          }
+        }
+        state.lineMoveMode = null;
+        renderer.renderSettings();
+        return;
+      }
+
+      state.lineMoveMode = null;
+      renderer.renderSettings();
+    }
 
     if (stationEl) {
       const entity = { type: "station", id: stationEl.dataset.stationId };
