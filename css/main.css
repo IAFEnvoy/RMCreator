@@ -695,7 +695,45 @@
   margin: 6px 0 4px;
 }
 
+.align-actions {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+  margin: 6px 0 12px;
+}
+
+.align-action {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--text);
+  padding: 6px;
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.align-action:hover {
+  border-color: #b8c7df;
+  background: #f9fbff;
+}
+
+.align-action img {
+  width: 20px;
+  height: 20px;
+  display: block;
+}
+
 .line-layer-title {
+  margin-top: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #566781;
+}
+
+.settings-card-title {
   margin-top: 6px;
   font-size: 12px;
   font-weight: 700;
@@ -729,8 +767,8 @@
 }
 
 .line-layer-action img {
-  width: 18px;
-  height: 18px;
+  width: 22px;
+  height: 22px;
   display: block;
 }
 

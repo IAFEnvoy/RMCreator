@@ -16,7 +16,10 @@ const templateSources = {
   "settings-line-single": "/template/settings-line-single.html",
   "settings-line-batch": "/template/settings-line-batch.html",
   "settings-text-single": "/template/settings-text-single.html",
-  "settings-shape-single": "/template/settings-shape-single.html"
+  "settings-shape-single": "/template/settings-shape-single.html",
+  "settings-shape-batch": "/template/settings-shape-batch.html",
+  "settings-arrange-card": "/template/settings-arrange-card.html",
+  "settings-align-card": "/template/settings-align-card.html"
 };
 
 async function fetchTemplate(url) {

@@ -79,7 +79,25 @@ export function createSettingsRenderer({
       ? `<div class="kv">已选择：车站 ${selectedStations.length} 个，线条 ${selectedLines.length} 条，文本 ${selectedTexts.length} 个，图形 ${selectedShapes.length} 个</div>`
       : "";
 
+    const alignTargets = [
+      ...selectedStations.map((item) => ({ item, type: "station" })),
+      ...selectedShapes.map((item) => ({ item, type: "shape" }))
+    ];
+    const canAlign = alignTargets.length >= 2;
+
     if (typeCount > 1) {
+      if (canAlign && selectedTexts.length === 0) {
+        const note = selectedLines.length
+          ? "<div class=\"kv\">已忽略线条，仅对车站和图形进行对齐与分布。</div>"
+          : "";
+        settingsBody.innerHTML = renderTemplate("settings-message", {
+          summaryHtml,
+          messageHtml: `${renderTemplate("settings-align-card")}${note}`
+        });
+        bindAlignControls(alignTargets);
+        return;
+      }
+
       settingsBody.innerHTML = renderTemplate("settings-message", {
         summaryHtml,
         messageHtml: "<div class=\"kv\">当前包含多种类型，暂不提供批量属性设置。</div>"
@@ -121,10 +139,7 @@ export function createSettingsRenderer({
       if (selectedShapes.length === 1) {
         renderSingleShape(selectedShapes[0], summaryHtml);
       } else {
-        settingsBody.innerHTML = renderTemplate("settings-message", {
-          summaryHtml,
-          messageHtml: "<div class=\"kv\">图形多选暂不支持批量设置。</div>"
-        });
+        renderBatchShapes(selectedShapes, summaryHtml);
       }
     }
   };
@@ -358,8 +373,11 @@ export function createSettingsRenderer({
 
     settingsBody.innerHTML = renderTemplate("settings-station-batch", {
       summaryHtml,
-      stationTypeOptions
+      stationTypeOptions,
+      alignCardHtml: renderTemplate("settings-align-card")
     });
+
+    bindAlignControls(stations.map((item) => ({ item, type: "station" })));
 
     const batchStationTypeSelect = document.getElementById("batchStationTypeSelect");
     batchStationTypeSelect.addEventListener("change", () => {
@@ -373,6 +391,15 @@ export function createSettingsRenderer({
       renderSettings();
       onStateChanged?.();
     });
+  }
+
+  function renderBatchShapes(shapes, summaryHtml) {
+    settingsBody.innerHTML = renderTemplate("settings-shape-batch", {
+      summaryHtml,
+      alignCardHtml: renderTemplate("settings-align-card")
+    });
+
+    bindAlignControls(shapes.map((item) => ({ item, type: "shape" })));
   }
 
   function renderSingleLine(edge, summaryHtml) {
@@ -417,6 +444,7 @@ export function createSettingsRenderer({
 
     settingsBody.innerHTML = renderTemplate("settings-line-single", {
       summaryHtml,
+      arrangeCardHtml: renderTemplate("settings-arrange-card"),
       lineTypeOptions,
       geometryOptions,
       lineFlipChecked: edge.flip ? "checked" : "",
@@ -890,6 +918,78 @@ export function createSettingsRenderer({
 
       inputEl.addEventListener("input", apply);
       inputEl.addEventListener("change", apply);
+    });
+  }
+
+  function bindAlignControls(items) {
+    const buttons = settingsBody.querySelectorAll("[data-align-action]");
+    if (!buttons.length) {
+      return;
+    }
+
+    const applyAlignment = (action) => {
+      if (!Array.isArray(items) || items.length < 2) {
+        return;
+      }
+
+      const positions = items.map(({ item, type }) => ({
+        item,
+        type,
+        x: Number(item.x) || 0,
+        y: Number(item.y) || 0
+      }));
+      if (action === "align-left") {
+        const minX = Math.min(...positions.map((entry) => entry.x));
+        positions.forEach((entry) => { entry.item.x = minX; });
+      } else if (action === "align-right") {
+        const maxX = Math.max(...positions.map((entry) => entry.x));
+        positions.forEach((entry) => { entry.item.x = maxX; });
+      } else if (action === "align-top") {
+        const minY = Math.min(...positions.map((entry) => entry.y));
+        positions.forEach((entry) => { entry.item.y = minY; });
+      } else if (action === "align-bottom") {
+        const maxY = Math.max(...positions.map((entry) => entry.y));
+        positions.forEach((entry) => { entry.item.y = maxY; });
+      } else if (action === "distribute-x") {
+        if (positions.length < 3) {
+          return;
+        }
+        const sorted = [...positions].sort((a, b) => a.x - b.x);
+        const minX = sorted[0].x;
+        const maxX = sorted[sorted.length - 1].x;
+        const step = (maxX - minX) / (sorted.length - 1 || 1);
+        sorted.forEach((entry, index) => { entry.item.x = minX + step * index; });
+      } else if (action === "distribute-y") {
+        if (positions.length < 3) {
+          return;
+        }
+        const sorted = [...positions].sort((a, b) => a.y - b.y);
+        const minY = sorted[0].y;
+        const maxY = sorted[sorted.length - 1].y;
+        const step = (maxY - minY) / (sorted.length - 1 || 1);
+        sorted.forEach((entry, index) => { entry.item.y = minY + step * index; });
+      }
+
+      const hasStation = positions.some((entry) => entry.type === "station");
+      const hasShape = positions.some((entry) => entry.type === "shape");
+      if (hasStation) {
+        renderStations();
+        renderLines();
+      }
+      if (hasShape) {
+        renderShapes();
+      }
+
+      onStateChanged?.({ coalesceKey: "align-multi" });
+      renderSettings();
+    };
+
+    buttons.forEach((button) => {
+      const action = button.getAttribute("data-align-action");
+      if (!action) {
+        return;
+      }
+      button.addEventListener("click", () => applyAlignment(action));
     });
   }
 
