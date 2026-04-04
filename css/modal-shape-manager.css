@@ -240,7 +240,8 @@
 }
 
 .shape-prop-item input:not(.toggle-checkbox),
-.shape-prop-item select {
+.shape-prop-item select,
+.shape-prop-item .color-modal-trigger {
   border: 1px solid var(--line);
   border-radius: 7px;
   padding: 6px 8px;
@@ -248,9 +249,9 @@
   background: #fff;
 }
 
-.shape-prop-item input[type="color"] {
+.shape-prop-item .color-modal-trigger {
   min-height: 34px;
-  padding: 2px;
+  justify-content: flex-start;
 }
 
 .shape-prop-toggle {
@@ -374,7 +375,8 @@
 }
 
 .shape-param-item input:not(.toggle-checkbox),
-.shape-param-item select {
+.shape-param-item select,
+.shape-param-item .color-modal-trigger {
   border: 1px solid var(--line);
   border-radius: 7px;
   padding: 6px 8px;
@@ -382,9 +384,9 @@
   background: #fff;
 }
 
-.shape-param-item input[type="color"] {
+.shape-param-item .color-modal-trigger {
   min-height: 34px;
-  padding: 2px;
+  justify-content: flex-start;
 }
 
 .shape-param-default {

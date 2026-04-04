@@ -10,6 +10,7 @@
   <link rel="stylesheet" href="css/modal-line-manager.css" />
   <link rel="stylesheet" href="css/modal-shape-manager.css" />
   <link rel="stylesheet" href="css/modal-station-manager.css" />
+  <link rel="stylesheet" href="css/modal-color-picker.css" />
   <link rel="icon" href="favicon.webp" />
 </head>
 
@@ -339,21 +340,34 @@
               </div>
               <div class="station-distance-controls">
                 <label for="stationTextDistanceValue">文字距离</label>
-                <label class="toggle-switch station-distance-toggle" for="stationTextDistanceUseParam" title="参数模式">
-                  <input id="stationTextDistanceUseParam" class="toggle-checkbox" type="checkbox" />
-                  <span class="toggle-slider" aria-hidden="true"></span>
-                </label>
+                <div class="shape-prop-param-toggle station-distance-toggle" title="参数模式">
+                  <span>参数</span>
+                  <label class="toggle-switch" for="stationTextDistanceUseParam">
+                    <input id="stationTextDistanceUseParam" class="toggle-checkbox" type="checkbox" />
+                    <span class="toggle-slider" aria-hidden="true"></span>
+                  </label>
+                </div>
                 <input id="stationTextDistanceValue" type="number" step="0.1" min="0" value="18" />
                 <select id="stationTextDistanceParamSelect"></select>
               </div>
               <div class="station-distance-controls station-line-gap-controls">
                 <label for="stationTextLineGap">文本间距</label>
-                <label class="toggle-switch station-distance-toggle" for="stationTextLineGapUseParam" title="参数模式">
-                  <input id="stationTextLineGapUseParam" class="toggle-checkbox" type="checkbox" />
-                  <span class="toggle-slider" aria-hidden="true"></span>
-                </label>
+                <div class="shape-prop-param-toggle station-distance-toggle" title="参数模式">
+                  <span>参数</span>
+                  <label class="toggle-switch" for="stationTextLineGapUseParam">
+                    <input id="stationTextLineGapUseParam" class="toggle-checkbox" type="checkbox" />
+                    <span class="toggle-slider" aria-hidden="true"></span>
+                  </label>
+                </div>
                 <input id="stationTextLineGap" type="number" step="0.1" value="4" />
                 <select id="stationTextLineGapParamSelect"></select>
+              </div>
+              <div class="station-distance-controls station-virtual-controls">
+                <label for="stationVirtualToggle">虚拟节点</label>
+                <label class="toggle-switch" for="stationVirtualToggle">
+                  <input id="stationVirtualToggle" class="toggle-checkbox" type="checkbox" />
+                  <span class="toggle-slider" aria-hidden="true"></span>
+                </label>
               </div>
             </section>
             <div class="field">
@@ -456,6 +470,42 @@
           <div class="modal-actions export-modal-actions">
             <button class="btn-ghost" id="exportPngCancelBtn" type="button">取消</button>
             <button class="btn-main" id="exportPngConfirmBtn" type="button">导出</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-backdrop" id="colorPickerModal" hidden>
+      <div class="line-manager-modal color-picker-modal" role="dialog" aria-modal="true" aria-label="颜色选择器">
+        <div class="modal-head">
+          <h2 id="colorPickerTitle">颜色选择</h2>
+          <button class="btn-ghost" id="closeColorPickerBtn" type="button" aria-label="关闭">
+            <img src="/img/icon-close.svg" alt="关闭" />
+          </button>
+        </div>
+        <div class="color-picker-body">
+          <div class="color-picker-row">
+            <label for="colorPickerInput">RGB</label>
+            <div class="color-picker-inputs">
+              <input id="colorPickerInput" type="color" />
+              <div class="color-picker-preview" id="colorPickerPreview"></div>
+              <div class="color-picker-value" id="colorPickerValue">#000000 100%</div>
+            </div>
+          </div>
+          <div class="color-picker-row">
+            <label for="colorPickerAlpha">Alpha</label>
+            <div class="color-picker-alpha">
+              <input id="colorPickerAlpha" type="range" min="0" max="100" value="100" />
+              <input id="colorPickerAlphaNumber" type="number" min="0" max="100" step="1" value="100" />
+            </div>
+          </div>
+          <div class="color-picker-history">
+            <div class="color-picker-history-head">历史记录</div>
+            <div class="color-picker-history-list" id="colorPickerHistoryList"></div>
+          </div>
+          <div class="modal-actions">
+            <button class="btn-ghost" id="colorPickerCancelBtn" type="button">取消</button>
+            <button class="btn-main" id="colorPickerConfirmBtn" type="button">确定</button>
           </div>
         </div>
       </div>

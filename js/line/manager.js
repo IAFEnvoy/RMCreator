@@ -7,12 +7,19 @@ import {
   persistCustomLineTypes,
   resolveSegmentColor
 } from "./type-store.js";
-import { clamp, mergeColorAndAlpha, splitColorAndAlpha } from "../utils.js";
+import {
+  clamp,
+  escapeHtml,
+  formatColorWithAlpha,
+  normalizeColor,
+  splitColorAndAlpha
+} from "../utils.js";
 
 export function createLineManager({
   state,
   elements,
   createLineTypeId,
+  colorPicker,
   renderSubmenu,
   renderLines,
   onLineTypeUpdated,
@@ -237,6 +244,24 @@ export function createLineManager({
     });
   }
 
+  function formatColorLabel(value) {
+    return formatColorWithAlpha(value);
+  }
+
+  function buildColorTrigger({ color, label, attrs = {} }) {
+    const normalized = normalizeColor(color);
+    const attrText = Object.entries(attrs)
+      .map(([key, val]) => ` ${key}="${escapeHtml(val)}"`)
+      .join("");
+    const text = label || formatColorLabel(normalized);
+    return `
+        <button class="color-modal-trigger" type="button"${attrText}>
+          <span class="color-modal-swatch" style="--swatch-color:${escapeHtml(normalized)}"></span>
+          <span class="color-modal-text">${escapeHtml(text)}</span>
+        </button>
+      `;
+  }
+
   function renderLineEditor() {
     const draft = state.lineManager.draft;
     const selectedType = findLineType(state.lineManager.selectedId);
@@ -261,8 +286,6 @@ export function createLineManager({
       const paletteOptions = draft.colorList
         .map((_, paletteIndex) => `<option value="${paletteIndex}">颜色${paletteIndex + 1}</option>`)
         .join("");
-      const fixedColor = splitColorAndAlpha(segment.fixedColor);
-      const fixedAlphaPercent = Math.round(fixedColor.alpha * 100);
 
       const card = document.createElement("div");
       card.className = "segment-item";
@@ -329,12 +352,13 @@ export function createLineManager({
           ` : `
             <div class="field-compact">
               <label>固定颜色</label>
-              <input data-field="fixedColorHex" data-index="${index}" type="color" value="${fixedColor.hex}" />
-              <div class="alpha-control">
-                <span class="alpha-control-label" title="Alpha">A</span>
-                <input data-field="fixedColorAlpha" data-index="${index}" type="range" min="0" max="100" value="${fixedAlphaPercent}" />
-                <input class="alpha-control-number" data-field="fixedColorAlphaNumber" data-index="${index}" type="number" min="0" max="100" step="1" value="${fixedAlphaPercent}" />
-              </div>
+              ${buildColorTrigger({
+        color: segment.fixedColor,
+        attrs: {
+          "data-color-role": "segment-fixed",
+          "data-index": String(index)
+        }
+      })}
             </div>
           `}
         </div>
@@ -354,6 +378,31 @@ export function createLineManager({
       card.querySelectorAll("[data-field]").forEach((input) => {
         input.addEventListener("input", onSegmentDraftInput);
         input.addEventListener("change", onSegmentDraftInput);
+      });
+
+      const fixedColorButton = card.querySelector("[data-color-role='segment-fixed']");
+      fixedColorButton?.addEventListener("click", () => {
+        if (!colorPicker) {
+          return;
+        }
+        const liveDraft = state.lineManager.draft;
+        if (!liveDraft) {
+          return;
+        }
+        const liveSegment = liveDraft.segments[index];
+        if (!liveSegment) {
+          return;
+        }
+        colorPicker.open({
+          color: liveSegment.fixedColor,
+          title: `小线条${index + 1} 固定颜色`,
+          onConfirm: (nextColor) => {
+            liveSegment.fixedColor = nextColor;
+            renderLineTypePreviewEditor();
+            autoSaveDraft({ history: { coalesceKey: "line-type-color" }, syncUsage: false });
+            renderLineEditor();
+          }
+        });
       });
 
       const removeBtn = card.querySelector("[data-remove-index]");
@@ -396,68 +445,40 @@ export function createLineManager({
     }
 
     draft.colorList.forEach((color, index) => {
-      const parsedColor = splitColorAndAlpha(color);
-      const alphaPercent = Math.round(parsedColor.alpha * 100);
       const row = document.createElement("div");
       row.className = "color-list-item";
       row.innerHTML = `
         <span class="color-list-item-label">颜色${index + 1}</span>
-        <input type="color" data-color-hex-index="${index}" value="${parsedColor.hex}" />
-        <div class="alpha-control">
-          <span class="alpha-control-label" title="Alpha">A</span>
-          <input type="range" min="0" max="100" data-color-alpha-index="${index}" value="${alphaPercent}" />
-          <input class="alpha-control-number" data-color-alpha-number-index="${index}" type="number" min="0" max="100" step="1" value="${alphaPercent}" />
-        </div>
+        ${buildColorTrigger({
+        color,
+        attrs: {
+          "data-color-role": "line-palette",
+          "data-index": String(index)
+        }
+      })}
         <button class="btn-ghost" data-remove-color-index="${index}" type="button">删除</button>
       `;
 
-      const colorHexInput = row.querySelector("[data-color-hex-index]");
-      const colorAlphaInput = row.querySelector("[data-color-alpha-index]");
-      const colorAlphaNumberInput = row.querySelector("[data-color-alpha-number-index]");
-
-      const applyColor = () => {
+      const colorButton = row.querySelector("[data-color-role='line-palette']");
+      colorButton?.addEventListener("click", () => {
+        if (!colorPicker) {
+          return;
+        }
         const liveDraft = state.lineManager.draft;
         if (!liveDraft) {
           return;
         }
-
-        const alpha = Math.round(clamp(Number(colorAlphaInput.value) || 0, 0, 100));
-        colorAlphaInput.value = String(alpha);
-        if (colorAlphaNumberInput) {
-          colorAlphaNumberInput.value = String(alpha);
-        }
-
-        liveDraft.colorList[index] = mergeColorAndAlpha(colorHexInput.value, alpha / 100);
-        renderLineTypePreviewEditor();
-        autoSaveDraft({ history: { coalesceKey: "line-type-color" }, syncUsage: false });
-      };
-
-      const applyColorFromNumber = () => {
-        if (!colorAlphaNumberInput) {
-          applyColor();
-          return;
-        }
-
-        const alpha = Math.round(clamp(Number(colorAlphaNumberInput.value) || 0, 0, 100));
-        colorAlphaInput.value = String(alpha);
-        colorAlphaNumberInput.value = String(alpha);
-
-        const liveDraft = state.lineManager.draft;
-        if (!liveDraft) {
-          return;
-        }
-
-        liveDraft.colorList[index] = mergeColorAndAlpha(colorHexInput.value, alpha / 100);
-        renderLineTypePreviewEditor();
-        autoSaveDraft({ history: { coalesceKey: "line-type-color" }, syncUsage: false });
-      };
-
-      colorHexInput.addEventListener("input", applyColor);
-      colorAlphaInput.addEventListener("input", applyColor);
-      if (colorAlphaNumberInput) {
-        colorAlphaNumberInput.addEventListener("input", applyColorFromNumber);
-        colorAlphaNumberInput.addEventListener("change", applyColorFromNumber);
-      }
+        colorPicker.open({
+          color: liveDraft.colorList[index],
+          title: `颜色${index + 1}`,
+          onConfirm: (nextColor) => {
+            liveDraft.colorList[index] = nextColor;
+            renderLineTypePreviewEditor();
+            autoSaveDraft({ history: { coalesceKey: "line-type-color" }, syncUsage: false });
+            renderLineEditor();
+          }
+        });
+      });
 
       const removeBtn = row.querySelector("[data-remove-color-index]");
       // disable if only one color or if any segment references this palette index
@@ -526,35 +547,6 @@ export function createLineManager({
       return;
     }
 
-    if (field === "fixedColorHex") {
-      const alphaInput = input
-        .closest(".field-compact")
-        ?.querySelector(`[data-field="fixedColorAlpha"][data-index="${index}"]`);
-      const alphaNumberInput = input
-        .closest(".field-compact")
-        ?.querySelector(`[data-field="fixedColorAlphaNumber"][data-index="${index}"]`);
-      const alphaSource = alphaNumberInput ? Number(alphaNumberInput.value) : Number(alphaInput?.value);
-      const alpha = clamp(alphaSource || 0, 0, 100) / 100;
-      segment.fixedColor = mergeColorAndAlpha(input.value, alpha);
-    }
-
-    if (field === "fixedColorAlpha" || field === "fixedColorAlphaNumber") {
-      const container = input.closest(".field-compact");
-      const hexInput = container?.querySelector(`[data-field="fixedColorHex"][data-index="${index}"]`);
-      const alphaRangeInput = container?.querySelector(`[data-field="fixedColorAlpha"][data-index="${index}"]`);
-      const alphaNumberInput = container?.querySelector(`[data-field="fixedColorAlphaNumber"][data-index="${index}"]`);
-      const hex = hexInput ? hexInput.value : "#2f5d9d";
-      const alphaPercent = Math.round(clamp(Number(input.value) || 0, 0, 100));
-
-      if (alphaRangeInput) {
-        alphaRangeInput.value = String(alphaPercent);
-      }
-      if (alphaNumberInput) {
-        alphaNumberInput.value = String(alphaPercent);
-      }
-
-      segment.fixedColor = mergeColorAndAlpha(hex, alphaPercent / 100);
-    }
 
     if (field === "paletteIndex") {
       segment.paletteIndex = clamp(Number(input.value) || 0, 0, Math.max(0, state.lineManager.draft.colorList.length - 1));
@@ -575,10 +567,7 @@ export function createLineManager({
     }
 
     renderLineTypePreviewEditor();
-    const history = (field === "fixedColorHex" || field === "fixedColorAlpha" || field === "fixedColorAlphaNumber")
-      ? { coalesceKey: "line-type-color" }
-      : undefined;
-    autoSaveDraft({ history });
+    autoSaveDraft();
   }
 
   function onSegmentDragStart(event) {

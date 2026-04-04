@@ -15,6 +15,7 @@
 7. 线条子系统：`line/manager.js`、`line/typeStore.js`、`line/geometry.js`
 8. 图形子系统：`shape/manager.js`、`shape/utils.js`
 9. 基础设施：`dom.js`、`constants.js`、`utils.js`
+10. 颜色选择器：`color-picker-modal.js`
 
 ## 文件职责
 
@@ -31,6 +32,11 @@
 - 提供 `SVG` 直接导出（透明底）与 `PNG` 导出（缩放比例、透明背景开关）。
 - 负责 PNG 导出模态框的打开/关闭与确认导出逻辑。
 - 对导出的 SVG 节点执行清理（去除交互辅助属性和选中态类名）。
+
+### `color-picker-modal.js`
+- 颜色选择模态框（原生 RGB + Alpha 通道）。
+- 维护历史记录（本地存储），供线条与设置面板复用。
+- 对外提供 `open` 方法，传入当前颜色并在确认后回调更新。
 
 ### `historyManager.js`
 - 撤销/重做的核心状态机。
@@ -118,6 +124,7 @@
 - `line/manager.js` -> `line/geometry.js`、`line/typeStore.js`、`utils.js`
 - `exports.js` -> `utils.js`
 - `event.js` -> `utils.js`
+- `color-picker-modal.js` -> `utils.js`
 
 ## 维护建议
 

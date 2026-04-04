@@ -11,6 +11,7 @@ import { resolveSegmentColor } from "./line/type-store.js";
 import {
   clamp,
   getSvgTextDecoration,
+  formatColorWithAlpha,
   normalizeColor,
   normalizeTextStyleFlags
 } from "./utils.js";
@@ -29,6 +30,7 @@ export function createRenderer({
   elements,
   findLineType,
   getColorListDefault,
+  colorPicker,
   openLineManager,
   openShapeManager,
   openStationManager,
@@ -262,19 +264,52 @@ export function createRenderer({
         });
       }
 
-      const glowInput = submenuItems.querySelector("#selectionGlowColor");
-      if (glowInput) {
-        glowInput.value = state.appSettings?.selectionGlowColor || "#2f6de5";
-        glowInput.addEventListener("input", () => {
-          onAppSettingsChanged?.({ selectionGlowColor: glowInput.value });
+      const applyColorButton = (button, color) => {
+        const normalized = normalizeColor(color);
+        button.dataset.colorValue = normalized;
+        const swatch = button.querySelector(".color-modal-swatch");
+        if (swatch) {
+          swatch.style.setProperty("--swatch-color", normalized);
+        }
+        const text = button.querySelector(".color-modal-text");
+        if (text) {
+          text.textContent = formatColorWithAlpha(normalized);
+        }
+      };
+
+      const glowButton = submenuItems.querySelector("#selectionGlowColor");
+      if (glowButton) {
+        applyColorButton(glowButton, state.appSettings?.selectionGlowColor || "#2f6de5");
+        glowButton.addEventListener("click", () => {
+          if (!colorPicker) {
+            return;
+          }
+          colorPicker.open({
+            color: glowButton.dataset.colorValue,
+            title: "选择框颜色",
+            onConfirm: (nextColor) => {
+              applyColorButton(glowButton, nextColor);
+              onAppSettingsChanged?.({ selectionGlowColor: nextColor });
+            }
+          });
         });
       }
 
-      const themeAccentInput = submenuItems.querySelector("#themeAccentColor");
-      if (themeAccentInput) {
-        themeAccentInput.value = state.appSettings?.themeAccentColor || "#2f6de5";
-        themeAccentInput.addEventListener("input", () => {
-          onAppSettingsChanged?.({ themeAccentColor: themeAccentInput.value });
+      const themeAccentButton = submenuItems.querySelector("#themeAccentColor");
+      if (themeAccentButton) {
+        applyColorButton(themeAccentButton, state.appSettings?.themeAccentColor || "#2f6de5");
+        themeAccentButton.addEventListener("click", () => {
+          if (!colorPicker) {
+            return;
+          }
+          colorPicker.open({
+            color: themeAccentButton.dataset.colorValue,
+            title: "主题色",
+            onConfirm: (nextColor) => {
+              applyColorButton(themeAccentButton, nextColor);
+              onAppSettingsChanged?.({ themeAccentColor: nextColor });
+            }
+          });
         });
       }
 
@@ -377,10 +412,15 @@ export function createRenderer({
     stationLayer.innerHTML = "";
 
     state.nodes.forEach((station) => {
+      const preset = getStationPresetByStation(station);
       const group = document.createElementNS(svgNs, "g");
       group.setAttribute("data-station-id", station.id);
 
-      const renderedByShape = renderStationShape(group, station);
+      if (preset?.virtualNode) {
+        group.setAttribute("data-virtual-node", "true");
+      }
+
+      const renderedByShape = renderStationShape(group, station, preset);
       if (renderedByShape) {
         stationLayer.appendChild(group);
         return;
@@ -410,14 +450,13 @@ export function createRenderer({
         group.appendChild(inner);
       }
 
-      renderStationTextsFallback(group, station);
+      renderStationTextsFallback(group, station, preset);
 
       stationLayer.appendChild(group);
     });
   }
 
-  function renderStationShape(group, station) {
-    const preset = getStationPresetByStation(station);
+  function renderStationShape(group, station, preset) {
     if (!preset?.shapeId) {
       return false;
     }
@@ -492,8 +531,7 @@ export function createRenderer({
     return null;
   }
 
-  function renderStationTextsFallback(group, station) {
-    const preset = getStationPresetByStation(station);
+  function renderStationTextsFallback(group, station, preset) {
     if (!preset) {
       return;
     }
@@ -665,6 +703,7 @@ export function createRenderer({
     moveLineInStack,
     applyStationType,
     getStationTypeIndexByStation,
+    colorPicker,
     onStateChanged
   });
 

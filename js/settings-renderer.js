@@ -3,9 +3,9 @@ import {
   applyTextInputStyle,
   clamp,
   escapeHtml,
-  mergeColorAndAlpha,
-  normalizeTextStyleFlags,
-  splitColorAndAlpha
+  formatColorWithAlpha,
+  normalizeColor,
+  normalizeTextStyleFlags
 } from "./utils.js";
 import {
   buildRenderableShapeSvg,
@@ -35,6 +35,7 @@ export function createSettingsRenderer({
   moveLineInStack,
   applyStationType,
   getStationTypeIndexByStation,
+  colorPicker,
   onStateChanged
 }) {
   const renderSettings = () => {
@@ -231,10 +232,14 @@ export function createSettingsRenderer({
         const value = normalizeShapeParameterDefault(param.type, station.paramValues?.[param.id]);
 
         if (param.type === "color") {
+          const normalized = normalizeColor(value || "#2f5d9d");
           return `
             <div class="field">
               <label for="${controlId}">${label}（${typeLabel}）</label>
-              <input id="${controlId}" data-station-param-id="${escapeHtml(param.id)}" data-station-param-type="${escapeHtml(param.type)}" type="color" value="${escapeHtml(String(value || "#2f5d9d"))}" />
+              <button id="${controlId}" class="color-modal-trigger" type="button" data-color-trigger="station-param" data-color-value="${escapeHtml(normalized)}" data-station-param-id="${escapeHtml(param.id)}" data-station-param-type="${escapeHtml(param.type)}">
+                <span class="color-modal-swatch" style="--swatch-color:${escapeHtml(normalized)}"></span>
+                <span class="color-modal-text">${escapeHtml(formatColorWithAlpha(normalized))}</span>
+              </button>
             </div>
           `;
         }
@@ -337,6 +342,43 @@ export function createSettingsRenderer({
         return;
       }
 
+      if (paramType === "color" && inputEl instanceof HTMLButtonElement) {
+        const button = inputEl;
+        const applyButtonColor = (color) => {
+          const normalized = normalizeColor(color);
+          button.dataset.colorValue = normalized;
+          const swatch = button.querySelector(".color-modal-swatch");
+          if (swatch) {
+            swatch.style.setProperty("--swatch-color", normalized);
+          }
+          const text = button.querySelector(".color-modal-text");
+          if (text) {
+            text.textContent = formatColorWithAlpha(normalized);
+          }
+          if (!station.paramValues || typeof station.paramValues !== "object") {
+            station.paramValues = {};
+          }
+          station.paramValues[paramId] = normalizeShapeParameterDefault("color", normalized);
+        };
+
+        applyButtonColor(button.dataset.colorValue || "#2f5d9dff");
+        button.addEventListener("click", () => {
+          if (!colorPicker) {
+            return;
+          }
+          colorPicker.open({
+            color: button.dataset.colorValue,
+            title: "参数颜色",
+            onConfirm: (nextColor) => {
+              applyButtonColor(nextColor);
+              renderStations();
+              onStateChanged?.({ coalesceKey: "station-params" });
+            }
+          });
+        });
+        return;
+      }
+
       const apply = () => {
         if (!station.paramValues || typeof station.paramValues !== "object") {
           station.paramValues = {};
@@ -424,22 +466,18 @@ export function createSettingsRenderer({
       .join("");
 
     const colorList = ensureEdgeColorList(edge, lineType);
+    const formatColorLabel = (value) => formatColorWithAlpha(value);
+
     const colorListEditorHtml = colorList
-      .map((color, idx) => {
-        const parsed = splitColorAndAlpha(color);
-        const alphaPercent = Math.round(parsed.alpha * 100);
-        return `
+      .map((color, idx) => `
         <div class="line-settings-color-item">
           <label for="lineColorRef${idx}">颜色${idx + 1}</label>
-          <input id="lineColorRef${idx}" data-line-color-hex-index="${idx}" type="color" value="${escapeHtml(parsed.hex)}" />
-          <div class="alpha-control">
-            <span class="alpha-control-label" title="Alpha">A</span>
-            <input data-line-color-alpha-index="${idx}" type="range" min="0" max="100" value="${alphaPercent}" />
-            <input class="alpha-control-number" data-line-color-alpha-number-index="${idx}" type="number" min="0" max="100" step="1" value="${alphaPercent}" />
-          </div>
+          <button id="lineColorRef${idx}" class="color-modal-trigger" type="button" data-line-color-index="${idx}" data-color-value="${escapeHtml(color)}">
+            <span class="color-modal-swatch" style="--swatch-color:${escapeHtml(color)}"></span>
+            <span class="color-modal-text">${escapeHtml(formatColorLabel(color))}</span>
+          </button>
         </div>
-      `;
-      })
+      `)
       .join("");
 
     settingsBody.innerHTML = renderTemplate("settings-line-single", {
@@ -550,45 +588,26 @@ export function createSettingsRenderer({
       onStateChanged?.();
     });
 
-    settingsBody.querySelectorAll("[data-line-color-hex-index]").forEach((hexInput) => {
-      const index = Number(hexInput.dataset.lineColorHexIndex);
-      const alphaInput = settingsBody.querySelector(`[data-line-color-alpha-index="${index}"]`);
-      const alphaNumberInput = settingsBody.querySelector(`[data-line-color-alpha-number-index="${index}"]`);
-      if (!alphaInput) {
+    settingsBody.querySelectorAll("[data-line-color-index]").forEach((button) => {
+      const index = Number(button.getAttribute("data-line-color-index"));
+      if (!Number.isInteger(index)) {
         return;
       }
-
-      const apply = () => {
-        const alphaPercent = Math.round(clamp(Number(alphaInput.value) || 0, 0, 100));
-        alphaInput.value = String(alphaPercent);
-        if (alphaNumberInput) {
-          alphaNumberInput.value = String(alphaPercent);
-        }
-        edge.colorList[index] = mergeColorAndAlpha(hexInput.value, alphaPercent / 100);
-        renderLines();
-        onStateChanged?.({ coalesceKey: "line-color" });
-      };
-
-      const applyFromNumber = () => {
-        if (!alphaNumberInput) {
-          apply();
+      button.addEventListener("click", () => {
+        if (!colorPicker) {
           return;
         }
-
-        const alphaPercent = Math.round(clamp(Number(alphaNumberInput.value) || 0, 0, 100));
-        alphaInput.value = String(alphaPercent);
-        alphaNumberInput.value = String(alphaPercent);
-        edge.colorList[index] = mergeColorAndAlpha(hexInput.value, alphaPercent / 100);
-        renderLines();
-        onStateChanged?.({ coalesceKey: "line-color" });
-      };
-
-      hexInput.addEventListener("input", apply);
-      alphaInput.addEventListener("input", apply);
-      if (alphaNumberInput) {
-        alphaNumberInput.addEventListener("input", applyFromNumber);
-        alphaNumberInput.addEventListener("change", applyFromNumber);
-      }
+        colorPicker.open({
+          color: edge.colorList[index],
+          title: `颜色${index + 1}`,
+          onConfirm: (nextColor) => {
+            edge.colorList[index] = nextColor;
+            renderLines();
+            onStateChanged?.({ coalesceKey: "line-color" });
+            renderSettings();
+          }
+        });
+      });
     });
   }
 
@@ -753,7 +772,7 @@ export function createSettingsRenderer({
 
     const valueInput = document.getElementById("textValue");
     const fontSelect = document.getElementById("textFont");
-    const colorInput = document.getElementById("textColor");
+    const colorButton = document.getElementById("textColor");
     const fontSizeInput = document.getElementById("textFontSize");
     const styleButtons = settingsBody.querySelectorAll("[data-label-text-style-id][data-text-style-flag]");
 
@@ -772,11 +791,39 @@ export function createSettingsRenderer({
       onStateChanged?.();
     });
 
-    colorInput.addEventListener("input", () => {
-      label.color = colorInput.value;
-      renderTexts();
-      onStateChanged?.();
-    });
+    const applyTextColor = (color) => {
+      const normalized = normalizeColor(color);
+      label.color = normalized;
+      if (colorButton instanceof HTMLButtonElement) {
+        colorButton.dataset.colorValue = normalized;
+        const swatch = colorButton.querySelector(".color-modal-swatch");
+        if (swatch) {
+          swatch.style.setProperty("--swatch-color", normalized);
+        }
+        const text = colorButton.querySelector(".color-modal-text");
+        if (text) {
+          text.textContent = formatColorWithAlpha(normalized);
+        }
+      }
+    };
+
+    if (colorButton instanceof HTMLButtonElement) {
+      applyTextColor(label.color || "#2f5d9dff");
+      colorButton.addEventListener("click", () => {
+        if (!colorPicker) {
+          return;
+        }
+        colorPicker.open({
+          color: colorButton.dataset.colorValue || label.color,
+          title: "文字颜色",
+          onConfirm: (nextColor) => {
+            applyTextColor(nextColor);
+            renderTexts();
+            onStateChanged?.();
+          }
+        });
+      });
+    }
 
     const applyFontSize = () => {
       const nextSize = clamp(Number(fontSizeInput.value) || 20, 1, 300);
@@ -837,10 +884,14 @@ export function createSettingsRenderer({
         const typeLabel = escapeHtml(shapeParameterTypeDefinitions[param.type]?.label || "参数");
 
         if (param.type === "color") {
+          const normalized = normalizeColor(param.defaultValue || "#2f5d9d");
           return `
             <div class="field">
               <label for="${controlId}">${label}（${typeLabel}）</label>
-              <input id="${controlId}" data-shape-param-id="${escapeHtml(param.id)}" type="color" value="${escapeHtml(String(param.defaultValue || "#2f5d9d"))}" />
+              <button id="${controlId}" class="color-modal-trigger" type="button" data-color-trigger="shape-param" data-color-value="${escapeHtml(normalized)}" data-shape-param-id="${escapeHtml(param.id)}">
+                <span class="color-modal-swatch" style="--swatch-color:${escapeHtml(normalized)}"></span>
+                <span class="color-modal-text">${escapeHtml(formatColorWithAlpha(normalized))}</span>
+              </button>
             </div>
           `;
         }
@@ -896,6 +947,43 @@ export function createSettingsRenderer({
       const paramId = inputEl.getAttribute("data-shape-param-id");
       const param = resolvedParams.find((item) => item.id === paramId);
       if (!param) {
+        return;
+      }
+
+      if (param.type === "color" && inputEl instanceof HTMLButtonElement) {
+        const button = inputEl;
+        const applyButtonColor = (color) => {
+          const normalized = normalizeColor(color);
+          button.dataset.colorValue = normalized;
+          const swatch = button.querySelector(".color-modal-swatch");
+          if (swatch) {
+            swatch.style.setProperty("--swatch-color", normalized);
+          }
+          const text = button.querySelector(".color-modal-text");
+          if (text) {
+            text.textContent = formatColorWithAlpha(normalized);
+          }
+          if (!shapeInstance.paramValues || typeof shapeInstance.paramValues !== "object") {
+            shapeInstance.paramValues = {};
+          }
+          shapeInstance.paramValues[param.id] = normalizeShapeParameterDefault("color", normalized);
+        };
+
+        applyButtonColor(button.dataset.colorValue || "#2f5d9dff");
+        button.addEventListener("click", () => {
+          if (!colorPicker) {
+            return;
+          }
+          colorPicker.open({
+            color: button.dataset.colorValue,
+            title: "参数颜色",
+            onConfirm: (nextColor) => {
+              applyButtonColor(nextColor);
+              renderShapes();
+              onStateChanged?.({ coalesceKey: "shape-params" });
+            }
+          });
+        });
         return;
       }
 

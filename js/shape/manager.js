@@ -2,6 +2,7 @@ import { shapeStorageKey } from "../constants.js";
 import { createShapeManagerClipboard } from "../clipboards.js";
 import { createHistoryManager } from "../history-manager.js";
 import { svgNs } from "../dom.js";
+import { formatColorWithAlpha, normalizeColor } from "../utils.js";
 import {
   boundsToViewBox,
   buildSvgFromEditableElements,
@@ -24,7 +25,6 @@ import {
   resolveEditableElementsWithParameters,
   resolvePrimitiveFieldValue,
   resolvePrimitiveWithParameters,
-  safeColor,
   setPrimitiveParamBinding,
   shapeParameterTypeDefinitions,
   stripUnsafeAttributes,
@@ -44,6 +44,7 @@ export function createShapeManager({
   state,
   elements,
   createShapeId,
+  colorPicker,
   renderSubmenu,
   onPlacedShapeDefaultsUpdated,
   onStateChanged,
@@ -978,6 +979,46 @@ export function createShapeManager({
       return resolvePrimitiveFieldValue(primary, shapeParameters, key, paramType, fallback);
     };
 
+    const applyColorButton = (button, value) => {
+      const normalized = normalizeColor(value || "#2f5d9dff");
+      button.dataset.colorValue = normalized;
+      const swatch = button.querySelector(".color-modal-swatch");
+      if (swatch) {
+        swatch.style.setProperty("--swatch-color", normalized);
+      }
+      const text = button.querySelector(".color-modal-text");
+      if (text) {
+        text.textContent = formatColorWithAlpha(normalized);
+      }
+    };
+
+    const createColorButton = ({ value, title, onConfirm }) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "color-modal-trigger";
+      const swatch = document.createElement("span");
+      swatch.className = "color-modal-swatch";
+      const text = document.createElement("span");
+      text.className = "color-modal-text";
+      button.appendChild(swatch);
+      button.appendChild(text);
+      applyColorButton(button, value);
+      button.addEventListener("click", () => {
+        if (!colorPicker) {
+          return;
+        }
+        colorPicker.open({
+          color: button.dataset.colorValue,
+          title: title || "颜色",
+          onConfirm: (nextColor) => {
+            applyColorButton(button, nextColor);
+            onConfirm?.(nextColor);
+          }
+        });
+      });
+      return button;
+    };
+
     const applyPrimitiveValue = (key, value) => {
       primitives.forEach((item) => {
         item[key] = value;
@@ -1123,22 +1164,24 @@ export function createShapeManager({
 
     const addColor = (labelText, key, fallback = "#2f5d9d") => {
       const field = createPropField(labelText);
-      const input = document.createElement("input");
-      input.type = "color";
-      input.value = safeColor(resolveFieldValue(key, "color", fallback) || fallback);
-      const applyColor = ({ refreshLibrary }) => {
-        applyPrimitiveValue(key, safeColor(input.value));
-        commit({ refreshLibrary });
-      };
-      input.addEventListener("input", () => applyColor({ refreshLibrary: false }));
-      input.addEventListener("change", () => applyColor({ refreshLibrary: true }));
-      attachParameterBinding(field, key, "color", (useParam) => {
-        input.disabled = useParam;
-        if (useParam) {
-          input.value = safeColor(resolveFieldValue(key, "color", fallback) || fallback);
+      const initialValue = resolveFieldValue(key, "color", fallback) || fallback;
+      const button = createColorButton({
+        value: initialValue,
+        title: labelText,
+        onConfirm: (nextColor) => {
+          const normalized = normalizeColor(nextColor || fallback);
+          applyPrimitiveValue(key, normalized);
+          commit();
         }
       });
-      field.appendChild(input);
+      attachParameterBinding(field, key, "color", (useParam) => {
+        button.disabled = useParam;
+        const nextValue = useParam
+          ? resolveFieldValue(key, "color", fallback)
+          : (primary[key] || fallback);
+        applyColorButton(button, nextValue || fallback);
+      });
+      field.appendChild(button);
       container.appendChild(field);
     };
 
@@ -1155,24 +1198,33 @@ export function createShapeManager({
         select.appendChild(option);
       });
 
-      const color = document.createElement("input");
-      color.type = "color";
-      color.value = safeColor(primary[key] || "#2f5d9d");
+      const button = createColorButton({
+        value: primary[key] || "#2f5d9d",
+        title: labelText,
+        onConfirm: (nextColor) => {
+          if (select.value === "none") {
+            return;
+          }
+          const normalized = normalizeColor(nextColor || "#2f5d9d");
+          applyPrimitiveValue(key, normalized);
+          commit();
+        }
+      });
 
       const syncFillFixedState = (useParam) => {
         if (useParam) {
           select.value = "custom";
           select.disabled = true;
-          color.disabled = true;
-          color.value = safeColor(resolveFieldValue(key, "color", "#2f5d9d") || "#2f5d9d");
+          button.disabled = true;
+          applyColorButton(button, resolveFieldValue(key, "color", "#2f5d9d") || "#2f5d9d");
           return;
         }
 
         const isNone = String(primary[key] || "none") === "none";
         select.disabled = false;
         select.value = isNone ? "none" : "custom";
-        color.disabled = isNone;
-        color.value = safeColor(primary[key] || "#2f5d9d");
+        button.disabled = isNone;
+        applyColorButton(button, primary[key] || "#2f5d9d");
       };
 
       syncFillFixedState(false);
@@ -1180,30 +1232,21 @@ export function createShapeManager({
       select.addEventListener("change", () => {
         if (select.value === "none") {
           applyPrimitiveValue(key, "none");
-          color.disabled = true;
+          button.disabled = true;
         } else {
-          applyPrimitiveValue(key, safeColor(color.value));
-          color.disabled = false;
+          const nextColor = button.dataset.colorValue || "#2f5d9d";
+          applyPrimitiveValue(key, normalizeColor(nextColor));
+          button.disabled = false;
         }
         commit();
       });
-
-      const applyColor = ({ refreshLibrary }) => {
-        if (select.value !== "none") {
-          applyPrimitiveValue(key, safeColor(color.value));
-          commit({ refreshLibrary });
-        }
-      };
-
-      color.addEventListener("input", () => applyColor({ refreshLibrary: false }));
-      color.addEventListener("change", () => applyColor({ refreshLibrary: true }));
 
       attachParameterBinding(field, key, "color", (useParam) => {
         syncFillFixedState(useParam);
       });
 
       field.appendChild(select);
-      field.appendChild(color);
+      field.appendChild(button);
       container.appendChild(field);
     };
 
@@ -1650,22 +1693,44 @@ export function createShapeManager({
 
   function createParameterDefaultInput(param, commitDefault, onBeforeDefaultChange) {
     if (param.type === "color") {
-      const input = document.createElement("input");
-      input.type = "color";
-      input.value = safeColor(param.defaultValue || "#2f5d9d");
-      input.addEventListener("input", () => {
-        const previous = param.defaultValue;
-        onBeforeDefaultChange?.(previous);
-        param.defaultValue = safeColor(input.value);
-        commitDefault({ refreshLibrary: true });
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "color-modal-trigger";
+      const swatch = document.createElement("span");
+      swatch.className = "color-modal-swatch";
+      const text = document.createElement("span");
+      text.className = "color-modal-text";
+      button.appendChild(swatch);
+      button.appendChild(text);
+
+      const applyValue = (value) => {
+        const normalized = normalizeColor(value || "#2f5d9dff");
+        button.dataset.colorValue = normalized;
+        swatch.style.setProperty("--swatch-color", normalized);
+        text.textContent = formatColorWithAlpha(normalized);
+      };
+
+      applyValue(param.defaultValue || "#2f5d9d");
+
+      button.addEventListener("click", () => {
+        if (!colorPicker) {
+          return;
+        }
+        colorPicker.open({
+          color: button.dataset.colorValue,
+          title: "参数默认颜色",
+          onConfirm: (nextColor) => {
+            const previous = param.defaultValue;
+            onBeforeDefaultChange?.(previous);
+            const normalized = normalizeColor(nextColor || "#2f5d9d");
+            param.defaultValue = normalized;
+            applyValue(normalized);
+            commitDefault({ refreshLibrary: true });
+          }
+        });
       });
-      input.addEventListener("change", () => {
-        const previous = param.defaultValue;
-        onBeforeDefaultChange?.(previous);
-        param.defaultValue = safeColor(input.value);
-        commitDefault({ refreshLibrary: true });
-      });
-      return input;
+
+      return button;
     }
 
     if (param.type === "number") {

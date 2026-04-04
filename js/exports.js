@@ -193,6 +193,9 @@ export function createExportManager({ elements }) {
 
     layers.forEach((layer) => {
       Array.from(layer.children).forEach((child) => {
+        if (child instanceof Element && child.hasAttribute("data-virtual-node")) {
+          return;
+        }
         const cloned = child.cloneNode(true);
         sanitizeExportNode(cloned);
         svgExport.appendChild(cloned);
@@ -248,6 +251,9 @@ export function createExportManager({ elements }) {
 
     layers.forEach((layer) => {
       Array.from(layer.children).forEach((child) => {
+        if (child instanceof Element && child.hasAttribute("data-virtual-node")) {
+          return;
+        }
         if (!(child instanceof SVGGraphicsElement)) {
           return;
         }

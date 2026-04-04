@@ -318,12 +318,22 @@
 
 .station-binding-row {
   display: grid;
-  grid-template-columns: 88px 1fr;
+  grid-template-columns: auto 1fr 1fr;
   gap: 6px;
+  align-items: center;
 }
 
 .station-binding-row.single {
   grid-template-columns: 1fr;
+}
+
+.station-virtual-controls {
+  grid-template-columns: 88px auto;
+}
+
+.station-param-item .param-remove-btn[disabled] {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .station-param-panel {

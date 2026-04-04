@@ -53,6 +53,10 @@ export function mergeColorAndAlpha(hexColor, alpha) {
   return `${hex}${alphaHex}`;
 }
 
+export function formatColorWithAlpha(value) {
+  return normalizeColor(value).toUpperCase();
+}
+
 export function toCanvasPoint(event, svg, viewport) {
   const pt = svg.createSVGPoint();
   pt.x = event.clientX;

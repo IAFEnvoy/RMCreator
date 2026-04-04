@@ -16,7 +16,11 @@
 </div>
 <div class="field">
   <label for="textColor">颜色</label>
-  <input id="textColor" type="color" value="{{textColor}}" />
+  <button id="textColor" class="color-modal-trigger" type="button" data-color-role="text-color"
+    data-color-value="{{textColor}}">
+    <span class="color-modal-swatch" style="--swatch-color:{{textColor}}"></span>
+    <span class="color-modal-text">{{textColor}}</span>
+  </button>
 </div>
 <div class="field">
   <label for="textFontSize">字号</label>

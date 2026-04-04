@@ -9,6 +9,7 @@ import {
   persistCustomLineTypes
 } from "./line/type-store.js";
 import { createLineManager } from "./line/manager.js";
+import { createColorPickerModal } from "./color-picker-modal.js";
 import { createShapeManager } from "./shape/manager.js";
 import { createStationManager } from "./station/manager.js";
 import {
@@ -192,12 +193,14 @@ let lineManager = null;
 let shapeManager = null;
 let stationManager = null;
 const exportManager = createExportManager({ elements });
+const colorPicker = createColorPickerModal({ elements });
 
 const renderer = createRenderer({
   state,
   elements,
   findLineType,
   getColorListDefault,
+  colorPicker,
   openLineManager: () => lineManager?.open(),
   openShapeManager: () => shapeManager?.open(),
   openStationManager: () => stationManager?.open(),
@@ -212,6 +215,7 @@ lineManager = createLineManager({
   state,
   elements,
   createLineTypeId,
+  colorPicker,
   renderSubmenu: renderer.renderSubmenu,
   renderLines: renderer.renderLines,
   onLineTypeUpdated,
@@ -222,6 +226,7 @@ shapeManager = createShapeManager({
   state,
   elements,
   createShapeId,
+  colorPicker,
   renderSubmenu: renderer.renderSubmenu,
   onPlacedShapeDefaultsUpdated: commitStateChange,
   onStateChanged: commitStateChange,
@@ -232,6 +237,7 @@ stationManager = createStationManager({
   state,
   elements,
   createStationPresetId,
+  colorPicker,
   renderSubmenu: renderer.renderSubmenu,
   onStateChanged: commitStateChange,
   rerenderScene

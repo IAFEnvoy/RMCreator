@@ -11,6 +11,8 @@ import {
 } from "../shape/utils.js";
 import {
   applyTextInputStyle,
+  formatColorWithAlpha,
+  normalizeColor,
   normalizeTextStyleFlags
 } from "../utils.js";
 import {
@@ -44,6 +46,7 @@ export function createStationManager({
   state,
   elements,
   createStationPresetId,
+  colorPicker,
   renderSubmenu,
   onStateChanged,
   rerenderScene
@@ -66,6 +69,7 @@ export function createStationManager({
     stationTextLineGapUseParam,
     stationTextLineGap,
     stationTextLineGapParamSelect,
+    stationVirtualToggle,
     stationPreviewResetBtn,
     stationPreviewCanvasWrap,
     stationPreviewCanvas,
@@ -158,6 +162,7 @@ export function createStationManager({
       || !stationTextLineGapUseParam
       || !stationTextLineGap
       || !stationTextLineGapParamSelect
+      || !stationVirtualToggle
       || !stationPreviewResetBtn
       || !stationPreviewCanvasWrap
       || !stationPreviewCanvas
@@ -259,9 +264,7 @@ export function createStationManager({
       preset.shapeParamSettings = {};
       persistStationLibrary();
       resetPreviewView(preset);
-      renderParamsPanel(preset);
-      renderPreview(preset);
-      renderSubmenu?.();
+      refreshStationParamPanels(preset);
     });
 
     stationPositionGrid.addEventListener("click", onPositionGridClicked);
@@ -271,6 +274,19 @@ export function createStationManager({
     stationTextLineGapUseParam.addEventListener("change", onTextLineGapChanged);
     stationTextLineGap.addEventListener("change", onTextLineGapChanged);
     stationTextLineGapParamSelect.addEventListener("change", onTextLineGapChanged);
+    stationVirtualToggle.addEventListener("change", () => {
+      const preset = getSelectedPreset();
+      if (!preset) {
+        return;
+      }
+
+      preset.virtualNode = Boolean(stationVirtualToggle.checked);
+      persistStationLibrary();
+      renderPreview(preset);
+      renderSubmenu?.();
+      rerenderScene?.();
+      onStateChanged?.();
+    });
 
     stationManagerModal.hidden = true;
   }
@@ -311,6 +327,8 @@ export function createStationManager({
       stationPresetNameInput.value = "";
       stationShapeSelect.innerHTML = "";
       stationTextCardList.innerHTML = "<div class=\"kv\">暂无文本卡片。</div>";
+      stationVirtualToggle.checked = false;
+      stationVirtualToggle.disabled = true;
       renderTextPlacementPanel(null);
       renderParamsPanel(null);
       renderPreview(null);
@@ -319,12 +337,30 @@ export function createStationManager({
     }
 
     stationPresetNameInput.value = preset.name || "";
+    stationVirtualToggle.disabled = false;
+    stationVirtualToggle.checked = Boolean(preset.virtualNode);
     renderShapeSelect();
     renderTextCards(preset);
     renderTextPlacementPanel(preset);
     renderParamsPanel(preset);
     renderPreview(preset);
     syncStationBulkActionState();
+  }
+
+  function refreshStationParamPanels(preset) {
+    if (!preset) {
+      stationTextCardList.innerHTML = "<div class=\"kv\">暂无文本卡片。</div>";
+      renderParamsPanel(null);
+      renderTextPlacementPanel(null);
+      renderPreview(null);
+      return;
+    }
+
+    renderParamsPanel(preset);
+    renderTextCards(preset);
+    renderTextPlacementPanel(preset);
+    renderPreview(preset);
+    renderSubmenu?.();
   }
 
   function getStationUsageCountByPresetId(presetId) {
@@ -454,6 +490,7 @@ export function createStationManager({
         shapeId: safePreset.shapeId,
         textCards: safePreset.textCards,
         textPlacement: safePreset.textPlacement,
+        virtualNode: Boolean(safePreset.virtualNode),
         radius: safePreset.radius,
         oval: safePreset.oval,
         shapeParamSettings: safePreset.shapeParamSettings,
@@ -840,12 +877,42 @@ export function createStationManager({
 
       const colorModeRow = document.createElement("div");
       colorModeRow.className = "station-binding-row";
-      const colorMode = document.createElement("select");
-      colorMode.innerHTML = "<option value=\"value\">固定值</option><option value=\"param\">参数引用</option>";
-      colorMode.value = card.colorBinding?.mode === "param" ? "param" : "value";
-      const colorValue = document.createElement("input");
-      colorValue.type = "color";
-      colorValue.value = safeColor(card.colorBinding?.value || "#000000");
+      const colorToggleWrap = document.createElement("div");
+      colorToggleWrap.className = "shape-prop-param-toggle";
+      const colorToggleText = document.createElement("span");
+      colorToggleText.textContent = "参数";
+      const colorToggle = document.createElement("input");
+      colorToggle.type = "checkbox";
+      colorToggle.className = "toggle-checkbox";
+      const colorToggleId = `station-text-color-toggle-${card.id}`;
+      colorToggle.id = colorToggleId;
+      const colorToggleSlider = document.createElement("span");
+      colorToggleSlider.className = "toggle-slider";
+      colorToggleSlider.setAttribute("aria-hidden", "true");
+      const colorToggleSwitch = document.createElement("label");
+      colorToggleSwitch.className = "toggle-switch";
+      colorToggleSwitch.setAttribute("for", colorToggleId);
+      colorToggleSwitch.appendChild(colorToggle);
+      colorToggleSwitch.appendChild(colorToggleSlider);
+      colorToggleWrap.appendChild(colorToggleText);
+      colorToggleWrap.appendChild(colorToggleSwitch);
+      colorModeRow.appendChild(colorToggleWrap);
+      const colorValue = document.createElement("button");
+      colorValue.type = "button";
+      colorValue.className = "color-modal-trigger";
+      const colorSwatch = document.createElement("span");
+      colorSwatch.className = "color-modal-swatch";
+      const colorText = document.createElement("span");
+      colorText.className = "color-modal-text";
+      colorValue.appendChild(colorSwatch);
+      colorValue.appendChild(colorText);
+      const setColorValue = (value) => {
+        const normalized = normalizeColor(value || "#000000ff");
+        colorValue.dataset.colorValue = normalized;
+        colorSwatch.style.setProperty("--swatch-color", normalized);
+        colorText.textContent = formatColorWithAlpha(normalized);
+      };
+      setColorValue(card.colorBinding?.value || "#000000ff");
       const colorParam = document.createElement("select");
       colorParam.innerHTML = colorParamOptions.length
         ? colorParamOptions.map((option) => `<option value=\"${option.id}\">${option.label}</option>`).join("")
@@ -853,13 +920,22 @@ export function createStationManager({
       colorParam.value = colorParamOptions.some((option) => option.id === card.colorBinding?.paramId)
         ? card.colorBinding.paramId
         : (colorParamOptions[0]?.id || "");
-      colorModeRow.appendChild(colorMode);
       colorModeRow.appendChild(colorValue);
       colorModeRow.appendChild(colorParam);
       colorBindingField.appendChild(colorModeRow);
 
+      const hasColorParams = colorParamOptions.length > 0;
+      colorToggle.disabled = !hasColorParams;
+      if (!hasColorParams) {
+        colorToggleWrap.classList.add("is-disabled");
+        const disabledHint = "暂无可用颜色参数，请先在参数区添加。";
+        colorToggleWrap.title = disabledHint;
+        colorToggleSwitch.title = disabledHint;
+      }
+      colorToggle.checked = hasColorParams && card.colorBinding?.mode === "param";
+
       const syncColorBindingView = () => {
-        const useParam = colorMode.value === "param";
+        const useParam = colorToggle.checked && hasColorParams;
         colorValue.hidden = useParam;
         colorValue.disabled = useParam;
         colorParam.hidden = !useParam;
@@ -867,10 +943,14 @@ export function createStationManager({
       };
 
       const applyColorBinding = () => {
+        const useParam = colorToggle.checked && hasColorParams;
+        if (useParam && !colorParamOptions.some((option) => option.id === colorParam.value)) {
+          colorParam.value = colorParamOptions[0]?.id || "";
+        }
         mutateSelectedTextCard(card.id, (liveCard) => {
           liveCard.colorBinding = normalizeTextBinding({
-            mode: colorMode.value,
-            value: colorValue.value,
+            mode: useParam ? "param" : "value",
+            value: colorValue.dataset.colorValue || "#000000ff",
             paramId: colorParam.value
           }, "color", "#000000");
         });
@@ -879,8 +959,23 @@ export function createStationManager({
         renderPreview(preset);
       };
 
-      colorMode.addEventListener("change", applyColorBinding);
-      colorValue.addEventListener("input", applyColorBinding);
+      colorToggle.addEventListener("change", applyColorBinding);
+      colorValue.addEventListener("click", () => {
+        if (colorToggle.checked && hasColorParams) {
+          return;
+        }
+        if (!colorPicker) {
+          return;
+        }
+        colorPicker.open({
+          color: colorValue.dataset.colorValue || "#000000ff",
+          title: "文本颜色",
+          onConfirm: (nextColor) => {
+            setColorValue(nextColor);
+            applyColorBinding();
+          }
+        });
+      });
       colorParam.addEventListener("change", applyColorBinding);
       syncColorBindingView();
       item.appendChild(colorBindingField);
@@ -913,9 +1008,26 @@ export function createStationManager({
 
       const sizeModeRow = document.createElement("div");
       sizeModeRow.className = "station-binding-row";
-      const sizeMode = document.createElement("select");
-      sizeMode.innerHTML = "<option value=\"value\">固定值</option><option value=\"param\">参数引用</option>";
-      sizeMode.value = card.fontSizeBinding?.mode === "param" ? "param" : "value";
+      const sizeToggleWrap = document.createElement("div");
+      sizeToggleWrap.className = "shape-prop-param-toggle";
+      const sizeToggleText = document.createElement("span");
+      sizeToggleText.textContent = "参数";
+      const sizeToggle = document.createElement("input");
+      sizeToggle.type = "checkbox";
+      sizeToggle.className = "toggle-checkbox";
+      const sizeToggleId = `station-text-size-toggle-${card.id}`;
+      sizeToggle.id = sizeToggleId;
+      const sizeToggleSlider = document.createElement("span");
+      sizeToggleSlider.className = "toggle-slider";
+      sizeToggleSlider.setAttribute("aria-hidden", "true");
+      const sizeToggleSwitch = document.createElement("label");
+      sizeToggleSwitch.className = "toggle-switch";
+      sizeToggleSwitch.setAttribute("for", sizeToggleId);
+      sizeToggleSwitch.appendChild(sizeToggle);
+      sizeToggleSwitch.appendChild(sizeToggleSlider);
+      sizeToggleWrap.appendChild(sizeToggleText);
+      sizeToggleWrap.appendChild(sizeToggleSwitch);
+      sizeModeRow.appendChild(sizeToggleWrap);
       const sizeValue = document.createElement("input");
       sizeValue.type = "number";
       sizeValue.step = "0.1";
@@ -928,13 +1040,22 @@ export function createStationManager({
       sizeParam.value = numberParamOptions.some((option) => option.id === card.fontSizeBinding?.paramId)
         ? card.fontSizeBinding.paramId
         : (numberParamOptions[0]?.id || "");
-      sizeModeRow.appendChild(sizeMode);
       sizeModeRow.appendChild(sizeValue);
       sizeModeRow.appendChild(sizeParam);
       fontSizeField.appendChild(sizeModeRow);
 
+      const hasNumberParams = numberParamOptions.length > 0;
+      sizeToggle.disabled = !hasNumberParams;
+      if (!hasNumberParams) {
+        sizeToggleWrap.classList.add("is-disabled");
+        const disabledHint = "暂无可用数字参数，请先在参数区添加。";
+        sizeToggleWrap.title = disabledHint;
+        sizeToggleSwitch.title = disabledHint;
+      }
+      sizeToggle.checked = hasNumberParams && card.fontSizeBinding?.mode === "param";
+
       const syncFontSizeBindingView = () => {
-        const useParam = sizeMode.value === "param";
+        const useParam = sizeToggle.checked && hasNumberParams;
         sizeValue.hidden = useParam;
         sizeValue.disabled = useParam;
         sizeParam.hidden = !useParam;
@@ -942,9 +1063,13 @@ export function createStationManager({
       };
 
       const applyFontSizeBinding = () => {
+        const useParam = sizeToggle.checked && hasNumberParams;
+        if (useParam && !numberParamOptions.some((option) => option.id === sizeParam.value)) {
+          sizeParam.value = numberParamOptions[0]?.id || "";
+        }
         mutateSelectedTextCard(card.id, (liveCard) => {
           liveCard.fontSizeBinding = normalizeTextBinding({
-            mode: sizeMode.value,
+            mode: useParam ? "param" : "value",
             value: Number(sizeValue.value) || 18,
             paramId: sizeParam.value
           }, "number", 18);
@@ -954,7 +1079,7 @@ export function createStationManager({
         renderPreview(preset);
       };
 
-      sizeMode.addEventListener("change", applyFontSizeBinding);
+      sizeToggle.addEventListener("change", applyFontSizeBinding);
       sizeValue.addEventListener("input", applyFontSizeBinding);
       sizeParam.addEventListener("change", applyFontSizeBinding);
       syncFontSizeBindingView();
@@ -1130,10 +1255,20 @@ export function createStationManager({
         button.classList.remove("active");
         button.disabled = true;
       });
+      const distanceToggleWrap = stationTextDistanceUseParam.closest(".shape-prop-param-toggle");
+      if (distanceToggleWrap) {
+        distanceToggleWrap.classList.add("is-disabled");
+        distanceToggleWrap.title = "暂无数字参数";
+      }
       stationTextDistanceUseParam.disabled = true;
       stationTextDistanceUseParam.checked = false;
       stationTextDistanceValue.disabled = true;
       stationTextDistanceParamSelect.disabled = true;
+      const lineGapToggleWrap = stationTextLineGapUseParam.closest(".shape-prop-param-toggle");
+      if (lineGapToggleWrap) {
+        lineGapToggleWrap.classList.add("is-disabled");
+        lineGapToggleWrap.title = "暂无数字参数";
+      }
       stationTextLineGapUseParam.disabled = true;
       stationTextLineGapUseParam.checked = false;
       stationTextLineGap.disabled = true;
@@ -1183,6 +1318,11 @@ export function createStationManager({
     };
 
     const hasNumberParams = options.length > 0;
+    const distanceToggleWrap = stationTextDistanceUseParam.closest(".shape-prop-param-toggle");
+    if (distanceToggleWrap) {
+      distanceToggleWrap.classList.toggle("is-disabled", !hasNumberParams);
+      distanceToggleWrap.title = hasNumberParams ? "参数模式" : "暂无数字参数";
+    }
     stationTextDistanceUseParam.disabled = !hasNumberParams;
     stationTextDistanceUseParam.checked = hasNumberParams && distanceBinding.mode === "param";
     stationTextDistanceValue.value = Number.isFinite(Number(distanceBinding.value))
@@ -1194,6 +1334,11 @@ export function createStationManager({
     stationTextDistanceValue.disabled = stationTextDistanceUseParam.checked;
     stationTextDistanceParamSelect.disabled = !stationTextDistanceUseParam.checked || !hasNumberParams;
 
+    const lineGapToggleWrap = stationTextLineGapUseParam.closest(".shape-prop-param-toggle");
+    if (lineGapToggleWrap) {
+      lineGapToggleWrap.classList.toggle("is-disabled", !hasNumberParams);
+      lineGapToggleWrap.title = hasNumberParams ? "参数模式" : "暂无数字参数";
+    }
     stationTextLineGapUseParam.disabled = !hasNumberParams;
     stationTextLineGapUseParam.checked = hasNumberParams && lineGapBinding.mode === "param";
     stationTextLineGap.value = Number.isFinite(Number(lineGapBinding.value))
@@ -1355,6 +1500,7 @@ export function createStationManager({
       shapeId: null,
       textCards: [primaryCard],
       textPlacement: createDefaultStationTextPlacement(),
+      virtualNode: false,
       radius: 12,
       oval: false,
       shapeParamSettings: {},
@@ -1409,6 +1555,32 @@ export function createStationManager({
     renderExistingParamList(preset);
   }
 
+  function collectReferencedParamIds(preset) {
+    const referenced = new Set();
+    if (!preset) {
+      return referenced;
+    }
+
+    const placement = normalizeStationTextPlacement(preset.textPlacement || createDefaultStationTextPlacement());
+    [placement.distanceBinding, placement.lineGapBinding].forEach((binding) => {
+      if (binding?.mode === "param" && binding.paramId) {
+        referenced.add(String(binding.paramId));
+      }
+    });
+
+    const cards = normalizeStationTextCards(preset.textCards, createStationPresetId);
+    cards.forEach((card) => {
+      if (card.colorBinding?.mode === "param" && card.colorBinding.paramId) {
+        referenced.add(String(card.colorBinding.paramId));
+      }
+      if (card.fontSizeBinding?.mode === "param" && card.fontSizeBinding.paramId) {
+        referenced.add(String(card.fontSizeBinding.paramId));
+      }
+    });
+
+    return referenced;
+  }
+
   function renderCustomParamList(preset) {
     stationCustomParamList.innerHTML = "";
     if (!preset) {
@@ -1422,6 +1594,8 @@ export function createStationManager({
       stationCustomParamList.innerHTML = "<div class=\"shape-param-item\">暂无自定义参数。</div>";
       return;
     }
+
+    const referencedParamIds = collectReferencedParamIds(preset);
 
     params.forEach((param, index) => {
       const row = document.createElement("div");
@@ -1439,11 +1613,19 @@ export function createStationManager({
       removeBtn.className = "btn-ghost param-remove-btn";
       removeBtn.type = "button";
       removeBtn.textContent = "删除";
+      const isReferenced = referencedParamIds.has(param.id);
+      if (isReferenced) {
+        removeBtn.disabled = true;
+        removeBtn.title = "参数已被文本绑定引用，无法删除。";
+      }
       removeBtn.addEventListener("click", () => {
+        if (isReferenced) {
+          return;
+        }
         preset.params = normalizeShapeParameters(preset.params);
         preset.params.splice(index, 1);
         persistStationLibrary();
-        renderParamsPanel(preset);
+        refreshStationParamPanels(preset);
       });
       head.appendChild(removeBtn);
 
@@ -1457,7 +1639,7 @@ export function createStationManager({
         param.label = String(labelInput.value || "参数").trim() || "参数";
         labelInput.value = param.label;
         persistStationLibrary();
-        renderParamsPanel(preset);
+        refreshStationParamPanels(preset);
       });
       row.appendChild(labelInput);
 
@@ -1471,6 +1653,8 @@ export function createStationManager({
       const input = createParameterInput(param.type, param.defaultValue, (value) => {
         param.defaultValue = value;
         persistStationLibrary();
+        renderPreview(preset);
+        renderSubmenu?.();
       });
       defaultBlock.appendChild(input);
       row.appendChild(defaultBlock);
@@ -1616,21 +1800,43 @@ export function createStationManager({
     });
 
     persistStationLibrary();
-    renderParamsPanel(preset);
+    refreshStationParamPanels(preset);
   }
 
   function createParameterInput(type, value, onValueChanged) {
     if (type === "color") {
-      const input = document.createElement("input");
-      input.type = "color";
-      input.value = safeColor(value || "#2f5d9d");
-      input.addEventListener("input", () => {
-        onValueChanged(safeColor(input.value));
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "color-modal-trigger";
+      const swatch = document.createElement("span");
+      swatch.className = "color-modal-swatch";
+      const text = document.createElement("span");
+      text.className = "color-modal-text";
+      button.appendChild(swatch);
+      button.appendChild(text);
+
+      const applyColor = (nextValue) => {
+        const normalized = normalizeColor(nextValue || "#2f5d9dff");
+        button.dataset.colorValue = normalized;
+        swatch.style.setProperty("--swatch-color", normalized);
+        text.textContent = formatColorWithAlpha(normalized);
+      };
+
+      applyColor(value || "#2f5d9dff");
+      button.addEventListener("click", () => {
+        if (!colorPicker) {
+          return;
+        }
+        colorPicker.open({
+          color: button.dataset.colorValue || "#2f5d9dff",
+          title: "参数颜色",
+          onConfirm: (nextColor) => {
+            applyColor(nextColor);
+            onValueChanged(normalizeColor(nextColor));
+          }
+        });
       });
-      input.addEventListener("change", () => {
-        onValueChanged(safeColor(input.value));
-      });
-      return input;
+      return button;
     }
 
     if (type === "number") {
@@ -1705,15 +1911,28 @@ export function createStationManager({
       return;
     }
 
-    const field = input instanceof HTMLInputElement
+    const field = (input instanceof HTMLInputElement || input instanceof HTMLButtonElement)
       ? input
-      : input.querySelector("input");
+      : input.querySelector("input,button");
     if (!field) {
       return;
     }
 
     if (type === "color") {
-      field.value = safeColor(value || "#2f5d9d");
+      const normalized = normalizeColor(value || "#2f5d9dff");
+      if (field instanceof HTMLButtonElement) {
+        field.dataset.colorValue = normalized;
+        const swatch = field.querySelector(".color-modal-swatch");
+        if (swatch) {
+          swatch.style.setProperty("--swatch-color", normalized);
+        }
+        const text = field.querySelector(".color-modal-text");
+        if (text) {
+          text.textContent = formatColorWithAlpha(normalized);
+        }
+        return;
+      }
+      field.value = safeColor(normalized);
       return;
     }
 
@@ -1733,14 +1952,17 @@ export function createStationManager({
       return checkbox ? Boolean(checkbox.checked) : Boolean(fallback);
     }
 
-    const field = input instanceof HTMLInputElement
+    const field = (input instanceof HTMLInputElement || input instanceof HTMLButtonElement)
       ? input
-      : input.querySelector("input");
+      : input.querySelector("input,button");
     if (!field) {
       return fallback;
     }
 
     if (type === "color") {
+      if (field instanceof HTMLButtonElement) {
+        return normalizeColor(field.dataset.colorValue || fallback || "#2f5d9dff");
+      }
       return safeColor(field.value || fallback || "#2f5d9d");
     }
 
@@ -1827,7 +2049,12 @@ export function createStationManager({
       cards[0].label = "文本 1";
     }
 
-    return {
+    const rawParams = Array.isArray(raw.params) ? structuredClone(raw.params) : [];
+    const filteredParams = rawParams.filter((param) => (
+      param?.id !== "station-virtual-node" && param?.extensions?.role !== "virtual-node"
+    ));
+
+    const preset = {
       id: String(raw.id || createStationPresetId()),
       name: String(raw.name || "车站预设").trim() || "车站预设",
       shapeId: raw.shapeId ? String(raw.shapeId) : null,
@@ -1838,11 +2065,13 @@ export function createStationManager({
           ? { mode: "value", value: raw.distance }
           : undefined
       }),
+      virtualNode: Boolean(raw.virtualNode),
       radius: Number.isFinite(Number(raw.radius)) ? Number(raw.radius) : 12,
       oval: Boolean(raw.oval),
       shapeParamSettings: normalizeShapeParamSettings(raw.shapeParamSettings),
-      params: Array.isArray(raw.params) ? structuredClone(raw.params) : []
+      params: filteredParams
     };
+    return preset;
   }
 
   function convertTypeToPreset(type, index) {
@@ -1857,6 +2086,7 @@ export function createStationManager({
       shapeId: type?.shapeId ? String(type.shapeId) : null,
       textCards: [primaryCard],
       textPlacement: createDefaultStationTextPlacement(),
+      virtualNode: Boolean(type?.virtualNode),
       radius: Number(type?.radius) || 12,
       oval: Boolean(type?.oval),
       shapeParamSettings: {},
