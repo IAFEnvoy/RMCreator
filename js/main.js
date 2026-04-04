@@ -372,14 +372,18 @@ function persistAppSettings() {
 }
 
 function applyAppSettings() {
-  const glow = toRgba(state.appSettings.selectionGlowColor, 0.45);
+  const glowBase = stripHexAlpha(
+    state.appSettings.selectionGlowColor,
+    defaultAppSettings.selectionGlowColor
+  );
+  const glow = toRgba(glowBase, 0.45);
   document.documentElement.style.setProperty("--selection-glow-color", glow);
   document.documentElement.style.setProperty(
     "--selection-glow-size",
     `${state.appSettings.selectionGlowSize}px`
   );
 
-  const accent = normalizeHexColor(
+  const accent = stripHexAlpha(
     state.appSettings.themeAccentColor,
     defaultAppSettings.themeAccentColor
   );
@@ -433,10 +437,19 @@ function sanitizeAppSettings(rawSettings) {
 
 function normalizeHexColor(input, fallback) {
   const value = String(input || "").trim();
-  if (/^#[0-9a-fA-F]{3}$/.test(value) || /^#[0-9a-fA-F]{6}$/.test(value)) {
+  if (
+    /^#[0-9a-fA-F]{3}$/.test(value)
+    || /^#[0-9a-fA-F]{6}$/.test(value)
+    || /^#[0-9a-fA-F]{8}$/.test(value)
+  ) {
     return value.toLowerCase();
   }
   return fallback;
+}
+
+function stripHexAlpha(input, fallback) {
+  const normalized = normalizeHexColor(input, fallback);
+  return normalized.length === 9 ? normalized.slice(0, 7) : normalized;
 }
 
 function hexToRgb(hexColor) {
