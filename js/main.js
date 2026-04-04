@@ -333,6 +333,20 @@ async function init() {
   renderer.renderSettings();
   renderer.updateViewportTransform();
   renderer.updateZoomIndicator();
+  registerServiceWorker();
+}
+
+function registerServiceWorker() {
+  if (!("serviceWorker" in navigator)) {
+    return;
+  }
+  if (!window.isSecureContext) {
+    return;
+  }
+
+  navigator.serviceWorker.register("/js/sw.js").catch(() => {
+    // Ignore registration errors (offline or unsupported hosting).
+  });
 }
 
 function updateAppSettings(patch = {}) {
