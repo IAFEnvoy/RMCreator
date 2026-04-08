@@ -114,10 +114,18 @@ function collectMenuElements(holder) {
 
   holder.quickButtons = {
     refresh: byAction("refresh"),
+    refreshSingle: byAction("refresh-single"),
     cut: byAction("cut"),
     copy: byAction("copy"),
     delete: byAction("delete")
   };
+
+  holder.quickContainers = {
+    full: holder.menuEl.querySelector("[data-role=\"quick-full\"]"),
+    single: holder.menuEl.querySelector("[data-role=\"quick-single\"]")
+  };
+
+  holder.quickDivider = holder.menuEl.querySelector("[data-role=\"quick-divider\"]");
 
   holder.listItems = {
     paste: byAction("paste"),
@@ -240,6 +248,7 @@ function bindMenuHandlers(holder, opts) {
 
   const quick = holder.quickButtons || {};
   quick.refresh?.addEventListener("click", () => handleQuick("refresh", quick.refresh));
+  quick.refreshSingle?.addEventListener("click", () => handleQuick("refresh", quick.refreshSingle));
   quick.cut?.addEventListener("click", () => handleQuick("cut", quick.cut));
   quick.copy?.addEventListener("click", () => handleQuick("copy", quick.copy));
   quick.delete?.addEventListener("click", () => handleQuick("delete", quick.delete));
@@ -384,7 +393,9 @@ function renderMenu(opts, context) {
   const canCut = canCopy;
   const showFullQuick = hasEntity && !isLineSelection;
 
-  holder.quickEl.classList.toggle("compact", !showFullQuick);
+  setHidden(holder.quickContainers?.full, !showFullQuick);
+  setHidden(holder.quickDivider, !showFullQuick);
+  setHidden(holder.quickContainers?.single, showFullQuick);
 
   setHidden(holder.quickButtons?.cut, !showFullQuick);
   setHidden(holder.quickButtons?.copy, !showFullQuick);

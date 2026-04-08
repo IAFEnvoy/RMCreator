@@ -1,5 +1,5 @@
 <div class="context-menu" id="contextMenu" hidden>
-  <div class="context-menu-quick" id="contextMenuQuick">
+  <div class="context-menu-quick" id="contextMenuQuick" data-role="quick-full">
     <button class="menu-quick-btn" type="button" data-action="refresh">
       <img src="/img/menu/icon-refresh.svg" alt="刷新" />
       刷新
@@ -15,6 +15,15 @@
     <button class="menu-quick-btn" type="button" data-action="delete">
       <img src="/img/menu/icon-delete.svg" alt="删除" />
       删除
+    </button>
+  </div>
+
+  <div class="context-menu-divider" data-role="quick-divider"></div>
+
+  <div class="context-menu-single" data-role="quick-single" hidden>
+    <button class="context-menu-item" type="button" data-action="refresh-single">
+      <img src="/img/menu/icon-refresh.svg" alt="刷新" />
+      刷新
     </button>
   </div>
 
