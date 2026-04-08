@@ -338,6 +338,30 @@
   user-select: none;
 }
 
+.submenu-shortcut-btn {
+  border: 1px dashed #b9c7dd;
+  border-radius: 10px;
+  background: #f4f8ff;
+  color: #1c3f78;
+  padding: 8px 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.submenu-shortcut-btn img {
+  width: 20px;
+  height: 20px;
+  display: block;
+}
+
+.submenu-shortcut-btn:hover {
+  border-color: #97abd0;
+  background: #edf3ff;
+}
+
 .submenu-settings-row {
   display: flex;
   align-items: center;

@@ -1,0 +1,48 @@
+.shortcuts-modal {
+  width: min(420px, calc(100% - 32px));
+  height: auto;
+  min-height: 0;
+}
+
+.shortcuts-body {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.shortcuts-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #f9fbff;
+}
+
+.shortcuts-keys {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.key-icon {
+  width: 28px;
+  height: 28px;
+  display: block;
+}
+
+.shortcuts-desc {
+  font-size: 13px;
+  color: #2c3f5b;
+}
+
+@media (max-width: 520px) {
+  .shortcuts-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

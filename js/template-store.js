@@ -27,7 +27,8 @@ const templateSources = {
   "station-manager-custom-param-unselected": "/template/manager/station/custom-param-unselected.html",
   "station-manager-existing-param-empty": "/template/manager/station/existing-param-empty.html",
   "station-manager-existing-param-unselected": "/template/manager/station/existing-param-unselected.html",
-  "station-manager-existing-param-no-shape": "/template/manager/station/existing-param-no-shape.html"
+  "station-manager-existing-param-no-shape": "/template/manager/station/existing-param-no-shape.html",
+  "shortcuts-modal": "/template/manager/shortcuts/shortcuts-modal.html"
 };
 
 async function fetchTemplate(url) {

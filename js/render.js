@@ -53,11 +53,70 @@ export function createRenderer({
     submenuItems,
     settingsPanel,
     settingsBody,
-    zoomIndicator
+    zoomIndicator,
+    shortcutsModal
   } = elements;
 
   let shapeGhostEl = null;
   let stationGhostEl = null;
+  let shortcutsModalBound = false;
+  let shortcutsKeyHandler = null;
+
+  const ensureShortcutsModalContent = () => {
+    if (!shortcutsModal) {
+      return null;
+    }
+    if (!shortcutsModal.dataset.ready) {
+      shortcutsModal.innerHTML = getTemplate("shortcuts-modal");
+      shortcutsModal.dataset.ready = "true";
+    }
+    return shortcutsModal.querySelector("#closeShortcutsBtn");
+  };
+
+  const openShortcutsModal = () => {
+    ensureShortcutsModalContent();
+    bindShortcutsModal();
+    if (shortcutsModal) {
+      shortcutsModal.hidden = false;
+    }
+    if (!shortcutsKeyHandler) {
+      shortcutsKeyHandler = (event) => {
+        if (event.key === "Escape") {
+          closeShortcutsModal();
+        }
+      };
+      window.addEventListener("keydown", shortcutsKeyHandler);
+    }
+  };
+
+  const closeShortcutsModal = () => {
+    if (shortcutsModal) {
+      shortcutsModal.hidden = true;
+    }
+    if (shortcutsKeyHandler) {
+      window.removeEventListener("keydown", shortcutsKeyHandler);
+      shortcutsKeyHandler = null;
+    }
+  };
+
+  const bindShortcutsModal = () => {
+    if (shortcutsModalBound) {
+      return;
+    }
+    shortcutsModalBound = true;
+    if (shortcutsModal) {
+      shortcutsModal.addEventListener("click", (event) => {
+        const closeBtn = event.target.closest("#closeShortcutsBtn");
+        if (closeBtn) {
+          closeShortcutsModal();
+          return;
+        }
+        if (event.target === shortcutsModal) {
+          closeShortcutsModal();
+        }
+      });
+    }
+  };
 
   function setActiveToolButton() {
     toolStrip.querySelectorAll(".tool-btn").forEach((btn) => {
@@ -215,6 +274,14 @@ export function createRenderer({
     if (state.activeTool === "settings") {
       submenuTitle.textContent = "设置";
       submenuItems.innerHTML = getTemplate("submenu-settings");
+
+      const shortcutBtn = submenuItems.querySelector("#openShortcutModalBtn");
+      if (shortcutBtn) {
+        bindShortcutsModal();
+        shortcutBtn.addEventListener("click", () => {
+          openShortcutsModal();
+        });
+      }
 
       const continuousSelectInput = submenuItems.querySelector("#continuousSelectModeToggle");
       if (continuousSelectInput) {
