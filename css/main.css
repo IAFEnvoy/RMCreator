@@ -3,6 +3,7 @@
   height: 100%;
   position: relative;
   overflow: hidden;
+  user-select: none;
 }
 
 .topbar {
@@ -472,6 +473,13 @@
   opacity: 0.7;
 }
 
+.snap-guide-line-split {
+  stroke: var(--accent-strong);
+  stroke-width: 2.2;
+  stroke-dasharray: none;
+  opacity: 0.9;
+}
+
 .snap-guide-diagonal {
   stroke-dasharray: 6 5;
 }
@@ -495,6 +503,11 @@
 .snap-guide-dot {
   fill: var(--accent);
   opacity: 0.85;
+}
+
+.snap-guide-dot-split {
+  fill: var(--accent-strong);
+  opacity: 0.95;
 }
 
 .station {

@@ -1,0 +1,42 @@
+<div class="segment-item" data-segment-index="{{segmentIndex}}">
+  <div class="segment-head">
+    <div class="segment-title">{{segmentTitle}}</div>
+    <button class="segment-drag-handle" data-drag-handle-index="{{segmentIndex}}" draggable="true" type="button"
+      title="拖拽排序" aria-label="拖拽排序">
+      <img src="img/icon-drag-vertical.svg" alt="" />
+    </button>
+  </div>
+  <div class="segment-grid">
+    <div class="field-compact">
+      <label>宽度</label>
+      <input data-field="width" data-index="{{segmentIndex}}" type="number" min="1" max="20" value="{{segmentWidth}}" />
+    </div>
+    <div class="field-compact">
+      <label>线形</label>
+      <select data-field="strokeStyle" data-index="{{segmentIndex}}">
+        <option value="solid">实线</option>
+        <option value="dashed">虚线</option>
+      </select>
+    </div>
+    <div class="field-compact">
+      <label>颜色来源</label>
+      <select data-field="colorMode" data-index="{{segmentIndex}}">
+        <option value="fixed">固定颜色</option>
+        <option value="palette">引用颜色列表</option>
+      </select>
+    </div>
+    <button class="btn-ghost" data-remove-index="{{segmentIndex}}" type="button">删除</button>
+  </div>
+  <div class="segment-subgrid">
+    {{dashedFieldsHtml}}
+    <div class="field-compact field-compact-toggle">
+      <label for="segmentRoundCap{{segmentIndex}}">端点圆头</label>
+      <label class="toggle-switch" for="segmentRoundCap{{segmentIndex}}">
+        <input id="segmentRoundCap{{segmentIndex}}" class="toggle-checkbox" data-field="roundCap"
+          data-index="{{segmentIndex}}" type="checkbox" {{roundCapChecked}} />
+        <span class="toggle-slider" aria-hidden="true"></span>
+      </label>
+    </div>
+    {{colorModeHtml}}
+  </div>
+</div>

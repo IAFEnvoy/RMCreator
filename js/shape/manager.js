@@ -2,7 +2,7 @@ import { shapeStorageKey } from "../constants.js";
 import { createShapeManagerClipboard } from "../clipboards.js";
 import { createHistoryManager } from "../history-manager.js";
 import { svgNs } from "../dom.js";
-import { formatColorWithAlpha, normalizeColor } from "../utils.js";
+import { applyTextInputStyle, formatColorWithAlpha, normalizeColor, normalizeTextStyleFlags } from "../utils.js";
 import {
   boundsToViewBox,
   buildSvgFromEditableElements,
@@ -39,6 +39,21 @@ const snapConfig = Object.freeze({
   axisY: 120,
   pixelTolerance: 8
 });
+
+const textFontOptions = Object.freeze([
+  "Segoe UI",
+  "Microsoft YaHei",
+  "SimSun",
+  "Arial",
+  "Noto Sans SC"
+]);
+
+const textStyleToolbarItems = Object.freeze([
+  { flag: "bold", icon: "/img/icon-bold.svg", label: "加粗" },
+  { flag: "italic", icon: "/img/icon-italic.svg", label: "斜体" },
+  { flag: "underline", icon: "/img/icon-underline.svg", label: "下划线" },
+  { flag: "strikethrough", icon: "/img/icon-strikethrough.svg", label: "删除线" }
+]);
 
 export function createShapeManager({
   state,
@@ -1267,6 +1282,110 @@ export function createShapeManager({
       });
       field.appendChild(input);
       container.appendChild(field);
+      return input;
+    };
+
+    const addTextSelect = (labelText, key, options, fallback = "") => {
+      const field = createPropField(labelText);
+      const select = document.createElement("select");
+      const list = Array.isArray(options) ? options : [];
+      const currentValue = String(resolveFieldValue(key, "text", fallback) ?? fallback);
+      const ensureOption = (value) => {
+        if (!value) {
+          return;
+        }
+        if (Array.from(select.options).some((option) => option.value === value)) {
+          return;
+        }
+        const option = document.createElement("option");
+        option.value = value;
+        option.textContent = value;
+        select.appendChild(option);
+      };
+
+      list.forEach((font) => {
+        const option = document.createElement("option");
+        option.value = font;
+        option.textContent = font;
+        select.appendChild(option);
+      });
+
+      ensureOption(currentValue);
+      select.value = currentValue || fallback;
+
+      select.addEventListener("change", () => {
+        applyPrimitiveValue(key, select.value);
+        commit();
+      });
+
+      attachParameterBinding(field, key, "text", (useParam) => {
+        select.disabled = useParam;
+        if (useParam) {
+          const resolved = String(resolveFieldValue(key, "text", fallback) ?? fallback);
+          ensureOption(resolved);
+          select.value = resolved;
+        }
+      });
+
+      field.appendChild(select);
+      container.appendChild(field);
+      return select;
+    };
+
+    const addTextStyleToolbar = (labelText, valueInput, fontSelect) => {
+      const field = createPropField(labelText);
+      const toolbar = document.createElement("div");
+      toolbar.className = "text-style-toolbar";
+
+      const applyPreview = () => {
+        if (valueInput) {
+          applyTextInputStyle(valueInput, normalizeTextStyleFlags(primary));
+          if (fontSelect) {
+            valueInput.style.fontFamily = fontSelect.value || "Segoe UI";
+          }
+        }
+      };
+
+      const buttons = new Map();
+
+      textStyleToolbarItems.forEach((item) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "text-style-btn";
+        button.setAttribute("aria-label", item.label);
+        toolbar.appendChild(button);
+
+        const img = document.createElement("img");
+        img.src = item.icon;
+        img.alt = item.label;
+        button.appendChild(img);
+        buttons.set(item.flag, button);
+
+        button.addEventListener("click", () => {
+          const current = normalizeTextStyleFlags(primary);
+          const nextValue = !current[item.flag];
+          applyPrimitiveValue(item.flag, nextValue);
+          const updated = normalizeTextStyleFlags(primary);
+          buttons.forEach((btn, flag) => {
+            const isActive = Boolean(updated[flag]);
+            btn.classList.toggle("active", isActive);
+            btn.setAttribute("aria-pressed", isActive ? "true" : "false");
+          });
+          applyPreview();
+          commit();
+        });
+      });
+
+      field.appendChild(toolbar);
+      container.appendChild(field);
+
+      const initial = normalizeTextStyleFlags(primary);
+      buttons.forEach((btn, flag) => {
+        const isActive = Boolean(initial[flag]);
+        btn.classList.toggle("active", isActive);
+        btn.setAttribute("aria-pressed", isActive ? "true" : "false");
+      });
+      applyPreview();
     };
 
     const addToggle = (labelText, key, { rerenderProps = false, onChange, parameterizable = true } = {}) => {
@@ -1402,8 +1521,15 @@ export function createShapeManager({
     }
 
     if (primary.type === "text") {
-      addText("文本内容", "value", "文本");
-      addText("字体", "fontFamily", "Segoe UI");
+      const valueInput = addText("文本内容", "value", "文本");
+      const fontSelect = addTextSelect("字体", "fontFamily", textFontOptions, "Segoe UI");
+      if (valueInput && fontSelect) {
+        valueInput.style.fontFamily = fontSelect.value || "Segoe UI";
+        fontSelect.addEventListener("change", () => {
+          valueInput.style.fontFamily = fontSelect.value || "Segoe UI";
+        });
+      }
+      addTextStyleToolbar("文字样式", valueInput, fontSelect);
       addNumber("位置 X", "x", { defaultValue: 120 });
       addNumber("位置 Y", "y", { defaultValue: 120 });
       addNumber("字号", "fontSize", { defaultValue: 26, min: 1, max: 200 });
@@ -1837,7 +1963,7 @@ export function createShapeManager({
     }
 
     const primitiveIndex = findPrimitiveIndex(event.target);
-    const multiSelect = event.ctrlKey || event.metaKey;
+    const multiSelect = event.shiftKey;
 
     if (layerMoveMode) {
       if (Number.isInteger(primitiveIndex)) {

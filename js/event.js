@@ -1,4 +1,5 @@
 import { svgNs } from "./dom.js";
+import { applyEndpointOffsets, getLinePoints } from "./line/geometry.js";
 import { clamp, clientToSvgPoint, toCanvasPoint } from "./utils.js";
 
 export function createEventBinder({
@@ -28,6 +29,7 @@ export function createEventBinder({
   copySelection,
   cutSelection,
   pasteSelection,
+  insertStationOnLine,
   onStateChanged
 }) {
   const {
@@ -200,6 +202,42 @@ export function createEventBinder({
         } else {
           undo?.();
         }
+        return;
+      }
+
+      const isArrowKey = event.key === "ArrowUp"
+        || event.key === "ArrowDown"
+        || event.key === "ArrowLeft"
+        || event.key === "ArrowRight";
+      if (isArrowKey) {
+        if (
+          isEditableTarget(event.target)
+          || state.lineManager.isOpen
+          || state.shapeManager?.isOpen
+          || state.stationManager?.isOpen
+          || state.appSettings?.arrowKeyPan === false
+        ) {
+          return;
+        }
+
+        if (Array.isArray(state.selectedEntities) && state.selectedEntities.length) {
+          return;
+        }
+
+        const step = event.shiftKey ? 50 : 24;
+        if (event.key === "ArrowUp") {
+          state.pan.y += step;
+        } else if (event.key === "ArrowDown") {
+          state.pan.y -= step;
+        } else if (event.key === "ArrowLeft") {
+          state.pan.x += step;
+        } else if (event.key === "ArrowRight") {
+          state.pan.x -= step;
+        }
+
+        renderer.updateViewportTransform();
+        onStateChanged?.({ coalesceKey: "viewport" });
+        event.preventDefault();
         return;
       }
 
@@ -393,7 +431,7 @@ export function createEventBinder({
 
     const point = toCanvasPoint(event, svg, viewport);
     const target = event.target;
-    const multiSelect = event.ctrlKey || event.metaKey;
+    const multiSelect = event.shiftKey;
     const continuousSelect = state.appSettings?.continuousSelectMode !== false && state.activeTool === "select";
     const handleEntityClick = (entity) => {
       if (multiSelect) {
@@ -436,6 +474,27 @@ export function createEventBinder({
 
       state.lineMoveMode = null;
       renderer.renderSettings();
+    }
+
+    if (state.activeTool === "station" && state.menuSelection.station !== null && event.ctrlKey) {
+      const candidate = findLineSplitCandidate(point);
+      if (candidate && insertStationOnLine) {
+        const inserted = insertStationOnLine({
+          edgeId: candidate.edgeId,
+          point: candidate.point,
+          stationTypeIndex: state.menuSelection.station,
+          commit: true,
+          selectStation: true
+        });
+        if (inserted) {
+          if (state.appSettings?.continuousStationMode === false) {
+            state.menuSelection.station = null;
+            renderer.hideStationGhost?.();
+            renderer.renderSubmenu();
+          }
+          return;
+        }
+      }
     }
 
     if (stationEl) {
@@ -510,7 +569,7 @@ export function createEventBinder({
     const shapeEl = target.closest("[data-shape-id]");
     const textEl = target.closest("[data-text-id]");
     const point = toCanvasPoint(event, svg, viewport);
-    const multiSelect = event.ctrlKey || event.metaKey;
+    const multiSelect = event.shiftKey;
 
     if (state.activeTool === "line" && state.menuSelection.lineType && state.menuSelection.lineGeometry && stationEl) {
       const stationId = stationEl.dataset.stationId;
@@ -596,14 +655,24 @@ export function createEventBinder({
     const shouldShowStationGhost = state.activeTool === "station" && state.menuSelection.station !== null && !state.drag.mode;
     const shouldShowShapeGhost = state.activeTool === "shape" && state.menuSelection.shape && !state.drag.mode;
     let ghostPoint = point;
+    let usedLineSnapGuide = false;
 
-    if (shouldShowStationGhost || shouldShowShapeGhost) {
+    if (shouldShowStationGhost && event.ctrlKey) {
+      const candidate = findLineSplitCandidate(point);
+      if (candidate) {
+        ghostPoint = candidate.point;
+        renderLineSplitGuide(candidate);
+        usedLineSnapGuide = true;
+      }
+    }
+
+    if (!usedLineSnapGuide && (shouldShowStationGhost || shouldShowShapeGhost)) {
       const visibleRect = getVisibleCanvasRect();
       const snapTargets = collectSnapTargets([], visibleRect);
       const snapResult = applySelectionSnap(point, event, snapTargets, visibleRect);
       ghostPoint = snapResult?.point || point;
       updateSnapGuides(snapResult?.guides || [], visibleRect);
-    } else if (!state.drag.mode) {
+    } else if (!state.drag.mode && !usedLineSnapGuide) {
       clearSnapGuides();
     }
 
@@ -634,11 +703,33 @@ export function createEventBinder({
       const rawDy = point.y - state.drag.fromY;
       let dx = rawDx;
       let dy = rawDy;
+      let usedLineSnap = false;
+
+      const moveEntities = state.drag.moveEntities;
+      const stationEntry = moveEntities.length === 1 && moveEntities[0].type === "station"
+        ? moveEntities[0]
+        : null;
+
+      if (event.ctrlKey && stationEntry) {
+        const rawPoint = { x: stationEntry.startX + rawDx, y: stationEntry.startY + rawDy };
+        const candidate = findLineSplitCandidate(rawPoint, { excludeStationId: stationEntry.id });
+        if (candidate) {
+          dx = candidate.point.x - stationEntry.startX;
+          dy = candidate.point.y - stationEntry.startY;
+          usedLineSnap = true;
+          state.drag.lineSplitCandidate = { ...candidate, stationId: stationEntry.id };
+          renderLineSplitGuide(candidate);
+        } else {
+          state.drag.lineSplitCandidate = null;
+        }
+      } else {
+        state.drag.lineSplitCandidate = null;
+      }
 
       const anchor = state.drag.snapAnchor;
       const snapTargets = state.drag.snapTargets;
       const visibleRect = state.drag.snapVisibleRect;
-      if (anchor && Array.isArray(snapTargets)) {
+      if (!usedLineSnap && anchor && Array.isArray(snapTargets)) {
         const snapResult = applySelectionSnap(
           { x: anchor.startX + rawDx, y: anchor.startY + rawDy },
           event,
@@ -652,7 +743,7 @@ export function createEventBinder({
         } else {
           clearSnapGuides();
         }
-      } else {
+      } else if (!usedLineSnap) {
         clearSnapGuides();
       }
 
@@ -723,6 +814,7 @@ export function createEventBinder({
     const dragMode = state.drag.mode;
     const isSelectionMoveDrag = dragMode === "selection-move";
     const hadMove = Boolean(state.drag.didMove);
+    const lineSplitCandidate = state.drag.lineSplitCandidate;
 
     if (dragMode === "line") {
       const startId = state.drag.lineStartStationId;
@@ -752,7 +844,7 @@ export function createEventBinder({
       if (state.drag.marqueeStart && state.drag.marqueeCurrent && hadMove) {
         const rect = normalizeRect(state.drag.marqueeStart, state.drag.marqueeCurrent);
         const matches = collectEntitiesInRect(rect);
-        const additive = event.ctrlKey || event.metaKey;
+        const additive = event.shiftKey;
 
         if (matches.length) {
           selectEntities(matches, { additive });
@@ -776,10 +868,25 @@ export function createEventBinder({
     state.drag.marqueeStart = null;
     state.drag.marqueeCurrent = null;
     state.drag.didMove = false;
+    state.drag.lineSplitCandidate = null;
     renderer.updateDragCursor();
     clearSnapGuides();
 
     if (isSelectionMoveDrag && hadMove) {
+      if (lineSplitCandidate && insertStationOnLine) {
+        const inserted = insertStationOnLine({
+          edgeId: lineSplitCandidate.edgeId,
+          point: lineSplitCandidate.point,
+          stationId: lineSplitCandidate.stationId,
+          commit: false,
+          selectStation: false
+        });
+        if (inserted) {
+          onStateChanged?.({ coalesceKey: "line-split" });
+          return;
+        }
+      }
+
       onStateChanged?.();
       return;
     }
@@ -924,6 +1031,146 @@ export function createEventBinder({
     });
 
     return targets;
+  }
+
+  function findLineSplitCandidate(point, { excludeStationId } = {}) {
+    if (!point) {
+      return null;
+    }
+
+    const tolerance = getSnapToleranceInCanvas() * 1.6;
+    const minEndpointDistance = Math.max(4, getSnapToleranceInCanvas() * 0.8);
+    let best = null;
+
+    state.edges.forEach((edge) => {
+      if (!edge) {
+        return;
+      }
+
+      if (
+        excludeStationId
+        && (String(edge.fromStationId || "") === String(excludeStationId)
+          || String(edge.toStationId || "") === String(excludeStationId))
+      ) {
+        return;
+      }
+
+      const from = state.nodes.find((node) => node.id === edge.fromStationId);
+      const to = state.nodes.find((node) => node.id === edge.toStationId);
+      if (!from || !to) {
+        return;
+      }
+
+      const rawPoints = getLinePoints(edge.geometry || "straight", from, to, { flip: edge.flip });
+      const baseLine = applyEndpointOffsets(
+        rawPoints,
+        Number(edge.startOffset) || 0,
+        Number(edge.endOffset) || 0
+      );
+      if (!Array.isArray(baseLine) || baseLine.length < 2) {
+        return;
+      }
+
+      const closest = getClosestPointOnPolyline(point, baseLine);
+      if (!closest) {
+        return;
+      }
+
+      const start = baseLine[0];
+      const end = baseLine[baseLine.length - 1];
+      if (
+        Math.hypot(closest.point.x - start.x, closest.point.y - start.y) < minEndpointDistance
+        || Math.hypot(closest.point.x - end.x, closest.point.y - end.y) < minEndpointDistance
+      ) {
+        return;
+      }
+
+      if (!best || closest.distance < best.distance) {
+        best = {
+          edgeId: edge.id,
+          point: closest.point,
+          segment: closest.segment,
+          distance: closest.distance
+        };
+      }
+    });
+
+    if (best && best.distance <= tolerance) {
+      return best;
+    }
+
+    return null;
+  }
+
+  function getClosestPointOnPolyline(point, polyline) {
+    if (!point || !Array.isArray(polyline) || polyline.length < 2) {
+      return null;
+    }
+
+    let best = null;
+    for (let i = 0; i < polyline.length - 1; i += 1) {
+      const a = polyline[i];
+      const b = polyline[i + 1];
+      const candidate = getClosestPointOnSegment(point, a, b);
+      if (!candidate) {
+        continue;
+      }
+      if (!best || candidate.distance < best.distance) {
+        best = {
+          point: candidate.point,
+          distance: candidate.distance,
+          segment: { from: a, to: b }
+        };
+      }
+    }
+
+    return best;
+  }
+
+  function getClosestPointOnSegment(point, a, b) {
+    if (!point || !a || !b) {
+      return null;
+    }
+
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const lenSq = (dx * dx) + (dy * dy);
+    if (lenSq <= 1e-6) {
+      return {
+        point: { x: a.x, y: a.y },
+        distance: Math.hypot(point.x - a.x, point.y - a.y)
+      };
+    }
+
+    const t = clamp(((point.x - a.x) * dx + (point.y - a.y) * dy) / lenSq, 0, 1);
+    const snapPoint = { x: a.x + dx * t, y: a.y + dy * t };
+    return {
+      point: snapPoint,
+      distance: Math.hypot(point.x - snapPoint.x, point.y - snapPoint.y)
+    };
+  }
+
+  function renderLineSplitGuide(candidate) {
+    if (!snapGuideLayer || !candidate?.segment || !candidate?.point) {
+      return;
+    }
+
+    snapGuideLayer.innerHTML = "";
+
+    const line = document.createElementNS(svgNs, "line");
+    line.setAttribute("x1", String(candidate.segment.from.x));
+    line.setAttribute("y1", String(candidate.segment.from.y));
+    line.setAttribute("x2", String(candidate.segment.to.x));
+    line.setAttribute("y2", String(candidate.segment.to.y));
+    line.setAttribute("class", "snap-guide-line snap-guide-line-split");
+    snapGuideLayer.appendChild(line);
+
+    const dot = document.createElementNS(svgNs, "circle");
+    dot.setAttribute("cx", String(candidate.point.x));
+    dot.setAttribute("cy", String(candidate.point.y));
+    dot.setAttribute("r", "4.5");
+    dot.setAttribute("class", "snap-guide-dot snap-guide-dot-split");
+    snapGuideLayer.appendChild(dot);
   }
 
   function applySelectionSnap(point, event, snapTargets, visibleRect) {

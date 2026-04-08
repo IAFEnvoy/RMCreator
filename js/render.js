@@ -264,6 +264,14 @@ export function createRenderer({
         });
       }
 
+      const arrowPanInput = submenuItems.querySelector("#arrowKeyPanToggle");
+      if (arrowPanInput) {
+        arrowPanInput.checked = state.appSettings?.arrowKeyPan !== false;
+        arrowPanInput.addEventListener("change", () => {
+          onAppSettingsChanged?.({ arrowKeyPan: arrowPanInput.checked });
+        });
+      }
+
       const applyColorButton = (button, color) => {
         const normalized = normalizeColor(color);
         button.dataset.colorValue = normalized;

@@ -29,6 +29,7 @@ import {
   normalizeTextBinding,
   normalizeTextSlot
 } from "./text-utils.js";
+import { getTemplate } from "../template-store.js";
 
 const previewDefaultViewBox = Object.freeze({ x: -120, y: -120, width: 480, height: 480 });
 const previewInitialScale = 0.25;
@@ -326,7 +327,7 @@ export function createStationManager({
     if (!preset) {
       stationPresetNameInput.value = "";
       stationShapeSelect.innerHTML = "";
-      stationTextCardList.innerHTML = "<div class=\"kv\">暂无文本卡片。</div>";
+      stationTextCardList.innerHTML = getTemplate("station-manager-text-card-empty");
       stationVirtualToggle.checked = false;
       stationVirtualToggle.disabled = true;
       renderTextPlacementPanel(null);
@@ -349,7 +350,7 @@ export function createStationManager({
 
   function refreshStationParamPanels(preset) {
     if (!preset) {
-      stationTextCardList.innerHTML = "<div class=\"kv\">暂无文本卡片。</div>";
+      stationTextCardList.innerHTML = getTemplate("station-manager-text-card-empty");
       renderParamsPanel(null);
       renderTextPlacementPanel(null);
       renderPreview(null);
@@ -1584,14 +1585,14 @@ export function createStationManager({
   function renderCustomParamList(preset) {
     stationCustomParamList.innerHTML = "";
     if (!preset) {
-      stationCustomParamList.innerHTML = "<div class=\"shape-param-item\">请先创建或选择车站预设。</div>";
+      stationCustomParamList.innerHTML = getTemplate("station-manager-custom-param-unselected");
       return;
     }
 
     const params = normalizeShapeParameters(preset.params);
     preset.params = params;
     if (!params.length) {
-      stationCustomParamList.innerHTML = "<div class=\"shape-param-item\">暂无自定义参数。</div>";
+      stationCustomParamList.innerHTML = getTemplate("station-manager-custom-param-empty");
       return;
     }
 
@@ -1666,19 +1667,19 @@ export function createStationManager({
   function renderExistingParamList(preset) {
     stationExistingParamList.innerHTML = "";
     if (!preset) {
-      stationExistingParamList.innerHTML = "<div class=\"shape-prop-empty\">请先创建或选择车站预设。</div>";
+      stationExistingParamList.innerHTML = getTemplate("station-manager-existing-param-unselected");
       return;
     }
 
     const shape = getShapeById(preset.shapeId);
     if (!shape) {
-      stationExistingParamList.innerHTML = "<div class=\"shape-prop-empty\">请选择图形后查看已有参数。</div>";
+      stationExistingParamList.innerHTML = getTemplate("station-manager-existing-param-no-shape");
       return;
     }
 
     const shapeParams = normalizeShapeParameters(shape.parameters);
     if (!shapeParams.length) {
-      stationExistingParamList.innerHTML = "<div class=\"shape-prop-empty\">所选图形没有参数可复用。</div>";
+      stationExistingParamList.innerHTML = getTemplate("station-manager-existing-param-empty");
       return;
     }
 

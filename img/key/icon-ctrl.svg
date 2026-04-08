@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 64" width="96" height="64">
+  <rect x="4" y="4" width="88" height="56" rx="8" fill="none" stroke="black" stroke-width="4" />
+  <rect x="4" y="4" width="88" height="46" rx="8" fill="none" stroke="black" stroke-width="4" />
+  <text x="48" y="32" font-family="sans-serif" font-size="20" font-weight="bold" fill="black" text-anchor="middle" dominant-baseline="middle">Ctrl</text>
+</svg>

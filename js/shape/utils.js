@@ -1,4 +1,5 @@
 import { svgNs } from "../dom.js";
+import { getSvgTextDecoration, normalizeTextStyleFlags } from "../utils.js";
 
 export const shapeParameterTypeDefinitions = Object.freeze({
   color: { label: "颜色参数", defaultValue: "#2f5d9d" },
@@ -144,6 +145,10 @@ export function createPrimitiveElement(type, index) {
       value: "文本",
       fontSize: 26,
       fontFamily: "Segoe UI",
+      bold: false,
+      italic: false,
+      underline: false,
+      strikethrough: false,
       fill: "#2f5d9d",
       rotation: 0
     };
@@ -408,6 +413,7 @@ export function normalizePrimitive(raw) {
   }
 
   if (type === "text") {
+    const textStyle = normalizeTextStyleFlags(raw);
     return {
       type,
       x: toNumber(raw.x, 120),
@@ -415,6 +421,7 @@ export function normalizePrimitive(raw) {
       value: String(raw.value || "文本"),
       fontSize: normalizeNumber(raw.fontSize, 26, 1, 240),
       fontFamily: String(raw.fontFamily || "Segoe UI"),
+      ...textStyle,
       fill: safeColor(raw.fill),
       rotation: toNumber(raw.rotation, 0),
       paramBindings
@@ -509,12 +516,16 @@ export function createPrimitiveNode(primitive) {
   }
 
   if (type === "text") {
+    const textStyle = normalizeTextStyleFlags(primitive);
     const text = document.createElementNS(svgNs, "text");
     text.setAttribute("x", String(primitive.x));
     text.setAttribute("y", String(primitive.y));
     text.setAttribute("fill", safeColor(primitive.fill));
     text.setAttribute("font-size", String(primitive.fontSize));
     text.setAttribute("font-family", String(primitive.fontFamily || "Segoe UI"));
+    text.setAttribute("font-weight", textStyle.bold ? "700" : "400");
+    text.setAttribute("font-style", textStyle.italic ? "italic" : "normal");
+    text.setAttribute("text-decoration", getSvgTextDecoration(textStyle));
     text.setAttribute("text-anchor", "middle");
     text.setAttribute("dominant-baseline", "middle");
     text.textContent = String(primitive.value || "文本");
@@ -567,7 +578,11 @@ export function primitiveToMarkup(primitive) {
   }
 
   if (primitive.type === "text") {
-    return `<text x=\"${num(primitive.x)}\" y=\"${num(primitive.y)}\" fill=\"${safeColor(primitive.fill)}\" font-size=\"${num(primitive.fontSize)}\" font-family=\"${escapeXml(String(primitive.fontFamily || "Segoe UI"))}\" text-anchor=\"middle\" dominant-baseline=\"middle\"${rotationAttr}>${escapeXml(String(primitive.value || "文本"))}</text>`;
+    const textStyle = normalizeTextStyleFlags(primitive);
+    const decoration = getSvgTextDecoration(textStyle);
+    const weight = textStyle.bold ? "700" : "400";
+    const style = textStyle.italic ? "italic" : "normal";
+    return `<text x=\"${num(primitive.x)}\" y=\"${num(primitive.y)}\" fill=\"${safeColor(primitive.fill)}\" font-size=\"${num(primitive.fontSize)}\" font-family=\"${escapeXml(String(primitive.fontFamily || "Segoe UI"))}\" font-weight=\"${weight}\" font-style=\"${style}\" text-decoration=\"${decoration}\" text-anchor=\"middle\" dominant-baseline=\"middle\"${rotationAttr}>${escapeXml(String(primitive.value || "文本"))}</text>`;
   }
 
   return "";

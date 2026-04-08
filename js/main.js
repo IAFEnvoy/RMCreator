@@ -39,6 +39,7 @@ const defaultAppSettings = Object.freeze({
   continuousTextMode: true,
   continuousShapeMode: true,
   showGrid: true,
+  arrowKeyPan: true,
   selectionGlowColor: "#2f6de5",
   selectionGlowSize: 4,
   themeAccentColor: "#2f6de5",
@@ -82,6 +83,7 @@ const state = {
     marqueeStart: null,
     marqueeCurrent: null,
     didMove: false,
+    lineSplitCandidate: null,
     suppressClick: false,
     fromX: 0,
     fromY: 0,
@@ -297,6 +299,7 @@ const eventBinder = createEventBinder({
   copySelection: clipboardController.copySelection,
   cutSelection: clipboardController.cutSelection,
   pasteSelection: clipboardController.pasteSelection,
+  insertStationOnLine,
   onStateChanged: commitStateChange
 });
 
@@ -437,6 +440,7 @@ function sanitizeAppSettings(rawSettings) {
     continuousTextMode: Boolean(next.continuousTextMode),
     continuousShapeMode: Boolean(next.continuousShapeMode),
     showGrid: next.showGrid !== false,
+    arrowKeyPan: next.arrowKeyPan !== false,
     selectionGlowColor: normalizeHexColor(next.selectionGlowColor, defaultAppSettings.selectionGlowColor),
     selectionGlowSize: clamp(Number(next.selectionGlowSize) || defaultAppSettings.selectionGlowSize, 1, 30),
     themeAccentColor: normalizeHexColor(next.themeAccentColor, defaultAppSettings.themeAccentColor),
@@ -545,6 +549,7 @@ function createNewDrawing() {
     marqueeStart: null,
     marqueeCurrent: null,
     didMove: false,
+    lineSplitCandidate: null,
     suppressClick: false,
     fromX: 0,
     fromY: 0,
@@ -700,6 +705,7 @@ function applyDrawingData(drawing, {
     marqueeStart: null,
     marqueeCurrent: null,
     didMove: false,
+    lineSplitCandidate: null,
     suppressClick: false,
     fromX: 0,
     fromY: 0,
@@ -1098,6 +1104,91 @@ function addLine(fromStationId, toStationId, lineTypeId, geometry) {
   renderer.renderLines();
   selectEntity({ type: "line", id: edge.id });
   commitStateChange();
+}
+
+function insertStationOnLine({ edgeId, point, stationTypeIndex, stationId, commit = true, selectStation = true } = {}) {
+  const targetId = String(edgeId || "");
+  if (!targetId || !point || !Number.isFinite(point.x) || !Number.isFinite(point.y)) {
+    return null;
+  }
+
+  const edgeIndex = state.edges.findIndex((edge) => String(edge.id || "") === targetId);
+  if (edgeIndex < 0) {
+    return null;
+  }
+
+  const edge = state.edges[edgeIndex];
+  const fromId = edge?.fromStationId;
+  const toId = edge?.toStationId;
+  if (!fromId || !toId) {
+    return null;
+  }
+
+  let station = stationId
+    ? state.nodes.find((node) => String(node.id || "") === String(stationId))
+    : null;
+
+  if (!station) {
+    const sourceType = state.stationTypes[stationTypeIndex];
+    if (!sourceType) {
+      return null;
+    }
+
+    station = {
+      id: getNextId("station"),
+      x: point.x,
+      y: point.y,
+      name: sourceType.name,
+      radius: Number(sourceType.radius) || 10,
+      oval: Boolean(sourceType.oval),
+      stationTypeIndex,
+      paramValues: resolveStationParamDefaultsByTypeIndex(stationTypeIndex),
+      textValues: resolveStationTextDefaultsByTypeIndex(stationTypeIndex),
+      textStyleValues: resolveStationTextStyleDefaultsByTypeIndex(stationTypeIndex),
+      textPlacement: resolveStationTextPlacementByTypeIndex(stationTypeIndex)
+    };
+
+    state.nodes.push(station);
+  } else {
+    station.x = point.x;
+    station.y = point.y;
+  }
+
+  if (String(station.id) === String(fromId) || String(station.id) === String(toId)) {
+    return null;
+  }
+
+  const lineType = findLineType(edge.lineTypeId);
+  const fallbackColors = lineType ? getColorListDefault(lineType) : [];
+  const baseColors = Array.isArray(edge.colorList) && edge.colorList.length
+    ? edge.colorList.map((color) => normalizeColor(color))
+    : fallbackColors.map((color) => normalizeColor(color));
+
+  const buildSplitEdge = (fromStationId, toStationId) => ({
+    ...edge,
+    id: getNextId("line"),
+    fromStationId,
+    toStationId,
+    colorList: [...baseColors]
+  });
+
+  const leftEdge = buildSplitEdge(fromId, station.id);
+  const rightEdge = buildSplitEdge(station.id, toId);
+  state.edges.splice(edgeIndex, 1, leftEdge, rightEdge);
+
+  renderer.renderStations();
+  renderer.renderLines();
+  renderer.renderSettings();
+
+  if (selectStation) {
+    selectEntity({ type: "station", id: station.id });
+  }
+
+  if (commit) {
+    commitStateChange();
+  }
+
+  return station;
 }
 
 function addText(x, y) {

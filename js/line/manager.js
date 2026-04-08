@@ -14,6 +14,7 @@ import {
   normalizeColor,
   splitColorAndAlpha
 } from "../utils.js";
+import { renderTemplate } from "../template-store.js";
 
 export function createLineManager({
   state,
@@ -291,43 +292,8 @@ export function createLineManager({
       card.className = "segment-item";
       card.dataset.segmentIndex = String(index);
 
-      card.innerHTML = `
-        <div class="segment-head">
-          <div class="segment-title">小线条 ${index + 1}</div>
-          <button
-            class="segment-drag-handle"
-            data-drag-handle-index="${index}"
-            draggable="true"
-            type="button"
-            title="拖拽排序"
-            aria-label="拖拽排序"
-          >
-            <img src="img/icon-drag-vertical.svg" alt="" />
-          </button>
-        </div>
-        <div class="segment-grid">
-          <div class="field-compact">
-            <label>宽度</label>
-            <input data-field="width" data-index="${index}" type="number" min="1" max="20" value="${segment.width}" />
-          </div>
-          <div class="field-compact">
-            <label>线形</label>
-            <select data-field="strokeStyle" data-index="${index}">
-              <option value="solid">实线</option>
-              <option value="dashed">虚线</option>
-            </select>
-          </div>
-          <div class="field-compact">
-            <label>颜色来源</label>
-            <select data-field="colorMode" data-index="${index}">
-              <option value="fixed">固定颜色</option>
-              <option value="palette">引用颜色列表</option>
-            </select>
-          </div>
-          <button class="btn-ghost" data-remove-index="${index}" type="button">删除</button>
-        </div>
-        <div class="segment-subgrid">
-          ${segment.strokeStyle === "dashed" ? `
+      const dashedFieldsHtml = segment.strokeStyle === "dashed"
+        ? `
             <div class="field-compact">
               <label>虚线实段长度</label>
               <input data-field="dashSolidLength" data-index="${index}" type="number" min="0.1" max="200" step="0.1" value="${formatPositiveNumber(segment.dashSolidLength, 10)}" />
@@ -336,33 +302,37 @@ export function createLineManager({
               <label>虚线虚段长度</label>
               <input data-field="dashGapLength" data-index="${index}" type="number" min="0.1" max="200" step="0.1" value="${formatPositiveNumber(segment.dashGapLength, 6)}" />
             </div>
-          ` : ""}
-          <div class="field-compact field-compact-toggle">
-            <label for="segmentRoundCap${index}">端点圆头</label>
-            <label class="toggle-switch" for="segmentRoundCap${index}">
-              <input id="segmentRoundCap${index}" class="toggle-checkbox" data-field="roundCap" data-index="${index}" type="checkbox" ${segment.roundCap ? "checked" : ""} />
-              <span class="toggle-slider" aria-hidden="true"></span>
-            </label>
-          </div>
-          ${segment.colorMode === "palette" ? `
+          `
+        : "";
+
+      const colorModeHtml = segment.colorMode === "palette"
+        ? `
             <div class="field-compact">
               <label>引用颜色</label>
               <select data-field="paletteIndex" data-index="${index}">${paletteOptions}</select>
             </div>
-          ` : `
+          `
+        : `
             <div class="field-compact">
               <label>固定颜色</label>
               ${buildColorTrigger({
-        color: segment.fixedColor,
-        attrs: {
-          "data-color-role": "segment-fixed",
-          "data-index": String(index)
-        }
-      })}
+          color: segment.fixedColor,
+          attrs: {
+            "data-color-role": "segment-fixed",
+            "data-index": String(index)
+          }
+        })}
             </div>
-          `}
-        </div>
-      `;
+          `;
+
+      card.innerHTML = renderTemplate("line-manager-segment-item", {
+        segmentIndex: String(index),
+        segmentTitle: `小线条 ${index + 1}`,
+        segmentWidth: String(segment.width),
+        dashedFieldsHtml,
+        colorModeHtml,
+        roundCapChecked: segment.roundCap ? "checked" : ""
+      });
 
       const styleSelect = card.querySelector(`select[data-index="${index}"]`);
       styleSelect.value = segment.strokeStyle;
@@ -447,17 +417,17 @@ export function createLineManager({
     draft.colorList.forEach((color, index) => {
       const row = document.createElement("div");
       row.className = "color-list-item";
-      row.innerHTML = `
-        <span class="color-list-item-label">颜色${index + 1}</span>
-        ${buildColorTrigger({
-        color,
-        attrs: {
-          "data-color-role": "line-palette",
-          "data-index": String(index)
-        }
-      })}
-        <button class="btn-ghost" data-remove-color-index="${index}" type="button">删除</button>
-      `;
+      row.innerHTML = renderTemplate("line-manager-color-item", {
+        colorLabel: `颜色${index + 1}`,
+        colorTriggerHtml: buildColorTrigger({
+          color,
+          attrs: {
+            "data-color-role": "line-palette",
+            "data-index": String(index)
+          }
+        }),
+        colorIndex: String(index)
+      });
 
       const colorButton = row.querySelector("[data-color-role='line-palette']");
       colorButton?.addEventListener("click", () => {
