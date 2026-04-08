@@ -47,8 +47,7 @@
         </button>
         <div class="file-menu-panel" id="fileMenuPanel" hidden>
           <button class="file-menu-item" id="fileNewBtn" type="button">新建绘图</button>
-          <button class="file-menu-item" id="fileSaveBtn" type="button">保存绘图</button>
-          <button class="file-menu-item" id="fileLoadBtn" type="button">加载绘图</button>
+          <button class="file-menu-item" id="fileManageBtn" type="button">绘图管理</button>
           <div class="file-menu-divider" role="separator"></div>
           <button class="file-menu-item" id="fileExportSvgBtn" type="button">导出为 SVG</button>
           <button class="file-menu-item" id="fileExportPngBtn" type="button">导出为 PNG</button>
@@ -514,6 +513,8 @@
       </div>
     </div>
   </div>
+
+  <div class="modal-backdrop" id="drawingManagerModal" hidden></div>
 
   <script src="js/main.js" type="module"></script>
 </body>

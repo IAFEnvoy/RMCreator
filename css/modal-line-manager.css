@@ -211,6 +211,58 @@
   overflow: auto;
 }
 
+.drawing-manager-modal .modal-body {
+  grid-template-columns: 360px 1fr;
+}
+
+.drawing-manager-modal .manager-bulk-actions {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.drawing-manager-modal .drawing-metadata .field input {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: #ffffff;
+}
+
+.drawing-meta-cards {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.drawing-meta-cards.secondary {
+  grid-template-columns: 1fr;
+}
+
+.drawing-meta-card {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px;
+  background: #fbfdff;
+  text-align: center;
+}
+
+.drawing-meta-card-value {
+  font-size: 16px;
+  font-weight: 700;
+  color: #2b3f5c;
+}
+
+.drawing-meta-card-label {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #6a7f9b;
+}
+
+.line-library-item.opened .line-library-item-title,
+.line-library-item.opened .line-library-item-meta {
+  font-style: italic;
+}
+
 .line-type-preview {
   width: 100%;
   height: 90px;

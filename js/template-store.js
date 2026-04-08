@@ -29,6 +29,7 @@ const templateSources = {
   "station-manager-existing-param-unselected": "/template/manager/station/existing-param-unselected.html",
   "station-manager-existing-param-no-shape": "/template/manager/station/existing-param-no-shape.html",
   "shortcuts-modal": "/template/manager/shortcuts/shortcuts-modal.html"
+  , "drawing-manager": "/template/manager/drawing-manager.html"
 };
 
 async function fetchTemplate(url) {

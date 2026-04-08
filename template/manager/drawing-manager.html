@@ -1,0 +1,65 @@
+<div class="line-manager-modal drawing-manager-modal" role="dialog" aria-modal="true" aria-label="绘图管理器">
+  <div class="modal-head">
+    <h2>绘图管理</h2>
+    <button class="btn-ghost" id="closeDrawingManagerBtn" type="button" aria-label="关闭">
+      <img src="/img/icon-close.svg" alt="关闭" />
+    </button>
+  </div>
+  <div class="modal-body drawing-manager-body">
+    <section class="line-library drawing-library">
+      <div class="line-library-head">
+        <label class="manager-select-all" for="drawingSelectAllInput">
+          <input id="drawingSelectAllInput" class="library-select-all-checkbox" type="checkbox" />
+          <span>全选</span>
+        </label>
+        <span class="line-library-name">绘图列表</span>
+      </div>
+      <div class="manager-library-toolbar">
+        <div class="manager-bulk-actions">
+          <button class="btn-main" id="newDrawingBtn" type="button">新建</button>
+          <button class="btn-ghost" id="loadDrawingBtn" type="button">加载</button>
+          <button class="btn-ghost" id="exportDrawingBtn" type="button">导出</button>
+          <button class="btn-ghost" id="importDrawingBtn" type="button">导入</button>
+          <button class="btn-ghost btn-danger" id="deleteDrawingBtn" type="button">删除</button>
+          <input id="drawingImportInput" type="file" accept="application/json,.json" hidden />
+        </div>
+      </div>
+      <div class="line-library-list drawing-library-list" id="drawingLibraryList"></div>
+    </section>
+
+    <section class="line-editor drawing-metadata" id="drawingMetadataPanel">
+      <div class="field">
+        <label for="drawingMetaNameInput">名称</label>
+        <input id="drawingMetaNameInput" type="text" placeholder="未命名绘图" />
+      </div>
+      <div class="field">
+        <label for="drawingMetaAuthorInput">作者</label>
+        <input id="drawingMetaAuthorInput" type="text" placeholder="作者（可选）" />
+      </div>
+      <div class="drawing-meta-cards">
+        <div class="drawing-meta-card">
+          <div class="drawing-meta-card-value" id="drawingMetaNodes"></div>
+          <div class="drawing-meta-card-label">车站数</div>
+        </div>
+        <div class="drawing-meta-card">
+          <div class="drawing-meta-card-value" id="drawingMetaEdges"></div>
+          <div class="drawing-meta-card-label">线段数</div>
+        </div>
+        <div class="drawing-meta-card">
+          <div class="drawing-meta-card-value" id="drawingMetaLabels"></div>
+          <div class="drawing-meta-card-label">文本数</div>
+        </div>
+        <div class="drawing-meta-card">
+          <div class="drawing-meta-card-value" id="drawingMetaShapes"></div>
+          <div class="drawing-meta-card-label">图形数</div>
+        </div>
+      </div>
+      <div class="drawing-meta-cards secondary">
+        <div class="drawing-meta-card">
+          <div class="drawing-meta-card-value" id="drawingMetaModified"></div>
+          <div class="drawing-meta-card-label">最后修改</div>
+        </div>
+      </div>
+    </section>
+  </div>
+</div>

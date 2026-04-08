@@ -1,4 +1,5 @@
 import { elements } from "./dom.js";
+import "./modal-a11y.js";
 import {
   createRandomLineTypeId,
   createDefaultLineTypes,
@@ -12,6 +13,7 @@ import { createLineManager } from "./line/manager.js";
 import { createColorPickerModal } from "./color-picker-modal.js";
 import { createShapeManager } from "./shape/manager.js";
 import { createStationManager } from "./station/manager.js";
+import { createDrawingManager } from "./drawing-manager.js";
 import {
   getShapeParameterDefaults,
   normalizeShapeParameterDefault,
@@ -27,7 +29,12 @@ import {
   normalizeColor,
   normalizeTextStyleFlags
 } from "./utils.js";
-import { appSettingsStorageKey, drawingStorageKey, geometryLabelMap } from "./constants.js";
+import {
+  activeDrawingIdStorageKey,
+  appSettingsStorageKey,
+  drawingsListStorageKey,
+  geometryLabelMap
+} from "./constants.js";
 import { createHistoryManager } from "./history-manager.js";
 import { preloadTemplates } from "./template-store.js";
 
@@ -194,6 +201,7 @@ let defaultLineTypes = [];
 let lineManager = null;
 let shapeManager = null;
 let stationManager = null;
+let drawingManager = null;
 const exportManager = createExportManager({ elements });
 const colorPicker = createColorPickerModal({ elements });
 
@@ -245,6 +253,15 @@ stationManager = createStationManager({
   rerenderScene
 });
 
+drawingManager = createDrawingManager({
+  state,
+  elements,
+  parseDrawingJson,
+  safeSerializeSnapshot,
+  applyDrawingData,
+  confirmOverwrite
+});
+
 const mainClipboard = createMainClipboard({
   state,
   getNextId,
@@ -292,6 +309,7 @@ const eventBinder = createEventBinder({
   exportDrawingAsSvg: exportManager.exportDrawingAsSvg,
   openPngExportModal: exportManager.openPngExportModal,
   loadDrawingFromFile,
+  openDrawingManager: () => drawingManager?.open?.(),
   undo,
   redo,
   shapeUndo: () => shapeManager?.undo?.(),
@@ -330,6 +348,7 @@ async function init() {
   lineManager.bind();
   shapeManager.bind();
   stationManager.bind();
+  drawingManager.bind();
 
   renderer.renderSubmenu();
   rerenderScene();
@@ -748,20 +767,62 @@ function applyDrawingData(drawing, {
 }
 
 function restoreDrawingFromLocalStorage() {
-  const snapshot = localStorage.getItem(drawingStorageKey);
-  if (!snapshot) {
-    return;
+  const list = readDrawingsList();
+  const activeId = localStorage.getItem(activeDrawingIdStorageKey);
+  if (!list.length) {
+    const snapshot = createEmptySnapshot();
+    const name = `未命名绘图 ${new Date().toLocaleString()}`;
+    const saved = createDrawingRecord(snapshot, name);
+    persistDrawingsList([saved]);
+    setActiveDrawingId(saved.id);
+    try {
+      const drawing = parseDrawingJson(saved.snapshot);
+      applyDrawingData(drawing, {
+        persistSnapshot: false,
+        markTemporaryImported: false,
+        includePersistedPermanentCustoms: true
+      });
+      return;
+    } catch {
+      // ignore initial apply errors
+    }
+  }
+  if (activeId) {
+    const saved = list.find((item) => String(item.id) === String(activeId));
+    if (saved?.snapshot) {
+      try {
+        const drawing = parseDrawingJson(saved.snapshot);
+        applyDrawingData(drawing, {
+          persistSnapshot: false,
+          markTemporaryImported: false,
+          includePersistedPermanentCustoms: true
+        });
+        setActiveDrawingId(activeId);
+        return;
+      } catch {
+        localStorage.removeItem(activeDrawingIdStorageKey);
+      }
+    } else {
+      localStorage.removeItem(activeDrawingIdStorageKey);
+    }
   }
 
-  try {
-    const drawing = parseDrawingJson(snapshot);
-    applyDrawingData(drawing, {
-      persistSnapshot: false,
-      markTemporaryImported: false,
-      includePersistedPermanentCustoms: true
-    });
-  } catch {
-    localStorage.removeItem(drawingStorageKey);
+  if (list.length) {
+    const fallback = list[0];
+    if (fallback?.snapshot) {
+      try {
+        const drawing = parseDrawingJson(fallback.snapshot);
+        applyDrawingData(drawing, {
+          persistSnapshot: false,
+          markTemporaryImported: false,
+          includePersistedPermanentCustoms: true
+        });
+        setActiveDrawingId(fallback.id);
+        return;
+      } catch {
+        // ignore fallback errors
+      }
+    }
   }
 }
 
@@ -816,15 +877,109 @@ function safeSerializeSnapshot() {
   }
 }
 
+function createEmptySnapshot() {
+  return JSON.stringify({
+    version: 1,
+    counter: 1,
+    viewport: { zoom: 1, pan: { x: 0, y: 0 } },
+    nodes: [],
+    edges: [],
+    labels: [],
+    shapes: [],
+    customLineTypes: []
+  });
+}
+
+function createDrawingRecord(snapshot, name) {
+  const id = `drawing-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+  let counts = { nodes: 0, edges: 0, labels: 0, shapes: 0 };
+  try {
+    const parsed = parseDrawingJson(snapshot);
+    counts = {
+      nodes: Array.isArray(parsed.nodes) ? parsed.nodes.length : 0,
+      edges: Array.isArray(parsed.edges) ? parsed.edges.length : 0,
+      labels: Array.isArray(parsed.labels) ? parsed.labels.length : 0,
+      shapes: Array.isArray(parsed.shapes) ? parsed.shapes.length : 0
+    };
+  } catch {
+    // keep defaults
+  }
+  const now = new Date().toISOString();
+  return {
+    id,
+    name: String(name || `绘图 ${now}`),
+    author: "",
+    snapshot: String(snapshot),
+    createdAt: now,
+    modifiedAt: now,
+    counts
+  };
+}
+
+function readDrawingsList() {
+  try {
+    const raw = localStorage.getItem(drawingsListStorageKey);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function persistDrawingsList(list) {
+  try {
+    localStorage.setItem(drawingsListStorageKey, JSON.stringify(list));
+  } catch {
+    // ignore storage errors
+  }
+}
+
+function setActiveDrawingId(id) {
+  if (state.drawingManager) {
+    state.drawingManager.activeId = id || null;
+  }
+  if (id) {
+    localStorage.setItem(activeDrawingIdStorageKey, String(id));
+  } else {
+    localStorage.removeItem(activeDrawingIdStorageKey);
+  }
+}
+
+function updateActiveDrawingSnapshot(snapshot) {
+  const activeId = state.drawingManager?.activeId || localStorage.getItem(activeDrawingIdStorageKey);
+  if (!activeId) return false;
+  const list = readDrawingsList();
+  const idx = list.findIndex((item) => String(item.id) === String(activeId));
+  if (idx < 0) return false;
+
+  try {
+    const parsed = parseDrawingJson(snapshot);
+    const counts = {
+      nodes: Array.isArray(parsed.nodes) ? parsed.nodes.length : 0,
+      edges: Array.isArray(parsed.edges) ? parsed.edges.length : 0,
+      labels: Array.isArray(parsed.labels) ? parsed.labels.length : 0,
+      shapes: Array.isArray(parsed.shapes) ? parsed.shapes.length : 0
+    };
+    list[idx] = {
+      ...list[idx],
+      snapshot,
+      counts,
+      modifiedAt: new Date().toISOString()
+    };
+    persistDrawingsList(list);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function persistDrawingSnapshot(snapshot) {
   if (!snapshot) {
     return;
   }
-
-  try {
-    localStorage.setItem(drawingStorageKey, snapshot);
-  } catch {
-    // Ignore localStorage quota/availability errors.
+  if (updateActiveDrawingSnapshot(snapshot)) {
+    return;
   }
 }
 

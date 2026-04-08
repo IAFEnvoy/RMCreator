@@ -22,6 +22,7 @@ export function createEventBinder({
   exportDrawingAsSvg,
   openPngExportModal,
   loadDrawingFromFile,
+  openDrawingManager,
   undo,
   redo,
   shapeUndo,
@@ -49,8 +50,7 @@ export function createEventBinder({
     editMenuBtn,
     editMenuPanel,
     fileNewBtn,
-    fileSaveBtn,
-    fileLoadBtn,
+    fileManageBtn,
     fileExportSvgBtn,
     fileExportPngBtn,
     fileUndoBtn,
@@ -300,8 +300,7 @@ export function createEventBinder({
   function bindFileMenu() {
     if (
       !fileNewBtn
-      || !fileSaveBtn
-      || !fileLoadBtn
+      || !fileManageBtn
       || !fileUndoBtn
       || !fileRedoBtn
       || !fileCutBtn
@@ -360,11 +359,6 @@ export function createEventBinder({
       createNewDrawing();
     });
 
-    fileSaveBtn.addEventListener("click", () => {
-      closeAllMenus();
-      saveDrawing();
-    });
-
     if (fileExportSvgBtn) {
       fileExportSvgBtn.addEventListener("click", () => {
         closeAllMenus();
@@ -379,9 +373,9 @@ export function createEventBinder({
       });
     }
 
-    fileLoadBtn.addEventListener("click", () => {
+    fileManageBtn.addEventListener("click", () => {
       closeAllMenus();
-      fileLoadInput.click();
+      openDrawingManager?.();
     });
 
     fileUndoBtn.addEventListener("click", () => {
