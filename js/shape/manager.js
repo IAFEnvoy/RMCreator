@@ -3391,6 +3391,7 @@ export function createShapeManager({
     redo,
     copySelection: clipboard.copySelection,
     cutSelection: clipboard.cutSelection,
+    duplicateSelection: clipboard.duplicateSelection,
     pasteSelection: clipboard.paste,
     clearClipboard: clipboard.clear,
     hasClipboard: clipboard.hasData

@@ -51,6 +51,7 @@ export function createEventBinder({
     editMenuPanel,
     fileNewBtn,
     fileManageBtn,
+    fileExportJsonBtn,
     fileExportSvgBtn,
     fileExportPngBtn,
     fileUndoBtn,
@@ -363,6 +364,13 @@ export function createEventBinder({
       fileExportSvgBtn.addEventListener("click", () => {
         closeAllMenus();
         exportDrawingAsSvg?.();
+      });
+    }
+
+    if (fileExportJsonBtn) {
+      fileExportJsonBtn.addEventListener("click", () => {
+        closeAllMenus();
+        saveDrawing?.();
       });
     }
 

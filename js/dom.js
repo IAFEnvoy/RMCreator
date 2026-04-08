@@ -19,6 +19,7 @@ export const elements = {
   editMenuPanel: document.getElementById("editMenuPanel"),
   fileNewBtn: document.getElementById("fileNewBtn"),
   fileManageBtn: document.getElementById("fileManageBtn"),
+  fileExportJsonBtn: document.getElementById("fileExportJsonBtn"),
   fileExportSvgBtn: document.getElementById("fileExportSvgBtn"),
   fileExportPngBtn: document.getElementById("fileExportPngBtn"),
   fileUndoBtn: document.getElementById("fileUndoBtn"),

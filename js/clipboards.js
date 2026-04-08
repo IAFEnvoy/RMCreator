@@ -186,10 +186,24 @@ export function createMainClipboard({
     return true;
   };
 
+  const duplicateSelection = () => {
+    const prevSnapshot = snapshot ? cloneValue(snapshot) : null;
+    const prevPasteIndex = pasteIndex;
+    const copied = copySelection();
+    if (!copied) {
+      return false;
+    }
+    const result = paste();
+    snapshot = prevSnapshot;
+    pasteIndex = prevPasteIndex;
+    return result;
+  };
+
   return {
     copySelection,
     cutSelection,
     paste,
+    duplicateSelection,
     clear,
     hasData
   };
@@ -312,12 +326,25 @@ export function createShapeManagerClipboard({
       const shape = ensureEditableShape();
       if (!shape || !Array.isArray(shape.editableElements)) {
         return false;
+        const duplicateSelection = () => {
+          const prevSnapshot = snapshot ? cloneValue(snapshot) : null;
+          const prevPasteIndex = pasteIndex;
+          const copied = copySelection();
+          if (!copied) {
+            return false;
+          }
+          const result = paste();
+          snapshot = prevSnapshot;
+          pasteIndex = prevPasteIndex;
+          return result;
+        };
       }
 
       const primitive = cloneValue(snapshot.primitive);
       offsetPrimitive(primitive, offset * 0.3);
       shape.editableElements.push(primitive);
-      setSelectedPrimitiveIndices(shape, [shape.editableElements.length - 1]);
+      duplicateSelection,
+        setSelectedPrimitiveIndices(shape, [shape.editableElements.length - 1]);
       syncShapeSvg(shape, { preserveParameters: true });
       persistShapeLibrary();
       renderShapeManager();
@@ -372,10 +399,24 @@ export function createShapeManagerClipboard({
     return false;
   };
 
+  const duplicateSelection = () => {
+    const prevSnapshot = snapshot ? cloneValue(snapshot) : null;
+    const prevPasteIndex = pasteIndex;
+    const copied = copySelection();
+    if (!copied) {
+      return false;
+    }
+    const result = paste();
+    snapshot = prevSnapshot;
+    pasteIndex = prevPasteIndex;
+    return result;
+  };
+
   return {
     copySelection,
     cutSelection,
     paste,
+    duplicateSelection,
     clear,
     hasData
   };

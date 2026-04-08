@@ -218,6 +218,9 @@ const renderer = createRenderer({
   moveLineInStack,
   applyStationType,
   getStationTypeIndexByStation,
+  copySelection: () => clipboardController?.copySelection?.(),
+  duplicateSelection: () => clipboardController?.duplicateSelection?.(),
+  deleteSelectedEntity,
   onStateChanged: commitStateChange
 });
 
@@ -281,6 +284,11 @@ const clipboardController = {
     state.shapeManager?.isOpen
       ? shapeManager?.cutSelection?.()
       : mainClipboard.cutSelection()
+  ),
+  duplicateSelection: () => (
+    state.shapeManager?.isOpen
+      ? shapeManager?.duplicateSelection?.()
+      : mainClipboard.duplicateSelection()
   ),
   pasteSelection: () => (
     state.shapeManager?.isOpen
@@ -551,67 +559,28 @@ async function loadMenus() {
 }
 
 function createNewDrawing() {
-  if (!confirmOverwrite("新建绘图会覆盖当前内容，是否继续？")) {
+  if (!confirmOverwrite("新增贴图会覆盖当前内容，是否继续？")) {
     return;
   }
+  const snapshot = createEmptySnapshot();
+  const name = `未命名绘图 ${new Date().toLocaleString()}`;
+  const record = createDrawingRecord(snapshot, name);
+  const list = readDrawingsList();
+  list.unshift(record);
+  persistDrawingsList(list);
+  setActiveDrawingId(record.id);
 
-  state.nodes = [];
-  state.edges = [];
-  state.labels = [];
-  state.shapes = [];
-  state.selectedEntities = [];
-  state.drag = {
-    mode: null,
-    stationId: null,
-    lineStartStationId: null,
-    moveEntities: [],
-    marqueeStart: null,
-    marqueeCurrent: null,
-    didMove: false,
-    lineSplitCandidate: null,
-    suppressClick: false,
-    fromX: 0,
-    fromY: 0,
-    panX: 0,
-    panY: 0
-  };
-  state.zoom = 1;
-  state.pan = { x: 0, y: 0 };
-
-  resetLineTypesForBlankDrawing();
-
-  if (state.menuSelection.lineType && !state.lineTypes.some((item) => item.id === state.menuSelection.lineType)) {
-    state.menuSelection.lineType = null;
+  try {
+    const drawing = parseDrawingJson(snapshot);
+    applyDrawingData(drawing, {
+      persistSnapshot: true,
+      markTemporaryImported: false,
+      includePersistedPermanentCustoms: true
+    });
+    initHistoryBaseline();
+  } catch {
+    // ignore parse errors for empty snapshot
   }
-
-  if (state.lineManager.selectedId && !state.lineTypes.some((item) => item.id === state.lineManager.selectedId)) {
-    state.lineManager.selectedId = null;
-    state.lineManager.draft = null;
-  }
-
-  if (state.lineManager.isOpen) {
-    lineManager.close();
-  }
-
-  if (state.shapeManager.isOpen) {
-    shapeManager.close();
-  }
-
-  if (state.stationManager.isOpen) {
-    stationManager.close();
-  }
-
-  state.counter = Math.max(1, computeNextCounter());
-
-  linePreview.setAttribute("visibility", "hidden");
-  linePreview.setAttribute("d", "");
-
-  rerenderScene();
-  renderer.renderSubmenu();
-  renderer.renderSettings();
-  renderer.updateViewportTransform();
-  renderer.updateZoomIndicator();
-  initHistoryBaseline();
 }
 
 function saveDrawing() {

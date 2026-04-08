@@ -36,8 +36,53 @@ export function createSettingsRenderer({
   applyStationType,
   getStationTypeIndexByStation,
   colorPicker,
+  copySelection,
+  duplicateSelection,
+  deleteSelectedEntity,
   onStateChanged
 }) {
+  const appendSelectionActions = () => {
+    if (!settingsBody) {
+      return;
+    }
+    settingsBody.insertAdjacentHTML("beforeend", `
+      <div class="settings-actions">
+        <button class="btn-ghost" id="settingsCopyBtn" type="button">复制</button>
+        <button class="btn-ghost" id="settingsDuplicateBtn" type="button">重复</button>
+        <button class="btn-ghost btn-danger" id="settingsDeleteBtn" type="button">删除</button>
+      </div>
+    `);
+
+    const copyBtn = settingsBody.querySelector("#settingsCopyBtn");
+    const duplicateBtn = settingsBody.querySelector("#settingsDuplicateBtn");
+    const deleteBtn = settingsBody.querySelector("#settingsDeleteBtn");
+
+    if (copyBtn) {
+      copyBtn.disabled = typeof copySelection !== "function";
+      copyBtn.addEventListener("click", () => copySelection?.());
+    }
+    if (duplicateBtn) {
+      duplicateBtn.disabled = typeof duplicateSelection !== "function";
+      duplicateBtn.addEventListener("click", () => duplicateSelection?.());
+    }
+    if (deleteBtn) {
+      deleteBtn.disabled = typeof deleteSelectedEntity !== "function";
+      deleteBtn.addEventListener("click", () => {
+        const count = Array.isArray(state.selectedEntities) ? state.selectedEntities.length : 0;
+        if (!count) {
+          return;
+        }
+        const message = count > 1
+          ? `确认删除所选 ${count} 个元素？`
+          : "确认删除所选元素？";
+        if (!window.confirm(message)) {
+          return;
+        }
+        deleteSelectedEntity?.();
+      });
+    }
+  };
+
   const renderSettings = () => {
     const selectedEntities = Array.isArray(state.selectedEntities) ? state.selectedEntities : [];
     if (!selectedEntities.length) {
@@ -96,6 +141,7 @@ export function createSettingsRenderer({
           messageHtml: `${renderTemplate("settings-align-card")}${note}`
         });
         bindAlignControls(alignTargets);
+        appendSelectionActions();
         return;
       }
 
@@ -103,6 +149,7 @@ export function createSettingsRenderer({
         summaryHtml,
         messageHtml: "<div class=\"kv\">当前包含多种类型，暂不提供批量属性设置。</div>"
       });
+      appendSelectionActions();
       return;
     }
 
@@ -132,6 +179,7 @@ export function createSettingsRenderer({
           summaryHtml,
           messageHtml: "<div class=\"kv\">文本多选暂不支持批量设置。</div>"
         });
+        appendSelectionActions();
       }
       return;
     }
@@ -401,6 +449,8 @@ export function createSettingsRenderer({
       inputEl.addEventListener("input", apply);
       inputEl.addEventListener("change", apply);
     });
+
+    appendSelectionActions();
   }
 
   function renderBatchStations(stations, summaryHtml) {
@@ -433,6 +483,8 @@ export function createSettingsRenderer({
       renderSettings();
       onStateChanged?.();
     });
+
+    appendSelectionActions();
   }
 
   function renderBatchShapes(shapes, summaryHtml) {
@@ -442,6 +494,8 @@ export function createSettingsRenderer({
     });
 
     bindAlignControls(shapes.map((item) => ({ item, type: "shape" })));
+
+    appendSelectionActions();
   }
 
   function renderSingleLine(edge, summaryHtml) {
@@ -451,6 +505,7 @@ export function createSettingsRenderer({
         summaryHtml,
         messageHtml: "<div class=\"kv\">组件类型: 线</div>"
       });
+      appendSelectionActions();
       return;
     }
 
@@ -609,6 +664,8 @@ export function createSettingsRenderer({
         });
       });
     });
+
+    appendSelectionActions();
   }
 
   function renderBatchLines(lines, summaryHtml) {
@@ -754,6 +811,8 @@ export function createSettingsRenderer({
       renderLines();
       onStateChanged?.();
     });
+
+    appendSelectionActions();
   }
 
   function renderSingleText(label, summaryHtml) {
@@ -862,6 +921,8 @@ export function createSettingsRenderer({
         onStateChanged?.();
       });
     });
+
+    appendSelectionActions();
   }
 
   function renderSingleShape(shapeInstance, summaryHtml) {
@@ -871,6 +932,7 @@ export function createSettingsRenderer({
         summaryHtml,
         messageHtml: "<div class=\"kv\">组件类型: 图形</div><div class=\"kv\">该图形引用的预制图形已不存在。</div>"
       });
+      appendSelectionActions();
       return;
     }
 
@@ -1007,6 +1069,8 @@ export function createSettingsRenderer({
       inputEl.addEventListener("input", apply);
       inputEl.addEventListener("change", apply);
     });
+
+    appendSelectionActions();
   }
 
   function bindAlignControls(items) {

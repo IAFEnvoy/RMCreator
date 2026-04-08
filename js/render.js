@@ -38,6 +38,9 @@ export function createRenderer({
   moveLineInStack,
   applyStationType,
   getStationTypeIndexByStation,
+  copySelection,
+  duplicateSelection,
+  deleteSelectedEntity,
   onStateChanged
 }) {
   const {
@@ -779,6 +782,9 @@ export function createRenderer({
     applyStationType,
     getStationTypeIndexByStation,
     colorPicker,
+    copySelection,
+    duplicateSelection,
+    deleteSelectedEntity,
     onStateChanged
   });
 
