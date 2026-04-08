@@ -23,34 +23,28 @@ function flashItemText(state, feedbackTimers, button, message) {
 }
 
 // Ensure menu DOM exists and attach to document.body
-function ensureMenu(holder) {
+function ensureMenu(holder, opts) {
   if (holder.menuEl && holder.menuEl.isConnected) return;
   try {
     const wrapper = document.createElement("div");
     wrapper.innerHTML = getTemplate("context-menu");
-    holder.menuEl = wrapper.getElementById('contextMenu');
+    holder.menuEl = wrapper.querySelector("#contextMenu");
   } catch (e) {
     holder.menuEl = null;
   }
   if (!holder.menuEl) {
-    const fallback = document.createElement("div");
-    fallback.className = "context-menu";
-    fallback.id = "contextMenu";
-    fallback.hidden = true;
-    fallback.innerHTML =
-      "<div class=\"context-menu-quick\" id=\"contextMenuQuick\"></div>" +
-      "<div class=\"context-menu-list\" id=\"contextMenuList\"></div>" +
-      "<div class=\"context-menu-submenu\" id=\"contextMenuSubmenu\" hidden></div>";
-    holder.menuEl = fallback;
+    return;
   }
+
   document.body.appendChild(holder.menuEl);
   holder.quickEl = holder.menuEl.querySelector("#contextMenuQuick");
   holder.listEl = holder.menuEl.querySelector("#contextMenuList");
-  holder.submenuEl = holder.menuEl.querySelector("#contextMenuSubmenu");
 
   holder.menuEl.addEventListener("contextmenu", (event) => event.preventDefault());
   holder.menuEl.addEventListener("mouseleave", () => hideSubmenu(holder));
-  holder.submenuEl?.addEventListener("mouseleave", () => hideSubmenu(holder));
+
+  collectMenuElements(holder);
+  bindMenuHandlers(holder, opts);
 }
 
 function getSelectionType(entities) {
@@ -80,9 +74,10 @@ function isEntitySelected(state, entity) {
 }
 
 function hideSubmenu(holder) {
-  if (!holder.submenuEl) return;
-  holder.submenuEl.hidden = true;
-  holder.submenuEl.innerHTML = "";
+  if (!holder.submenus) return;
+  Object.values(holder.submenus).forEach((submenu) => {
+    setHidden(submenu, true);
+  });
   holder.openSubmenuAnchor = null;
 }
 
@@ -91,6 +86,204 @@ function hideMenu(holder) {
     holder.menuEl.hidden = true;
   }
   hideSubmenu(holder);
+}
+
+function setHidden(el, hidden) {
+  if (!el) return;
+  el.hidden = hidden;
+  el.classList.toggle("is-hidden", hidden);
+}
+
+function setDisabled(el, disabled) {
+  if (!el) return;
+  el.classList.toggle("is-disabled", disabled);
+  el.setAttribute("aria-disabled", disabled ? "true" : "false");
+  if ("disabled" in el) {
+    el.disabled = Boolean(disabled);
+  }
+}
+
+function isDisabled(el) {
+  if (!el) return true;
+  return el.classList.contains("is-disabled") || Boolean(el.disabled);
+}
+
+function collectMenuElements(holder) {
+  if (!holder.menuEl) return;
+  const byAction = (name) => holder.menuEl.querySelector(`[data-action="${name}"]`);
+
+  holder.quickButtons = {
+    refresh: byAction("refresh"),
+    cut: byAction("cut"),
+    copy: byAction("copy"),
+    delete: byAction("delete")
+  };
+
+  holder.listItems = {
+    paste: byAction("paste"),
+    copyParams: byAction("copy-params"),
+    pasteParams: byAction("paste-params"),
+    arrange: byAction("arrange"),
+    align: byAction("align")
+  };
+
+  holder.dividerEl = holder.menuEl.querySelector("[data-role=\"divider\"]");
+
+  holder.submenus = {
+    arrange: holder.menuEl.querySelector("#contextMenuArrange"),
+    align: holder.menuEl.querySelector("#contextMenuAlign")
+  };
+
+  holder.arrangeItems = {
+    front: byAction("arrange-front"),
+    back: byAction("arrange-back"),
+    up: byAction("arrange-up"),
+    down: byAction("arrange-down"),
+    below: byAction("arrange-below"),
+    above: byAction("arrange-above")
+  };
+
+  holder.alignItems = {
+    left: byAction("align-left"),
+    right: byAction("align-right"),
+    top: byAction("align-top"),
+    bottom: byAction("align-bottom"),
+    spaceX: byAction("align-space-x"),
+    spaceY: byAction("align-space-y")
+  };
+}
+
+function bindMenuHandlers(holder, opts) {
+  if (holder.bound || !holder.menuEl) return;
+  holder.bound = true;
+
+  const { state, renderer, rerenderScene, copySelection, cutSelection, pasteSelection, deleteSelectedEntity, moveLineInStack, onStateChanged } = opts;
+
+  const handleQuick = (action, button) => {
+    if (isDisabled(button)) return;
+    const context = holder.context;
+
+    if (action === "refresh") {
+      rerenderScene();
+      renderer.renderSettings();
+      hideMenu(holder);
+      return;
+    }
+
+    if (action === "cut") {
+      cutSelection?.();
+      hideMenu(holder);
+      return;
+    }
+
+    if (action === "copy") {
+      if (copySelection?.()) {
+        flashItemText(state, holder.feedbackTimers, button, "复制成功");
+      }
+      hideMenu(holder);
+      return;
+    }
+
+    if (action === "delete") {
+      if (context?.hasSelection) {
+        deleteSelectedEntity?.();
+      }
+      hideMenu(holder);
+    }
+  };
+
+  const handleList = (action, button) => {
+    if (isDisabled(button)) return;
+    if (action === "paste") {
+      if (pasteSelection?.()) {
+        flashItemText(state, holder.feedbackTimers, button, "粘贴成功");
+      }
+      hideMenu(holder);
+      return;
+    }
+
+    if (action === "copy-params") {
+      if (state.paramClipboardActions?.copy?.()) {
+        flashItemText(state, holder.feedbackTimers, button, "复制成功");
+      }
+      hideMenu(holder);
+      return;
+    }
+
+    if (action === "paste-params") {
+      if (state.paramClipboardActions?.paste?.()) {
+        flashItemText(state, holder.feedbackTimers, button, "粘贴成功");
+      }
+      hideMenu(holder);
+    }
+  };
+
+  const handleArrange = (mode) => {
+    const context = holder.context;
+    const target = context?.lineTarget;
+    if (!target) return;
+    if (mode === "below" || mode === "above") {
+      state.lineMoveMode = { sourceId: target.id, mode };
+    } else {
+      moveLineInStack?.({ sourceId: target.id, mode });
+    }
+    hideMenu(holder);
+  };
+
+  const handleAlign = (action) => {
+    const context = holder.context;
+    const targets = context?.alignTargets || [];
+    if (!targets.length) return;
+    applyAlignment(renderer, onStateChanged, action, targets);
+    hideMenu(holder);
+  };
+
+  const quick = holder.quickButtons || {};
+  quick.refresh?.addEventListener("click", () => handleQuick("refresh", quick.refresh));
+  quick.cut?.addEventListener("click", () => handleQuick("cut", quick.cut));
+  quick.copy?.addEventListener("click", () => handleQuick("copy", quick.copy));
+  quick.delete?.addEventListener("click", () => handleQuick("delete", quick.delete));
+
+  const list = holder.listItems || {};
+  list.paste?.addEventListener("click", () => handleList("paste", list.paste));
+  list.copyParams?.addEventListener("click", () => handleList("copy-params", list.copyParams));
+  list.pasteParams?.addEventListener("click", () => handleList("paste-params", list.pasteParams));
+
+  const showArrange = () => {
+    if (!list.arrange || isDisabled(list.arrange) || list.arrange.hidden) return;
+    showSubmenu(holder, holder.submenus?.arrange, list.arrange);
+  };
+  list.arrange?.addEventListener("mouseenter", showArrange);
+  list.arrange?.addEventListener("click", (event) => {
+    event.preventDefault();
+    showArrange();
+  });
+
+  const showAlign = () => {
+    if (!list.align || isDisabled(list.align) || list.align.hidden) return;
+    showSubmenu(holder, holder.submenus?.align, list.align);
+  };
+  list.align?.addEventListener("mouseenter", showAlign);
+  list.align?.addEventListener("click", (event) => {
+    event.preventDefault();
+    showAlign();
+  });
+
+  const arrange = holder.arrangeItems || {};
+  arrange.front?.addEventListener("click", () => handleArrange("to-front"));
+  arrange.back?.addEventListener("click", () => handleArrange("to-back"));
+  arrange.up?.addEventListener("click", () => handleArrange("up"));
+  arrange.down?.addEventListener("click", () => handleArrange("down"));
+  arrange.below?.addEventListener("click", () => handleArrange("below"));
+  arrange.above?.addEventListener("click", () => handleArrange("above"));
+
+  const align = holder.alignItems || {};
+  align.left?.addEventListener("click", () => handleAlign("align-left"));
+  align.right?.addEventListener("click", () => handleAlign("align-right"));
+  align.top?.addEventListener("click", () => handleAlign("align-top"));
+  align.bottom?.addEventListener("click", () => handleAlign("align-bottom"));
+  align.spaceX?.addEventListener("click", () => handleAlign("distribute-x"));
+  align.spaceY?.addEventListener("click", () => handleAlign("distribute-y"));
 }
 
 function openMenuAt(holder, x, y) {
@@ -159,158 +352,46 @@ function applyAlignment(renderer, onStateChanged, action, items) {
   renderer.renderSettings();
 }
 
-function showSubmenu(holder, items, anchor) {
-  if (!holder.submenuEl || !anchor) return;
-  holder.submenuEl.innerHTML = "";
-  items.forEach((item) => {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "context-menu-item";
-    button.textContent = item.label;
-    if (item.icon) {
-      const icon = document.createElement("img");
-      icon.src = item.icon;
-      icon.alt = item.label;
-      button.prepend(icon);
-    }
-    if (item.disabled) {
-      button.disabled = true;
-    }
-    button.addEventListener("click", () => {
-      if (item.disabled) return;
-      item.onClick?.();
-      hideMenu(holder);
-    });
-    holder.submenuEl.appendChild(button);
-  });
+function showSubmenu(holder, submenuEl, anchor) {
+  if (!submenuEl || !anchor) return;
+  hideSubmenu(holder);
 
   const rect = anchor.getBoundingClientRect();
-  holder.submenuEl.hidden = false;
+  setHidden(submenuEl, false);
   const left = rect.right + 6;
   const top = rect.top;
-  holder.submenuEl.style.left = `${left}px`;
-  holder.submenuEl.style.top = `${top}px`;
+  submenuEl.style.left = `${left}px`;
+  submenuEl.style.top = `${top}px`;
 
-  const subRect = holder.submenuEl.getBoundingClientRect();
+  const subRect = submenuEl.getBoundingClientRect();
   if (subRect.right > window.innerWidth - 8) {
-    holder.submenuEl.style.left = `${rect.left - subRect.width - 6}px`;
+    submenuEl.style.left = `${rect.left - subRect.width - 6}px`;
   }
   if (subRect.bottom > window.innerHeight - 8) {
-    holder.submenuEl.style.top = `${window.innerHeight - subRect.height - 8}px`;
+    submenuEl.style.top = `${window.innerHeight - subRect.height - 8}px`;
   }
 }
 
 function renderMenu(opts, context) {
-  const {
-    state,
-    holder,
-    renderer,
-    rerenderScene,
-    copySelection,
-    cutSelection,
-    pasteSelection,
-    deleteSelectedEntity,
-    moveLineInStack,
-    onStateChanged,
-    hasClipboard
-  } = opts;
+  const { state, holder, hasClipboard } = opts;
 
   if (!holder.quickEl || !holder.listEl) return;
-  holder.quickEl.innerHTML = "";
-  holder.listEl.innerHTML = "";
+  holder.context = context;
   hideSubmenu(holder);
 
   const { selectionType, hasSelection, hasEntity, isLineSelection, alignTargets, lineTarget } = context;
-
-  const quickButtons = [];
-  const addQuickButton = (label, icon, onClick, disabled = false) => {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "menu-quick-btn";
-    button.textContent = label;
-    if (icon) {
-      const img = document.createElement("img");
-      img.src = icon;
-      img.alt = label;
-      button.prepend(img);
-    }
-    if (disabled) button.disabled = true;
-    button.addEventListener("click", () => {
-      if (disabled) return;
-      onClick?.(button);
-    });
-    quickButtons.push(button);
-  };
-
-  const refresh = () => {
-    rerenderScene();
-    renderer.renderSettings();
-    hideMenu(holder);
-  };
-
-  const doDelete = () => {
-    if (!hasSelection) return;
-    deleteSelectedEntity?.();
-    hideMenu(holder);
-  };
-
   const canCopy = hasSelection && !isLineSelection;
   const canCut = canCopy;
+  const showFullQuick = hasEntity && !isLineSelection;
 
-  if (hasEntity && !isLineSelection) {
-    holder.quickEl.classList.remove("compact");
-    addQuickButton("刷新", "/img/menu/icon-refresh.svg", refresh);
-    addQuickButton("剪切", "/img/menu/icon-cut.svg", () => {
-      cutSelection?.();
-      hideMenu(holder);
-    }, !canCut);
-    addQuickButton("复制", "/img/menu/icon-copy.svg", (btn) => {
-      if (copySelection?.()) {
-        flashItemText(state, holder.feedbackTimers, btn, "复制成功");
-      }
-      hideMenu(holder);
-    }, !canCopy);
-    addQuickButton("删除", "/img/menu/icon-delete.svg", () => doDelete(), !hasSelection);
-  } else {
-    holder.quickEl.classList.add("compact");
-    addQuickButton("刷新", "/img/menu/icon-refresh.svg", refresh);
-    addQuickButton("删除", "/img/menu/icon-delete.svg", () => doDelete(), !hasSelection);
-  }
+  holder.quickEl.classList.toggle("compact", !showFullQuick);
 
-  quickButtons.forEach((btn) => holder.quickEl.appendChild(btn));
+  setHidden(holder.quickButtons?.cut, !showFullQuick);
+  setHidden(holder.quickButtons?.copy, !showFullQuick);
 
-  const addItem = (label, icon, onClick, disabled = false, submenu) => {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "context-menu-item";
-    button.textContent = label;
-    if (icon) {
-      const img = document.createElement("img");
-      img.src = icon;
-      img.alt = label;
-      button.prepend(img);
-    }
-    if (submenu) {
-      button.classList.add("has-submenu");
-      button.addEventListener("mouseenter", () => {
-        holder.openSubmenuAnchor = button;
-        showSubmenu(holder, submenu, button);
-      });
-    }
-    if (disabled) button.disabled = true;
-    button.addEventListener("click", () => {
-      if (disabled || submenu) return;
-      onClick?.(button);
-    });
-    holder.listEl.appendChild(button);
-    return button;
-  };
-
-  const addDivider = () => {
-    const div = document.createElement("div");
-    div.className = "context-menu-divider";
-    holder.listEl.appendChild(div);
-  };
+  setDisabled(holder.quickButtons?.cut, !canCut);
+  setDisabled(holder.quickButtons?.copy, !canCopy);
+  setDisabled(holder.quickButtons?.delete, !hasSelection);
 
   const clipboardAvailable = Boolean(hasClipboard?.());
   const paramClipboard = state.paramClipboard;
@@ -319,51 +400,22 @@ function renderMenu(opts, context) {
     && Boolean(selectionType)
     && paramClipboard.type === selectionType;
 
-  const pasteBtn = addItem("粘贴", "/img/menu/icon-copy.svg", () => {
-    if (pasteSelection?.()) {
-      flashItemText(state, holder.feedbackTimers, pasteBtn, "粘贴成功");
-    }
-    hideMenu(holder);
-  }, !clipboardAvailable);
+  setDisabled(holder.listItems?.paste, !clipboardAvailable);
+  setDisabled(holder.listItems?.copyParams, !canCopyParams);
+  setDisabled(holder.listItems?.pasteParams, !canPasteParams);
 
-  const copyParamBtn = addItem("复制参数", "/img/menu/icon-copy.svg", () => {
-    if (state.paramClipboardActions?.copy?.()) {
-      flashItemText(state, holder.feedbackTimers, copyParamBtn, "复制成功");
-    }
-    hideMenu(holder);
-  }, !canCopyParams);
+  const showArrange = Boolean(isLineSelection && lineTarget);
+  const showAlign = Boolean(alignTargets && alignTargets.length >= 2);
 
-  const pasteParamBtn = addItem("粘贴属性", "/img/menu/icon-copy.svg", () => {
-    if (state.paramClipboardActions?.paste?.()) {
-      flashItemText(state, holder.feedbackTimers, pasteParamBtn, "粘贴成功");
-    }
-    hideMenu(holder);
-  }, !canPasteParams);
+  setHidden(holder.listItems?.arrange, !showArrange);
+  setHidden(holder.listItems?.align, !showAlign);
+  setHidden(holder.dividerEl, !(showArrange || showAlign));
 
-  addDivider();
-
-  if (isLineSelection && lineTarget) {
-    const arrangeItems = [
-      { label: "置顶", icon: "/img/layer/icon-layer-bring-to-front.svg", onClick: () => moveLineInStack?.({ sourceId: lineTarget.id, mode: "to-front" }) },
-      { label: "置底", icon: "/img/layer/icon-layer-send-to-back.svg", onClick: () => moveLineInStack?.({ sourceId: lineTarget.id, mode: "to-back" }) },
-      { label: "上移", icon: "/img/layer/icon-layer-bring-forward.svg", onClick: () => moveLineInStack?.({ sourceId: lineTarget.id, mode: "up" }) },
-      { label: "下移", icon: "/img/layer/icon-layer-send-backward.svg", onClick: () => moveLineInStack?.({ sourceId: lineTarget.id, mode: "down" }) },
-      { label: "移到下方", icon: "/img/layer/icon-layer-down-to.svg", onClick: () => { state.lineMoveMode = { sourceId: lineTarget.id, mode: "below" }; } },
-      { label: "移到上方", icon: "/img/layer/icon-layer-up-to.svg", onClick: () => { state.lineMoveMode = { sourceId: lineTarget.id, mode: "above" }; } }
-    ];
-    addItem("排列", null, null, false, arrangeItems);
+  if (!showArrange) {
+    setHidden(holder.submenus?.arrange, true);
   }
-
-  if (alignTargets && alignTargets.length >= 2) {
-    const alignItems = [
-      { label: "左对齐", icon: "/img/align/align-left-svgrepo-com.svg", onClick: () => applyAlignment(renderer, onStateChanged, "align-left", alignTargets) },
-      { label: "右对齐", icon: "/img/align/align-right-svgrepo-com.svg", onClick: () => applyAlignment(renderer, onStateChanged, "align-right", alignTargets) },
-      { label: "顶部对齐", icon: "/img/align/align-top-svgrepo-com.svg", onClick: () => applyAlignment(renderer, onStateChanged, "align-top", alignTargets) },
-      { label: "底部对齐", icon: "/img/align/align-bottom-svgrepo-com.svg", onClick: () => applyAlignment(renderer, onStateChanged, "align-bottom", alignTargets) },
-      { label: "水平等距", icon: "/img/align/align-horizonta-spacing-svgrepo-com.svg", onClick: () => applyAlignment(renderer, onStateChanged, "distribute-x", alignTargets) },
-      { label: "垂直等距", icon: "/img/align/align-vertical-spacing-svgrepo-com.svg", onClick: () => applyAlignment(renderer, onStateChanged, "distribute-y", alignTargets) }
-    ];
-    addItem("对齐", null, null, false, alignItems);
+  if (!showAlign) {
+    setHidden(holder.submenus?.align, true);
   }
 }
 
@@ -408,7 +460,10 @@ function onContextMenu(event, opts) {
     return;
   }
   event.preventDefault();
-  ensureMenu(holder);
+  ensureMenu(holder, opts);
+  if (!holder.menuEl) {
+    return;
+  }
 
   const targetEntity = getEntityFromTarget(event.target);
   if (targetEntity && !isEntitySelected(state, targetEntity)) {
@@ -426,7 +481,10 @@ function bindContextMenu(svg, opts) {
   svg.addEventListener("contextmenu", (e) => onContextMenu(e, opts));
   window.addEventListener("click", (event) => {
     if (!holder.menuEl) return;
-    if (holder.menuEl.contains(event.target) || holder.submenuEl?.contains(event.target)) {
+    const inSubmenu = holder.submenus
+      ? Object.values(holder.submenus).some((submenu) => submenu?.contains(event.target))
+      : false;
+    if (holder.menuEl.contains(event.target) || inSubmenu) {
       return;
     }
     hideMenu(holder);

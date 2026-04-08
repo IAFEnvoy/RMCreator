@@ -1,4 +1,4 @@
-export const version = '1.0-beta.1';
+export const version = '1.0-beta.2';
 
 export async function loadVersion() {
   let commit = await fetch('/commit.json')

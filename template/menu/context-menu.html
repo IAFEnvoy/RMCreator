@@ -1,5 +1,98 @@
 <div class="context-menu" id="contextMenu" hidden>
-  <div class="context-menu-quick" id="contextMenuQuick"></div>
-  <div class="context-menu-list" id="contextMenuList"></div>
-  <div class="context-menu-submenu" id="contextMenuSubmenu" hidden></div>
+  <div class="context-menu-quick" id="contextMenuQuick">
+    <button class="menu-quick-btn" type="button" data-action="refresh">
+      <img src="/img/menu/icon-refresh.svg" alt="刷新" />
+      刷新
+    </button>
+    <button class="menu-quick-btn" type="button" data-action="cut">
+      <img src="/img/menu/icon-cut.svg" alt="剪切" />
+      剪切
+    </button>
+    <button class="menu-quick-btn" type="button" data-action="copy">
+      <img src="/img/menu/icon-copy.svg" alt="复制" />
+      复制
+    </button>
+    <button class="menu-quick-btn" type="button" data-action="delete">
+      <img src="/img/menu/icon-delete.svg" alt="删除" />
+      删除
+    </button>
+  </div>
+
+  <div class="context-menu-list" id="contextMenuList">
+    <button class="context-menu-item" type="button" data-action="paste">
+      <img src="/img/menu/icon-paste.svg" alt="粘贴" />
+      粘贴
+    </button>
+    <button class="context-menu-item" type="button" data-action="copy-params">
+      <img src="/img/menu/icon-copy-args.svg" alt="复制参数" />
+      复制参数
+    </button>
+    <button class="context-menu-item" type="button" data-action="paste-params">
+      <img src="/img/menu/icon-paste-args.svg" alt="粘贴参数" />
+      粘贴参数
+    </button>
+
+    <div class="context-menu-divider" data-role="divider"></div>
+
+    <button class="context-menu-item has-submenu" type="button" data-action="arrange">
+      排列
+    </button>
+    <button class="context-menu-item has-submenu" type="button" data-action="align">
+      对齐
+    </button>
+  </div>
+
+  <div class="context-menu-submenu" id="contextMenuArrange" hidden>
+    <button class="context-menu-item" type="button" data-action="arrange-front">
+      <img src="/img/layer/icon-layer-bring-to-front.svg" alt="置顶" />
+      置顶
+    </button>
+    <button class="context-menu-item" type="button" data-action="arrange-back">
+      <img src="/img/layer/icon-layer-send-to-back.svg" alt="置底" />
+      置底
+    </button>
+    <button class="context-menu-item" type="button" data-action="arrange-up">
+      <img src="/img/layer/icon-layer-bring-forward.svg" alt="上移" />
+      上移
+    </button>
+    <button class="context-menu-item" type="button" data-action="arrange-down">
+      <img src="/img/layer/icon-layer-send-backward.svg" alt="下移" />
+      下移
+    </button>
+    <button class="context-menu-item" type="button" data-action="arrange-below">
+      <img src="/img/layer/icon-layer-down-to.svg" alt="移到下方" />
+      移到下方
+    </button>
+    <button class="context-menu-item" type="button" data-action="arrange-above">
+      <img src="/img/layer/icon-layer-up-to.svg" alt="移到上方" />
+      移到上方
+    </button>
+  </div>
+
+  <div class="context-menu-submenu" id="contextMenuAlign" hidden>
+    <button class="context-menu-item" type="button" data-action="align-left">
+      <img src="/img/align/align-left-svgrepo-com.svg" alt="左对齐" />
+      左对齐
+    </button>
+    <button class="context-menu-item" type="button" data-action="align-right">
+      <img src="/img/align/align-right-svgrepo-com.svg" alt="右对齐" />
+      右对齐
+    </button>
+    <button class="context-menu-item" type="button" data-action="align-top">
+      <img src="/img/align/align-top-svgrepo-com.svg" alt="顶部对齐" />
+      顶部对齐
+    </button>
+    <button class="context-menu-item" type="button" data-action="align-bottom">
+      <img src="/img/align/align-bottom-svgrepo-com.svg" alt="底部对齐" />
+      底部对齐
+    </button>
+    <button class="context-menu-item" type="button" data-action="align-space-x">
+      <img src="/img/align/align-horizonta-spacing-svgrepo-com.svg" alt="水平等距" />
+      水平等距
+    </button>
+    <button class="context-menu-item" type="button" data-action="align-space-y">
+      <img src="/img/align/align-vertical-spacing-svgrepo-com.svg" alt="垂直等距" />
+      垂直等距
+    </button>
+  </div>
 </div>

@@ -651,6 +651,10 @@
   user-select: none;
 }
 
+.context-menu .is-hidden {
+  display: none !important;
+}
+
 .context-menu[hidden] {
   display: none;
 }
@@ -689,6 +693,11 @@
   cursor: not-allowed;
 }
 
+.context-menu-quick .menu-quick-btn.is-disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .context-menu-list {
   display: flex;
   flex-direction: column;
@@ -721,6 +730,11 @@
 }
 
 .context-menu-item[disabled] {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.context-menu-item.is-disabled {
   opacity: 0.4;
   cursor: not-allowed;
 }
