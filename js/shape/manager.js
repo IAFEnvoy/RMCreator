@@ -65,6 +65,30 @@ export function createShapeManager({
   onStateChanged,
   rerenderScene
 }) {
+  const feedbackTimers = new WeakMap();
+  const flashButtonText = (button, message) => {
+    if (!button) {
+      return;
+    }
+    const durationSec = Math.max(0, Math.min(5, Number(state.appSettings?.feedbackDuration) || 0.63));
+    if (durationSec <= 0) {
+      return;
+    }
+    if (!button.dataset.originalText) {
+      button.dataset.originalText = button.textContent || "";
+    }
+    button.textContent = message;
+
+    const existing = feedbackTimers.get(button);
+    if (existing) {
+      clearTimeout(existing);
+    }
+    const timer = window.setTimeout(() => {
+      button.textContent = button.dataset.originalText || "";
+      feedbackTimers.delete(button);
+    }, durationSec * 1000);
+    feedbackTimers.set(button, timer);
+  };
   const {
     shapeManagerModal,
     closeShapeManagerBtn,
@@ -843,18 +867,82 @@ export function createShapeManager({
   function renderPropertiesPanel(shape) {
     shapePropsList.innerHTML = "";
 
+    const appendShapePropActions = () => {
+      const actions = document.createElement("div");
+      actions.className = "shape-prop-actions";
+
+      const copyBtn = document.createElement("button");
+      copyBtn.type = "button";
+      copyBtn.className = "btn-ghost";
+      copyBtn.textContent = "复制";
+      copyBtn.title = "复制当前图形或图元";
+
+      const duplicateBtn = document.createElement("button");
+      duplicateBtn.type = "button";
+      duplicateBtn.className = "btn-ghost";
+      duplicateBtn.textContent = "重复";
+      duplicateBtn.title = "重复当前图形或图元";
+
+      const deleteBtn = document.createElement("button");
+      deleteBtn.type = "button";
+      deleteBtn.className = "btn-ghost btn-danger";
+      deleteBtn.textContent = "删除";
+      deleteBtn.title = "删除当前图形或图元";
+
+      const hasShape = Boolean(shape);
+      copyBtn.disabled = !hasShape;
+      duplicateBtn.disabled = !hasShape;
+      deleteBtn.disabled = !hasShape;
+
+      copyBtn.addEventListener("click", () => {
+        if (clipboard.copySelection()) {
+          flashButtonText(copyBtn, "复制成功");
+        }
+      });
+
+      duplicateBtn.addEventListener("click", () => {
+        if (clipboard.duplicateSelection()) {
+          flashButtonText(duplicateBtn, "重复成功");
+        }
+      });
+
+      deleteBtn.addEventListener("click", () => {
+        if (!hasShape) {
+          return;
+        }
+        const selectedIndices = shape && Array.isArray(shape.editableElements)
+          ? getSelectedPrimitiveIndices(shape)
+          : [];
+        const message = selectedIndices.length
+          ? "确认删除当前选中的图元？"
+          : "确认删除当前图形？";
+        if (!window.confirm(message)) {
+          return;
+        }
+        deleteCurrentSelection();
+      });
+
+      actions.appendChild(copyBtn);
+      actions.appendChild(duplicateBtn);
+      actions.appendChild(deleteBtn);
+      shapePropsList.appendChild(actions);
+    };
+
     if (!shape) {
       appendInfo(shapePropsList, "请先创建或选择图形。", "shape-prop-empty");
+      appendShapePropActions();
       return;
     }
 
     if (!Array.isArray(shape.editableElements)) {
       appendInfo(shapePropsList, "外部导入 SVG 暂不支持逐图元编辑属性。", "shape-prop-empty");
+      appendShapePropActions();
       return;
     }
 
     if (!shape.editableElements.length) {
       appendInfo(shapePropsList, "暂无图元，请先添加图元。", "shape-prop-empty");
+      appendShapePropActions();
       return;
     }
 
@@ -864,6 +952,7 @@ export function createShapeManager({
     }
     if (!selectedIndices.length) {
       appendInfo(shapePropsList, "已取消图元选择，可点击画布中的图元继续编辑。", "shape-prop-empty");
+      appendShapePropActions();
       return;
     }
     const primitives = selectedIndices.map((index) => shape.editableElements[index]).filter(Boolean);
@@ -892,6 +981,7 @@ export function createShapeManager({
       shapePropsList.appendChild(row);
 
       renderPrimitiveFields(row, shape, selectedIndices, primitives);
+      appendShapePropActions();
       return;
     }
 
@@ -970,6 +1060,7 @@ export function createShapeManager({
     shapePropsList.appendChild(row);
 
     renderPrimitiveFields(row, shape, [index], [primitive]);
+    appendShapePropActions();
   }
 
   function renderPrimitiveFields(container, shape, indices, primitives) {

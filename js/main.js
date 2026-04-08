@@ -22,6 +22,7 @@ import {
 import { createRenderer } from "./render.js";
 import { createEventBinder } from "./event.js";
 import { createExportManager } from "./exports.js";
+import { createContextMenu } from "./context-menu.js";
 import { parseDrawingJson, serializeDrawingToJson } from "./serialization.js";
 import { createMainClipboard } from "./clipboards.js";
 import {
@@ -55,7 +56,9 @@ const defaultAppSettings = Object.freeze({
   snapAxisDiagonal: true,
   snapEqualSpacing: true,
   snapGrid: true,
-  snapEqualSpacingOffset: 25
+  snapEqualSpacingOffset: 25,
+  feedbackDuration: 0.63,
+  enableContextMenu: true
 });
 
 const state = {
@@ -294,8 +297,24 @@ const clipboardController = {
     state.shapeManager?.isOpen
       ? shapeManager?.pasteSelection?.()
       : mainClipboard.paste()
-  )
+  ),
+  hasClipboard: () => mainClipboard.hasData()
 };
+
+const contextMenu = createContextMenu({
+  state,
+  elements,
+  renderer,
+  rerenderScene,
+  copySelection: clipboardController.copySelection,
+  cutSelection: clipboardController.cutSelection,
+  pasteSelection: clipboardController.pasteSelection,
+  deleteSelectedEntity,
+  moveLineInStack,
+  onStateChanged: commitStateChange,
+  selectEntity,
+  hasClipboard: clipboardController.hasClipboard
+});
 
 const eventBinder = createEventBinder({
   state,
@@ -357,6 +376,7 @@ async function init() {
   shapeManager.bind();
   stationManager.bind();
   drawingManager.bind();
+  contextMenu.bind();
 
   renderer.renderSubmenu();
   rerenderScene();
@@ -476,7 +496,13 @@ function sanitizeAppSettings(rawSettings) {
     snapAxisDiagonal: next.snapAxisDiagonal !== false,
     snapEqualSpacing: next.snapEqualSpacing !== false,
     snapGrid: next.snapGrid !== false,
-    snapEqualSpacingOffset: clamp(Number(next.snapEqualSpacingOffset) || defaultAppSettings.snapEqualSpacingOffset, 4, 80)
+    snapEqualSpacingOffset: clamp(Number(next.snapEqualSpacingOffset) || defaultAppSettings.snapEqualSpacingOffset, 4, 80),
+    feedbackDuration: clamp(
+      Number(next.feedbackDuration) || defaultAppSettings.feedbackDuration,
+      0,
+      5
+    ),
+    enableContextMenu: next.enableContextMenu !== false
   };
 }
 

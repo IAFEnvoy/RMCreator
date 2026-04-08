@@ -206,6 +206,20 @@
   padding: 2px;
 }
 
+.shape-prop-actions {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--line);
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.shape-prop-actions .btn-ghost,
+.shape-prop-actions .btn-main {
+  width: 100%;
+}
+
 .line-editor {
   padding: 14px;
   overflow: auto;

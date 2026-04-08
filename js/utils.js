@@ -125,3 +125,35 @@ export function applyTextInputStyle(inputEl, textStyle) {
   inputEl.style.fontStyle = style.italic ? "italic" : "normal";
   inputEl.style.textDecoration = getSvgTextDecoration(style);
 }
+
+let toastEl = null;
+let toastTimer = null;
+
+export function showToast(message, durationMs = 600) {
+  const duration = Math.max(0, Number(durationMs) || 0);
+  if (!message || duration <= 0) {
+    return;
+  }
+
+  if (!toastEl) {
+    toastEl = document.createElement("div");
+    toastEl.className = "app-toast";
+    toastEl.setAttribute("role", "status");
+    toastEl.setAttribute("aria-live", "polite");
+    document.body.appendChild(toastEl);
+  }
+
+  toastEl.textContent = String(message);
+  toastEl.classList.add("show");
+
+  if (toastTimer) {
+    clearTimeout(toastTimer);
+    toastTimer = null;
+  }
+
+  toastTimer = window.setTimeout(() => {
+    if (toastEl) {
+      toastEl.classList.remove("show");
+    }
+  }, duration);
+}

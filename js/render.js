@@ -334,6 +334,14 @@ export function createRenderer({
         });
       }
 
+      const contextMenuInput = submenuItems.querySelector("#enableContextMenuToggle");
+      if (contextMenuInput) {
+        contextMenuInput.checked = state.appSettings?.enableContextMenu !== false;
+        contextMenuInput.addEventListener("change", () => {
+          onAppSettingsChanged?.({ enableContextMenu: contextMenuInput.checked });
+        });
+      }
+
       const arrowPanInput = submenuItems.querySelector("#arrowKeyPanToggle");
       if (arrowPanInput) {
         arrowPanInput.checked = state.appSettings?.arrowKeyPan !== false;
@@ -463,6 +471,22 @@ export function createRenderer({
         geometrySelect.value = state.appSettings?.defaultLineGeometry || "bend135";
         geometrySelect.addEventListener("change", () => {
           onAppSettingsChanged?.({ defaultLineGeometry: geometrySelect.value });
+        });
+      }
+
+      const feedbackDurationInput = submenuItems.querySelector("#feedbackDurationInput");
+      if (feedbackDurationInput) {
+        const current = Number(state.appSettings?.feedbackDuration);
+        feedbackDurationInput.value = Number.isFinite(current) ? String(current) : "0.63";
+        feedbackDurationInput.addEventListener("change", () => {
+          const raw = Number(feedbackDurationInput.value);
+          if (!Number.isFinite(raw)) {
+            feedbackDurationInput.value = String(state.appSettings?.feedbackDuration ?? 0.63);
+            return;
+          }
+          const clamped = Math.min(5, Math.max(0, raw));
+          feedbackDurationInput.value = String(clamped);
+          onAppSettingsChanged?.({ feedbackDuration: clamped });
         });
       }
 

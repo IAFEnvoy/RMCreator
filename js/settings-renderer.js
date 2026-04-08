@@ -41,29 +41,408 @@ export function createSettingsRenderer({
   deleteSelectedEntity,
   onStateChanged
 }) {
+  if (typeof state.paramClipboard === "undefined") {
+    state.paramClipboard = null;
+  }
+  const feedbackTimers = new WeakMap();
+
+  const flashButtonText = (button, message) => {
+    if (!button) {
+      return;
+    }
+    const durationSec = clamp(Number(state.appSettings?.feedbackDuration) || 0.63, 0, 5);
+    if (durationSec <= 0) {
+      return;
+    }
+    if (!button.dataset.originalText) {
+      button.dataset.originalText = button.textContent || "";
+    }
+    button.textContent = message;
+
+    const existing = feedbackTimers.get(button);
+    if (existing) {
+      clearTimeout(existing);
+    }
+    const timer = window.setTimeout(() => {
+      button.textContent = button.dataset.originalText || "";
+      feedbackTimers.delete(button);
+    }, durationSec * 1000);
+    feedbackTimers.set(button, timer);
+  };
+  const getSelectionType = (entities) => {
+    if (!Array.isArray(entities) || !entities.length) {
+      return null;
+    }
+    const firstType = entities[0]?.type;
+    if (!firstType) {
+      return null;
+    }
+    return entities.every((item) => item.type === firstType) ? firstType : null;
+  };
+
+  const buildParamKey = (name, type) => `${String(type)}::${String(name)}`;
+
+  const buildParamMap = (params) => {
+    const map = new Map();
+    (Array.isArray(params) ? params : []).forEach((param) => {
+      if (!param || !param.name || !param.type) {
+        return;
+      }
+      map.set(buildParamKey(param.name, param.type), param.value);
+    });
+    return map;
+  };
+
+  const collectStationParams = (station) => {
+    const params = [];
+    const descriptors = buildStationParameterDescriptors(station);
+    descriptors.forEach((descriptor) => {
+      if (descriptor.locked) {
+        return;
+      }
+      const value = normalizeShapeParameterDefault(
+        descriptor.type,
+        station.paramValues?.[descriptor.id]
+      );
+      params.push({ name: descriptor.label || "参数", type: descriptor.type, value });
+    });
+
+    return params;
+  };
+
+  const collectLineParams = (edge) => {
+    const params = [
+      { name: "线条类型", type: "select", value: edge.lineTypeId },
+      { name: "几何类型", type: "select", value: edge.geometry },
+      { name: "翻转形状", type: "checkbox", value: Boolean(edge.flip) },
+      { name: "翻转颜色", type: "checkbox", value: Boolean(edge.flipColor) },
+      { name: "转弯圆弧半径", type: "number", value: Number(edge.cornerRadius) || 0 },
+      { name: "起点偏移量", type: "number", value: Number(edge.startOffset) || 0 },
+      { name: "终点偏移量", type: "number", value: Number(edge.endOffset) || 0 }
+    ];
+
+    (Array.isArray(edge.colorList) ? edge.colorList : []).forEach((color, index) => {
+      params.push({ name: `颜色${index + 1}`, type: "color", value: color });
+    });
+
+    return params;
+  };
+
+  const collectTextParams = (label) => {
+    const textStyle = normalizeTextStyleFlags(label);
+    const params = [
+      { name: "内容", type: "text", value: label.value || "" },
+      { name: "字体", type: "select", value: label.fontFamily },
+      { name: "颜色", type: "color", value: normalizeColor(label.color) },
+      { name: "字号", type: "number", value: Number(label.fontSize) || 20 }
+    ];
+
+    getTextStyleToolbarItems().forEach((item) => {
+      params.push({ name: item.label, type: "checkbox", value: Boolean(textStyle[item.flag]) });
+    });
+
+    return params;
+  };
+
+  const collectShapeParams = (shapeInstance) => {
+    const params = [
+      { name: "缩放比例", type: "number", value: clamp(Number(shapeInstance.scale) || 1, 0.1, 10) }
+    ];
+    const preset = state.shapeLibrary.find((item) => item.id === shapeInstance.shapeId);
+    if (!preset) {
+      return params;
+    }
+    const resolvedParams = resolveShapeParametersWithValues(preset, shapeInstance.paramValues || {});
+    resolvedParams.forEach((param) => {
+      const value = normalizeShapeParameterDefault(param.type, param.defaultValue);
+      params.push({ name: param.label || "参数", type: param.type, value });
+    });
+    return params;
+  };
+
+  const copyParamsFromSelection = () => {
+    const selected = Array.isArray(state.selectedEntities) ? state.selectedEntities : [];
+    if (selected.length !== 1) {
+      window.alert("多选时无法复制参数。");
+      return false;
+    }
+    const entity = selected[0];
+    const type = entity.type;
+    if (type === "station") {
+      const station = state.nodes.find((item) => item.id === entity.id);
+      if (!station) return false;
+      state.paramClipboard = { type, params: collectStationParams(station) };
+      return true;
+    }
+    if (type === "line") {
+      const line = state.edges.find((item) => item.id === entity.id);
+      if (!line) return false;
+      state.paramClipboard = { type, params: collectLineParams(line) };
+      return true;
+    }
+    if (type === "text") {
+      const text = state.labels.find((item) => item.id === entity.id);
+      if (!text) return false;
+      state.paramClipboard = { type, params: collectTextParams(text) };
+      return true;
+    }
+    if (type === "shape") {
+      const shape = state.shapes.find((item) => item.id === entity.id);
+      if (!shape) return false;
+      state.paramClipboard = { type, params: collectShapeParams(shape) };
+      return true;
+    }
+    return false;
+  };
+
+  const pasteParamsToSelection = () => {
+    const parameterClipboard = state.paramClipboard;
+    if (!parameterClipboard) {
+      window.alert("暂无可黏贴的参数。");
+      return false;
+    }
+    const selected = Array.isArray(state.selectedEntities) ? state.selectedEntities : [];
+    if (!selected.length) {
+      return false;
+    }
+    const selectionType = getSelectionType(selected);
+    if (!selectionType || selectionType !== parameterClipboard.type) {
+      window.alert("参数类型不匹配，无法黏贴。");
+      return false;
+    }
+
+    const map = buildParamMap(parameterClipboard.params);
+
+    if (selectionType === "station") {
+      selected.forEach((entity) => {
+        const station = state.nodes.find((item) => item.id === entity.id);
+        if (!station) return;
+        const descriptors = buildStationParameterDescriptors(station);
+        descriptors.forEach((descriptor) => {
+          if (descriptor.locked) return;
+          const key = buildParamKey(descriptor.label || "参数", descriptor.type);
+          if (!map.has(key)) return;
+          if (!station.paramValues || typeof station.paramValues !== "object") {
+            station.paramValues = {};
+          }
+          station.paramValues[descriptor.id] = normalizeShapeParameterDefault(descriptor.type, map.get(key));
+        });
+      });
+
+      renderStations();
+      renderLines();
+      onStateChanged?.({ coalesceKey: "station-params-paste" });
+      renderSettings();
+      return true;
+    }
+
+    if (selectionType === "line") {
+      selected.forEach((entity) => {
+        const line = state.edges.find((item) => item.id === entity.id);
+        if (!line) return;
+
+        const lineTypeKey = buildParamKey("线条类型", "select");
+        if (map.has(lineTypeKey)) {
+          const nextType = String(map.get(lineTypeKey) || "");
+          const nextLineType = findLineType(nextType);
+          if (nextLineType) {
+            line.lineTypeId = nextLineType.id;
+            line.colorList = getColorListDefault(nextLineType);
+          }
+        }
+
+        const geometryKey = buildParamKey("几何类型", "select");
+        if (map.has(geometryKey)) {
+          const geom = String(map.get(geometryKey) || "");
+          if (geometryLabelMap[geom]) {
+            line.geometry = geom;
+          }
+        }
+
+        const flipKey = buildParamKey("翻转形状", "checkbox");
+        if (map.has(flipKey)) {
+          line.flip = Boolean(map.get(flipKey));
+        }
+        const flipColorKey = buildParamKey("翻转颜色", "checkbox");
+        if (map.has(flipColorKey)) {
+          line.flipColor = Boolean(map.get(flipColorKey));
+        }
+        const cornerKey = buildParamKey("转弯圆弧半径", "number");
+        if (map.has(cornerKey)) {
+          line.cornerRadius = clamp(Number(map.get(cornerKey)) || 0, 0, 120);
+        }
+        const startKey = buildParamKey("起点偏移量", "number");
+        if (map.has(startKey)) {
+          line.startOffset = clamp(Number(map.get(startKey)) || 0, -120, 120);
+        }
+        const endKey = buildParamKey("终点偏移量", "number");
+        if (map.has(endKey)) {
+          line.endOffset = clamp(Number(map.get(endKey)) || 0, -120, 120);
+        }
+
+        const lineType = findLineType(line.lineTypeId);
+        if (lineType) {
+          ensureEdgeColorList(line, lineType);
+        }
+
+        (Array.isArray(line.colorList) ? line.colorList : []).forEach((color, index) => {
+          const colorKey = buildParamKey(`颜色${index + 1}`, "color");
+          if (!map.has(colorKey)) return;
+          line.colorList[index] = String(map.get(colorKey));
+        });
+      });
+
+      renderLines();
+      onStateChanged?.({ coalesceKey: "line-params-paste" });
+      renderSettings();
+      return true;
+    }
+
+    if (selectionType === "text") {
+      selected.forEach((entity) => {
+        const text = state.labels.find((item) => item.id === entity.id);
+        if (!text) return;
+
+        const valueKey = buildParamKey("内容", "text");
+        if (map.has(valueKey)) {
+          text.value = String(map.get(valueKey) || "");
+        }
+        const fontKey = buildParamKey("字体", "select");
+        if (map.has(fontKey)) {
+          text.fontFamily = String(map.get(fontKey) || text.fontFamily);
+        }
+        const colorKey = buildParamKey("颜色", "color");
+        if (map.has(colorKey)) {
+          text.color = normalizeColor(map.get(colorKey));
+        }
+        const sizeKey = buildParamKey("字号", "number");
+        if (map.has(sizeKey)) {
+          text.fontSize = clamp(Number(map.get(sizeKey)) || 20, 1, 300);
+        }
+
+        getTextStyleToolbarItems().forEach((item) => {
+          const key = buildParamKey(item.label, "checkbox");
+          if (!map.has(key)) return;
+          text[item.flag] = Boolean(map.get(key));
+        });
+      });
+
+      renderTexts();
+      onStateChanged?.({ coalesceKey: "text-params-paste" });
+      renderSettings();
+      return true;
+    }
+
+    if (selectionType === "shape") {
+      selected.forEach((entity) => {
+        const shape = state.shapes.find((item) => item.id === entity.id);
+        if (!shape) return;
+
+        const scaleKey = buildParamKey("缩放比例", "number");
+        if (map.has(scaleKey)) {
+          shape.scale = clamp(Number(map.get(scaleKey)) || 1, 0.1, 10);
+        }
+
+        const preset = state.shapeLibrary.find((item) => item.id === shape.shapeId);
+        if (!preset) return;
+        const resolvedParams = resolveShapeParametersWithValues(preset, shape.paramValues || {});
+        resolvedParams.forEach((param) => {
+          const key = buildParamKey(param.label || "参数", param.type);
+          if (!map.has(key)) return;
+          if (!shape.paramValues || typeof shape.paramValues !== "object") {
+            shape.paramValues = {};
+          }
+          shape.paramValues[param.id] = normalizeShapeParameterDefault(param.type, map.get(key));
+        });
+      });
+
+      renderShapes();
+      onStateChanged?.({ coalesceKey: "shape-params-paste" });
+      renderSettings();
+      return true;
+    }
+
+    return false;
+  };
+
   const appendSelectionActions = () => {
     if (!settingsBody) {
       return;
     }
+    const selectedEntities = Array.isArray(state.selectedEntities) ? state.selectedEntities : [];
+    const selectionType = getSelectionType(selectedEntities);
+    const showCopyDuplicate = selectionType !== "line";
+    const actionButtons = [];
+    if (showCopyDuplicate) {
+      actionButtons.push(`<button class="btn-ghost" id="settingsCopyBtn" type="button">复制</button>`);
+      actionButtons.push(`<button class="btn-ghost" id="settingsDuplicateBtn" type="button">重复</button>`);
+    }
+    actionButtons.push(`<button class="btn-ghost btn-danger" id="settingsDeleteBtn" type="button">删除</button>`);
+
     settingsBody.insertAdjacentHTML("beforeend", `
+      <div class="settings-param-actions">
+        <button class="btn-ghost" id="settingsCopyParamsBtn" type="button">复制参数</button>
+        <button class="btn-ghost" id="settingsPasteParamsBtn" type="button">黏贴参数</button>
+      </div>
       <div class="settings-actions">
-        <button class="btn-ghost" id="settingsCopyBtn" type="button">复制</button>
-        <button class="btn-ghost" id="settingsDuplicateBtn" type="button">重复</button>
-        <button class="btn-ghost btn-danger" id="settingsDeleteBtn" type="button">删除</button>
+        ${actionButtons.join("")}
       </div>
     `);
+
+    const copyParamsBtn = settingsBody.querySelector("#settingsCopyParamsBtn");
+    const pasteParamsBtn = settingsBody.querySelector("#settingsPasteParamsBtn");
 
     const copyBtn = settingsBody.querySelector("#settingsCopyBtn");
     const duplicateBtn = settingsBody.querySelector("#settingsDuplicateBtn");
     const deleteBtn = settingsBody.querySelector("#settingsDeleteBtn");
 
+    const canCopyParams = selectedEntities.length === 1 && Boolean(selectionType);
+    const canPasteParams = Boolean(state.paramClipboard)
+      && Boolean(selectionType)
+      && state.paramClipboard.type === selectionType;
+
+    if (copyParamsBtn) {
+      copyParamsBtn.disabled = !canCopyParams;
+      copyParamsBtn.title = !canCopyParams
+        ? "多选或类型不一致时无法复制参数"
+        : "";
+      copyParamsBtn.addEventListener("click", () => {
+        if (copyParamsFromSelection()) {
+          flashButtonText(copyParamsBtn, "复制成功");
+        }
+      });
+    }
+    if (pasteParamsBtn) {
+      pasteParamsBtn.disabled = !canPasteParams;
+      if (!state.paramClipboard) {
+        pasteParamsBtn.title = "暂无可黏贴的参数";
+      } else if (!selectionType || state.paramClipboard.type !== selectionType) {
+        pasteParamsBtn.title = "参数类型不匹配";
+      } else {
+        pasteParamsBtn.title = "";
+      }
+      pasteParamsBtn.addEventListener("click", () => {
+        if (pasteParamsToSelection()) {
+          flashButtonText(pasteParamsBtn, "粘贴成功");
+        }
+      });
+    }
+
     if (copyBtn) {
       copyBtn.disabled = typeof copySelection !== "function";
-      copyBtn.addEventListener("click", () => copySelection?.());
+      copyBtn.addEventListener("click", () => {
+        if (copySelection?.()) {
+          flashButtonText(copyBtn, "复制成功");
+        }
+      });
     }
     if (duplicateBtn) {
       duplicateBtn.disabled = typeof duplicateSelection !== "function";
-      duplicateBtn.addEventListener("click", () => duplicateSelection?.());
+      duplicateBtn.addEventListener("click", () => {
+        if (duplicateSelection?.()) {
+          flashButtonText(duplicateBtn, "重复成功");
+        }
+      });
     }
     if (deleteBtn) {
       deleteBtn.disabled = typeof deleteSelectedEntity !== "function";
@@ -191,6 +570,11 @@ export function createSettingsRenderer({
         renderBatchShapes(selectedShapes, summaryHtml);
       }
     }
+  };
+
+  state.paramClipboardActions = {
+    copy: copyParamsFromSelection,
+    paste: pasteParamsToSelection
   };
 
   return renderSettings;

@@ -747,7 +747,7 @@ export function createStationManager({
 
       const removeBtn = document.createElement("button");
       removeBtn.type = "button";
-      removeBtn.className = "btn-ghost param-remove-btn";
+      removeBtn.className = "btn-ghost btn-danger param-remove-btn";
       removeBtn.textContent = "删除";
       removeBtn.addEventListener("click", (event) => {
         event.stopPropagation();
@@ -1211,9 +1211,15 @@ export function createStationManager({
       return;
     }
 
-    const cards = normalizeStationTextCards(preset.textCards, createStationPresetId)
-      .filter((card) => card.id !== cardId);
-    preset.textCards = cards.length ? cards : [createDefaultStationTextCard(0, createStationPresetId)];
+    const cards = normalizeStationTextCards(preset.textCards, createStationPresetId);
+    const target = cards.find((card) => card.id === cardId);
+    const label = String(target?.label || "文本卡片").trim() || "文本卡片";
+    if (!window.confirm(`确认删除${label}？`)) {
+      return;
+    }
+
+    const nextCards = cards.filter((card) => card.id !== cardId);
+    preset.textCards = nextCards.length ? nextCards : [createDefaultStationTextCard(0, createStationPresetId)];
 
     if (!preset.textCards.some((card) => card.id === state.stationManager.selectedTextCardId)) {
       state.stationManager.selectedTextCardId = preset.textCards[0]?.id || null;
