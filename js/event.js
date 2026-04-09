@@ -524,7 +524,8 @@ export function createEventBinder({
     }
 
     if (state.activeTool === "station" && state.menuSelection.station !== null) {
-      addStation(point.x, point.y, state.menuSelection.station);
+      const snapped = getPlacementSnapPoint(point, event);
+      addStation(snapped.x, snapped.y, state.menuSelection.station);
       if (state.appSettings?.continuousStationMode === false) {
         state.menuSelection.station = null;
         renderer.hideStationGhost?.();
@@ -545,7 +546,8 @@ export function createEventBinder({
     }
 
     if (state.activeTool === "shape" && state.menuSelection.shape) {
-      addShape(point.x, point.y, state.menuSelection.shape);
+      const snapped = getPlacementSnapPoint(point, event);
+      addShape(snapped.x, snapped.y, state.menuSelection.shape);
       if (state.appSettings?.continuousShapeMode === false) {
         state.menuSelection.shape = null;
         renderer.hideShapeGhost?.();
@@ -1282,6 +1284,13 @@ export function createEventBinder({
     }
 
     return { point, guides: [] };
+  }
+
+  function getPlacementSnapPoint(point, event) {
+    const visibleRect = getVisibleCanvasRect();
+    const snapTargets = collectSnapTargets([], visibleRect);
+    const snapResult = applySelectionSnap(point, event, snapTargets, visibleRect);
+    return snapResult?.point || point;
   }
 
   function getSnapToleranceInCanvas() {
