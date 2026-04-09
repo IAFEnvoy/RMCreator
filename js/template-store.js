@@ -1,4 +1,6 @@
 const templateCache = new Map();
+const templateElements = new Map();
+const imageCache = new Map();
 
 const templateSources = {
   "submenu-station": "/template/submenu/submenu-station.html",
@@ -33,20 +35,98 @@ const templateSources = {
   , "context-menu": "/template/menu/context-menu.html"
 };
 
-async function fetchTemplate(url) {
-  const res = await fetch(url);
-  if (!res.ok) {
-    throw new Error(`Failed to load template: ${url}`);
+function preloadImage(src) {
+  const normalized = String(src || "").trim();
+  if (!normalized) return;
+  if (imageCache.has(normalized)) return;
+  const img = new Image();
+  img.decoding = "async";
+  img.src = normalized;
+  imageCache.set(normalized, img);
+}
+
+function primeTemplateAssets(html) {
+  if (!html || typeof DOMParser === "undefined") {
+    return;
   }
-  return res.text();
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  doc.querySelectorAll("img[src]").forEach((img) => {
+    preloadImage(img.getAttribute("src"));
+  });
+}
+
+class RmTemplate extends HTMLElement {
+  connectedCallback() {
+    if (this._ready) return;
+    const key = this.getAttribute("data-key") || this.getAttribute("key") || this.id;
+    const src = this.getAttribute("src");
+    this._key = key;
+    this._ready = (async () => {
+      if (!key) {
+        throw new Error("rm-template requires a data-key attribute");
+      }
+      if (templateCache.has(key)) {
+        return;
+      }
+      if (!src) {
+        throw new Error(`rm-template missing src for ${key}`);
+      }
+      const res = await fetch(src);
+      if (!res.ok) {
+        throw new Error(`Failed to load template: ${src}`);
+      }
+      const html = await res.text();
+      templateCache.set(key, html);
+      primeTemplateAssets(html);
+    })();
+  }
+
+  whenReady() {
+    return this._ready || Promise.resolve();
+  }
+}
+
+function ensureTemplateElementDefined() {
+  if (!customElements.get("rm-template")) {
+    customElements.define("rm-template", RmTemplate);
+  }
+}
+
+function ensureTemplateHost() {
+  const existing = document.getElementById("templateHost");
+  if (existing) {
+    return existing;
+  }
+  const host = document.createElement("div");
+  host.id = "templateHost";
+  host.hidden = true;
+  document.body.appendChild(host);
+  return host;
 }
 
 export async function preloadTemplates() {
-  const entries = Object.entries(templateSources);
-  await Promise.all(entries.map(async ([key, url]) => {
-    const html = await fetchTemplate(url);
-    templateCache.set(key, html);
-  }));
+  ensureTemplateElementDefined();
+  await customElements.whenDefined("rm-template");
+
+  const host = ensureTemplateHost();
+  Object.entries(templateSources).forEach(([key, url]) => {
+    if (templateElements.has(key)) {
+      return;
+    }
+    let el = host.querySelector(`rm-template[data-key="${key}"]`);
+    if (!el) {
+      el = document.createElement("rm-template");
+      el.setAttribute("data-key", key);
+      el.setAttribute("src", url);
+      host.appendChild(el);
+    }
+    templateElements.set(key, el);
+  });
+
+  const pending = Array.from(templateElements.values()).map((el) => (
+    typeof el.whenReady === "function" ? el.whenReady() : Promise.resolve()
+  ));
+  await Promise.all(pending);
 }
 
 export function getTemplate(key) {
