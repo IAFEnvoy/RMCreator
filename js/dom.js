@@ -20,6 +20,7 @@ export const elements = {
   fileNewBtn: document.getElementById("fileNewBtn"),
   fileManageBtn: document.getElementById("fileManageBtn"),
   fileExportJsonBtn: document.getElementById("fileExportJsonBtn"),
+  fileImportBtn: document.getElementById("fileImportBtn"),
   fileExportSvgBtn: document.getElementById("fileExportSvgBtn"),
   fileExportPngBtn: document.getElementById("fileExportPngBtn"),
   fileUndoBtn: document.getElementById("fileUndoBtn"),
@@ -135,5 +136,11 @@ export const elements = {
   deleteLineTypeBtn: document.getElementById("deleteLineTypeBtn"),
   downloadLineTypeBtn: document.getElementById("downloadLineTypeBtn"),
   importLineTypeBtn: document.getElementById("importLineTypeBtn"),
-  lineTypeImportInput: document.getElementById("lineTypeImportInput")
+  lineTypeImportInput: document.getElementById("lineTypeImportInput"),
+  lineDetailCopyBtn: document.getElementById("lineDetailCopyBtn"),
+  lineDetailDeleteBtn: document.getElementById("lineDetailDeleteBtn"),
+  shapeDetailCopyBtn: document.getElementById("shapeDetailCopyBtn"),
+  shapeDetailDeleteBtn: document.getElementById("shapeDetailDeleteBtn"),
+  stationDetailCopyBtn: document.getElementById("stationDetailCopyBtn"),
+  stationDetailDeleteBtn: document.getElementById("stationDetailDeleteBtn")
 };

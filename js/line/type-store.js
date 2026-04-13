@@ -111,9 +111,13 @@ export function normalizeLineType(raw) {
     colorList.push("#2f5d9d");
   }
 
+  const source = raw.source === "default" || raw.source === "preset"
+    ? raw.source
+    : "custom";
+
   return {
     id: raw.id || null,
-    source: raw.source === "default" ? "default" : "custom",
+    source,
     name: String(raw.name || "未命名线条").trim() || "未命名线条",
     isTemporaryImported: raw.isTemporaryImported === true,
     colorList,

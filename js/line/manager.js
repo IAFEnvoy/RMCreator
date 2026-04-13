@@ -26,6 +26,7 @@ export function createLineManager({
   onLineTypeUpdated,
   onStateChanged
 }) {
+  const exportType = "lineType";
   const {
     lineManagerModal,
     closeLineManagerBtn,
@@ -43,7 +44,9 @@ export function createLineManager({
     deleteLineTypeBtn,
     downloadLineTypeBtn,
     importLineTypeBtn,
-    lineTypeImportInput
+    lineTypeImportInput,
+    lineDetailCopyBtn,
+    lineDetailDeleteBtn
   } = elements;
 
   const findLineType = (id) => getLineTypeById(state.lineTypes, id);
@@ -105,9 +108,19 @@ export function createLineManager({
     downloadLineTypeBtn.disabled = !canDownload;
   }
 
+  function syncLineDetailActionState() {
+    const selectedType = findLineType(state.lineManager.selectedId);
+    lineDetailCopyBtn.disabled = !selectedType;
+    lineDetailDeleteBtn.disabled = !selectedType || selectedType.source !== "custom";
+  }
+
   function bind() {
     if (!Array.isArray(state.lineManager.checkedIds)) {
       state.lineManager.checkedIds = [];
+    }
+
+    if (!lineDetailCopyBtn || !lineDetailDeleteBtn) {
+      return;
     }
 
     closeLineManagerBtn.addEventListener("click", close);
@@ -119,6 +132,8 @@ export function createLineManager({
     importLineTypeBtn.addEventListener("click", () => lineTypeImportInput.click());
     lineTypeImportInput.addEventListener("change", importLineTypesFromFile);
     makeLineTypePermanentBtn.addEventListener("click", makeSelectedLineTypePermanent);
+    lineDetailCopyBtn.addEventListener("click", createLineTypeCopy);
+    lineDetailDeleteBtn.addEventListener("click", deleteCurrentLineType);
     lineSelectAllInput.addEventListener("change", () => {
       if (lineSelectAllInput.checked) {
         setCheckedLineTypeIds(state.lineTypes.map((type) => type.id));
@@ -165,6 +180,7 @@ export function createLineManager({
     renderLineLibraryList();
     renderLineEditor();
     syncLineBulkActionState();
+    syncLineDetailActionState();
   }
 
   function renderLineLibraryList() {
@@ -215,10 +231,10 @@ export function createLineManager({
 
       const tag = document.createElement("span");
       tag.className = "line-library-item-tag";
-      if (type.source === "default") {
-        tag.textContent = "默认";
-      } else if (type.isTemporaryImported) {
+      if (type.isTemporaryImported) {
         tag.textContent = "外部导入(临时)";
+      } else if (type.source !== "custom") {
+        tag.textContent = "预设";
       } else {
         tag.textContent = "自定义";
       }
@@ -655,14 +671,25 @@ export function createLineManager({
   }
 
   function deleteSelectedLineType() {
-    const targets = resolveLineTypeTargets();
+    deleteLineTypes(resolveLineTypeTargets());
+  }
+
+  function deleteCurrentLineType() {
+    const selected = findLineType(state.lineManager.selectedId);
+    if (!selected) {
+      return;
+    }
+    deleteLineTypes([selected]);
+  }
+
+  function deleteLineTypes(targets) {
     if (!targets.length) {
       return;
     }
 
     const deletableTargets = targets.filter((type) => type.source === "custom");
     if (!deletableTargets.length) {
-      window.alert("所选线条类型均为默认类型，无法删除。");
+      window.alert("所选线条类型均为预设，无法删除。");
       return;
     }
 
@@ -675,7 +702,7 @@ export function createLineManager({
       warningLines.push(`当前绘图中有 ${usageCount} 条线在使用这些类型，删除后这些线也会被删除。`);
     }
     if (skippedCount > 0) {
-      warningLines.push(`有 ${skippedCount} 个默认类型已自动跳过。`);
+      warningLines.push(`有 ${skippedCount} 个预设类型已自动跳过。`);
     }
     warningLines.push("此操作不可撤销，是否继续？");
 
@@ -712,6 +739,60 @@ export function createLineManager({
     onStateChanged?.();
   }
 
+  function createLineTypeCopy() {
+    const selectedType = findLineType(state.lineManager.selectedId);
+    const draft = state.lineManager.draft;
+    if (!selectedType || !draft) {
+      return;
+    }
+
+    const nextId = createLineTypeId();
+    const existingNames = state.lineTypes.map((type) => String(type.name || ""));
+    const nextName = buildCopyName(String(selectedType.name || draft.name || "线条"), existingNames);
+
+    const normalized = normalizeLineType({
+      ...draft,
+      id: nextId,
+      name: nextName,
+      source: "custom"
+    });
+    if (!normalized) {
+      return;
+    }
+
+    const copy = {
+      ...normalized,
+      id: nextId,
+      source: "custom",
+      isTemporaryImported: false
+    };
+
+    state.lineTypes.push(copy);
+    state.lineManager.selectedId = nextId;
+    loadLineTypeDraft(nextId);
+    persistCustomLineTypes(state.lineTypes);
+    renderSubmenu();
+    renderLineManager();
+    renderLines();
+    onStateChanged?.();
+  }
+
+  function buildCopyName(baseName, existingNames) {
+    const cleaned = String(baseName || "线条").trim() || "线条";
+    const baseCopy = `${cleaned} 副本`;
+    if (!existingNames.includes(baseCopy)) {
+      return baseCopy;
+    }
+
+    let index = 2;
+    let next = `${baseCopy} ${index}`;
+    while (existingNames.includes(next)) {
+      index += 1;
+      next = `${baseCopy} ${index}`;
+    }
+    return next;
+  }
+
   function downloadSelectedLineType() {
     const targets = resolveLineTypeTargets();
     if (!targets.length) {
@@ -723,10 +804,11 @@ export function createLineManager({
       colorList: type.colorList,
       segments: type.segments
     }));
-    const payload = payloadList.length === 1 ? payloadList[0] : payloadList;
-    const downloadName = payloadList.length === 1
-      ? `${payloadList[0].name}.json`
-      : "线条类型-批量导出.json";
+    const payload = {
+      type: exportType,
+      data: payloadList
+    };
+    const downloadName = `RMC_LineType_${buildExportTimestamp()}.json`;
 
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -745,32 +827,154 @@ export function createLineManager({
 
     try {
       const text = await file.text();
-      const raw = JSON.parse(text);
-      const entries = Array.isArray(raw) ? raw : [raw];
-      const imported = entries
-        .map((item) => normalizeLineType(item))
-        .filter(Boolean)
-        .map((item) => ({
-          ...item,
-          id: createLineTypeId(),
-          source: "custom",
-          isTemporaryImported: false
-        }));
-
-      if (!imported.length) {
+      const payload = JSON.parse(text.replace(/^\uFEFF/, ""));
+      if (!payload || typeof payload !== "object") {
+        window.alert("导入失败：文件格式无效。");
         return;
       }
-
-      state.lineTypes.push(...imported);
-      state.lineManager.selectedId = imported[0].id;
-      loadLineTypeDraft(imported[0].id);
-      persistCustomLineTypes(state.lineTypes);
-      renderSubmenu();
-      renderLineManager();
-      onStateChanged?.();
+      if (payload.type !== exportType) {
+        window.alert("导入失败：文件类型不匹配。");
+        return;
+      }
+      const entries = Array.isArray(payload.data) ? payload.data : [];
+      if (!entries.length) {
+        window.alert("导入失败：文件中没有可导入的线条类型。");
+        return;
+      }
+      showLineImportSelectionModal(entries, file.name);
+    } catch {
+      window.alert("导入失败：JSON 文件格式无效。\n需要 {type:\"lineType\", data:[...]} 格式。");
     } finally {
       lineTypeImportInput.value = "";
     }
+  }
+
+  function openImportSelection(items, fileName) {
+    if (!Array.isArray(items) || !items.length) {
+      window.alert("导入失败：文件中没有可导入的线条类型。");
+      return;
+    }
+    showLineImportSelectionModal(items, fileName || "导入");
+  }
+
+  function showLineImportSelectionModal(items, fileName) {
+    const modalId = 'lineImportSelectModal';
+    const modal = (lineManagerModal && lineManagerModal.querySelector(`#${modalId}`)) || document.getElementById(modalId);
+    const listEl = modal ? modal.querySelector('#lineImportSelectList') : null;
+    const confirmBtn = modal ? modal.querySelector('#confirmLineImportSelectBtn') : null;
+    const cancelBtn = modal ? modal.querySelector('#cancelLineImportSelectBtn') : null;
+    const selectAllCheckbox = modal ? modal.querySelector('#lineImportSelectAll') : null;
+    const closeBtn2 = modal ? modal.querySelector('#closeLineImportSelectBtn') : null;
+
+    if (!modal || !listEl || !confirmBtn || !cancelBtn) {
+      // fallback: import all
+      try {
+        const imported = items
+          .map((item) => normalizeLineType(item))
+          .filter(Boolean)
+          .map((item) => ({
+            ...item,
+            id: createLineTypeId(),
+            source: 'custom',
+            isTemporaryImported: false
+          }));
+        if (!imported.length) return;
+        state.lineTypes.push(...imported);
+        state.lineManager.selectedId = imported[0].id;
+        loadLineTypeDraft(imported[0].id);
+        persistCustomLineTypes(state.lineTypes);
+        renderSubmenu();
+        renderLineManager();
+        onStateChanged?.();
+      } catch (err) {
+        // ignore
+      }
+      return;
+    }
+
+    listEl.innerHTML = '';
+    const normalized = items.map((it) => normalizeLineType(it)).map((it, idx) => ({ item: it, idx }));
+    normalized.forEach(({ item, idx }) => {
+      const row = document.createElement('div');
+      row.className = 'drawing-import-item';
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.className = 'drawing-import-item-checkbox';
+      checkbox.dataset.index = String(idx);
+      checkbox.checked = true;
+
+      const name = item && item.name ? item.name : `${fileName.replace(/\.[^/.]+$/, '')} ${idx + 1}`;
+      const segCount = item && Array.isArray(item.segments) ? item.segments.length : 0;
+      const label = document.createElement('label');
+      label.appendChild(checkbox);
+      const span = document.createElement('span');
+      span.textContent = `${name} — ${segCount} 段`;
+      label.appendChild(span);
+      row.appendChild(label);
+      listEl.appendChild(row);
+    });
+
+    function getSelectedIndexes() {
+      const boxes = listEl.querySelectorAll('.drawing-import-item-checkbox');
+      const res = [];
+      boxes.forEach((b) => { if (b.checked) res.push(Number(b.dataset.index)); });
+      return res;
+    }
+
+    function cleanupHandlers() {
+      confirmBtn.removeEventListener('click', confirmHandler);
+      cancelBtn.removeEventListener('click', cancelHandler);
+      if (selectAllCheckbox) selectAllCheckbox.removeEventListener('change', selectAllHandler);
+      if (closeBtn2) closeBtn2.removeEventListener('click', cancelHandler);
+    }
+
+    function confirmHandler() {
+      const idxs = getSelectedIndexes();
+      if (!idxs.length) {
+        window.alert('请先选择要导入的线条类型。');
+        return;
+      }
+      try {
+        const imported = idxs.map((i) => normalizeLineType(items[i])).filter(Boolean).map((item) => ({
+          ...item,
+          id: createLineTypeId(),
+          source: 'custom',
+          isTemporaryImported: false
+        }));
+        if (!imported.length) return;
+        state.lineTypes.push(...imported);
+        state.lineManager.selectedId = imported[0].id;
+        loadLineTypeDraft(imported[0].id);
+        persistCustomLineTypes(state.lineTypes);
+        renderSubmenu();
+        renderLineManager();
+        onStateChanged?.();
+      } catch (err) {
+        // ignore
+      } finally {
+        cleanupHandlers();
+        modal.hidden = true;
+      }
+    }
+
+    function cancelHandler() {
+      cleanupHandlers();
+      modal.hidden = true;
+    }
+
+    function selectAllHandler() {
+      const boxes = listEl.querySelectorAll('.drawing-import-item-checkbox');
+      boxes.forEach((b) => { b.checked = selectAllCheckbox.checked; });
+    }
+
+    if (selectAllCheckbox) {
+      selectAllCheckbox.checked = true;
+      selectAllCheckbox.addEventListener('change', selectAllHandler);
+    }
+    confirmBtn.addEventListener('click', confirmHandler);
+    cancelBtn.addEventListener('click', cancelHandler);
+    if (closeBtn2) closeBtn2.addEventListener('click', cancelHandler);
+    modal.hidden = false;
   }
 
   function renderLineTypePreviewEditor() {
@@ -825,7 +1029,7 @@ export function createLineManager({
     }
 
     const selectedType = findLineType(targetId);
-    if (selectedType && selectedType.source === "default") {
+    if (selectedType && selectedType.source !== "custom") {
       targetId = createLineTypeId();
       state.lineManager.selectedId = targetId;
     }
@@ -885,8 +1089,15 @@ export function createLineManager({
   return {
     bind,
     open,
-    close
+    close,
+    openImportSelection
   };
+}
+
+function buildExportTimestamp() {
+  const now = new Date();
+  const pad = (value) => String(value).padStart(2, "0");
+  return `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
 }
 
 function normalizePositiveNumber(value, fallback) {

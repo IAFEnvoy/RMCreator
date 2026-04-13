@@ -1,0 +1,111 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "schema/lineType.schema.json",
+  "title": "Line Type Export (线条类型导出)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "type",
+    "data"
+  ],
+  "properties": {
+    "type": {
+      "const": "lineType"
+    },
+    "data": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/lineType"
+      }
+    }
+  },
+  "definitions": {
+    "lineType": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "segments"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string",
+          "enum": [
+            "default",
+            "preset",
+            "custom"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "isTemporaryImported": {
+          "type": "boolean"
+        },
+        "colorList": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$"
+          },
+          "uniqueItems": true
+        },
+        "segments": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/segment"
+          }
+        }
+      }
+    },
+    "segment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "width"
+      ],
+      "properties": {
+        "width": {
+          "type": "number",
+          "minimum": 0
+        },
+        "strokeStyle": {
+          "type": "string",
+          "enum": [
+            "solid",
+            "dashed"
+          ]
+        },
+        "dashSolidLength": {
+          "type": "number",
+          "minimum": 0
+        },
+        "dashGapLength": {
+          "type": "number",
+          "minimum": 0
+        },
+        "roundCap": {
+          "type": "boolean"
+        },
+        "colorMode": {
+          "type": "string",
+          "enum": [
+            "fixed",
+            "palette"
+          ]
+        },
+        "paletteIndex": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fixedColor": {
+          "type": "string",
+          "pattern": "^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$"
+        }
+      }
+    }
+  }
+}

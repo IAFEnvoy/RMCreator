@@ -1,0 +1,7 @@
+[
+  {
+    "id": "preset-shape-circle",
+    "name": "默认圆形",
+    "svg": "<svg viewBox=\"0 0 240 240\" xmlns=\"http://www.w3.org/2000/svg\"><circle cx=\"120\" cy=\"120\" r=\"40\" stroke=\"#2f5d9d\" stroke-width=\"8\" fill=\"#ffffff\"/></svg>"
+  }
+]

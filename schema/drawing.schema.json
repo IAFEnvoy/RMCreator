@@ -1,0 +1,355 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "schema/drawing.schema.json",
+  "title": "Drawing Export (绘图导出)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "type",
+    "data"
+  ],
+  "properties": {
+    "type": {
+      "const": "drawing"
+    },
+    "data": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/savedEntry"
+      }
+    }
+  },
+  "definitions": {
+    "drawingSnapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "counter",
+        "viewport",
+        "nodes",
+        "edges",
+        "labels",
+        "shapes",
+        "customLineTypes"
+      ],
+      "properties": {
+        "version": {
+          "type": "integer"
+        },
+        "exportedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "counter": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "viewport": {
+          "type": "object",
+          "required": [
+            "zoom",
+            "pan"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "zoom": {
+              "type": "number"
+            },
+            "pan": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "x",
+                "y"
+              ],
+              "properties": {
+                "x": {
+                  "type": "number"
+                },
+                "y": {
+                  "type": "number"
+                }
+              }
+            }
+          }
+        },
+        "nodes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "x": {
+                "type": "number"
+              },
+              "y": {
+                "type": "number"
+              },
+              "name": {
+                "type": "string"
+              },
+              "radius": {
+                "type": "number"
+              },
+              "oval": {
+                "type": "boolean"
+              },
+              "stationTypeIndex": {
+                "type": "integer"
+              },
+              "paramValues": {
+                "type": "object",
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "boolean"
+                    }
+                  ]
+                }
+              },
+              "textValues": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              "textStyleValues": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "boolean"
+                }
+              },
+              "textPlacement": {
+                "type": "object",
+                "properties": {
+                  "slot": {
+                    "type": "string",
+                    "enum": [
+                      "nw",
+                      "n",
+                      "ne",
+                      "w",
+                      "e",
+                      "sw",
+                      "s",
+                      "se"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "edges": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "fromStationId",
+              "toStationId",
+              "lineTypeId"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "fromStationId": {
+                "type": "string"
+              },
+              "toStationId": {
+                "type": "string"
+              },
+              "lineTypeId": {
+                "type": "string"
+              },
+              "geometry": {
+                "type": "string",
+                "enum": [
+                  "straight",
+                  "bend135",
+                  "bend90",
+                  "bend90rot45"
+                ]
+              },
+              "colorList": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "flip": {
+                "type": "boolean"
+              },
+              "flipColor": {
+                "type": "boolean"
+              },
+              "cornerRadius": {
+                "type": "number"
+              },
+              "startOffset": {
+                "type": "number"
+              },
+              "endOffset": {
+                "type": "number"
+              }
+            }
+          }
+        },
+        "labels": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "x": {
+                "type": "number"
+              },
+              "y": {
+                "type": "number"
+              },
+              "value": {
+                "type": "string"
+              },
+              "fontSize": {
+                "type": "number"
+              },
+              "color": {
+                "type": "string"
+              },
+              "fontFamily": {
+                "type": "string"
+              },
+              "bold": {
+                "type": "boolean"
+              },
+              "italic": {
+                "type": "boolean"
+              },
+              "underline": {
+                "type": "boolean"
+              },
+              "strikethrough": {
+                "type": "boolean"
+              }
+            }
+          }
+        },
+        "shapes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "shapeId"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "shapeId": {
+                "type": "string"
+              },
+              "x": {
+                "type": "number"
+              },
+              "y": {
+                "type": "number"
+              },
+              "scale": {
+                "type": "number"
+              },
+              "paramValues": {
+                "type": "object",
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "boolean"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "customLineTypes": {
+          "type": "array",
+          "items": {
+            "$ref": "lineType.schema.json"
+          }
+        }
+      }
+    },
+    "savedEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "author": {
+          "type": "string"
+        },
+        "snapshot": {
+          "$ref": "#/definitions/drawingSnapshot"
+        },
+        "counts": {
+          "type": "object",
+          "properties": {
+            "nodes": {
+              "type": "integer"
+            },
+            "edges": {
+              "type": "integer"
+            },
+            "labels": {
+              "type": "integer"
+            },
+            "shapes": {
+              "type": "integer"
+            }
+          },
+          "additionalProperties": false
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "modifiedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "snapshot"
+      ]
+    }
+  }
+}

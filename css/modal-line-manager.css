@@ -220,6 +220,38 @@
   width: 100%;
 }
 
+.manager-detail-actions {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--line);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.manager-detail-actions .btn-ghost,
+.manager-detail-actions .btn-main {
+  width: 100%;
+}
+
+/* Compact two small buttons for the line manager (left-aligned) */
+#lineManagerModal .manager-detail-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-start;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--line);
+}
+
+#lineManagerModal .manager-detail-actions .btn-ghost,
+#lineManagerModal .manager-detail-actions .btn-main {
+  width: auto;
+  padding: 6px 10px;
+  height: 32px;
+  min-width: 56px;
+}
+
 .line-editor {
   padding: 14px;
   overflow: auto;

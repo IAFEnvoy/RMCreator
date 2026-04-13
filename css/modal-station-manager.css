@@ -160,6 +160,10 @@
   gap: 10px;
 }
 
+.station-side-panel .manager-detail-actions {
+  margin-top: auto;
+}
+
 .station-text-card-list {
   display: flex;
   flex-direction: column;

@@ -50,6 +50,7 @@
           <button class="file-menu-item" id="fileManageBtn" type="button">绘图管理</button>
           <div class="file-menu-divider" role="separator"></div>
           <button class="file-menu-item" id="fileExportJsonBtn" type="button">导出项目</button>
+          <button class="file-menu-item" id="fileImportBtn" type="button">导入</button>
           <button class="file-menu-item" id="fileExportSvgBtn" type="button">导出为 SVG</button>
           <button class="file-menu-item" id="fileExportPngBtn" type="button">导出为 PNG</button>
         </div>
@@ -176,7 +177,75 @@
               <button class="btn-main" id="addSegmentBtn" type="button">添加小线条</button>
             </div>
             <div class="segments-list" id="segmentEditorList"></div>
+            <div class="manager-detail-actions">
+              <button class="btn-ghost" id="lineDetailCopyBtn" type="button">创建副本</button>
+              <button class="btn-ghost btn-danger" id="lineDetailDeleteBtn" type="button">删除</button>
+            </div>
           </section>
+        </div>
+      </div>
+    </div>
+    <div class="modal-backdrop import-select-backdrop" id="stationImportSelectModal" hidden>
+      <div class="line-manager-modal import-select-modal" role="dialog" aria-modal="true" aria-label="导入选择">
+        <div class="modal-head">
+          <h3>选择要导入的车站预设</h3>
+          <button class="btn-ghost" id="closeStationImportSelectBtn" type="button" aria-label="关闭">
+            <img src="/img/icon-close.svg" alt="关闭" />
+          </button>
+        </div>
+        <div class="modal-body drawing-import-select-body">
+          <label class="manager-select-all" for="stationImportSelectAll">
+            <input id="stationImportSelectAll" class="library-select-all-checkbox" type="checkbox" />
+            <span>全选</span>
+          </label>
+          <div id="stationImportSelectList" class="drawing-import-select-list"></div>
+        </div>
+        <div class="modal-foot">
+          <button class="btn-ghost" id="cancelStationImportSelectBtn" type="button">取消</button>
+          <button class="btn-main" id="confirmStationImportSelectBtn" type="button">导入所选</button>
+        </div>
+      </div>
+    </div>
+    <div class="modal-backdrop import-select-backdrop" id="lineImportSelectModal" hidden>
+      <div class="line-manager-modal import-select-modal" role="dialog" aria-modal="true" aria-label="导入选择">
+        <div class="modal-head">
+          <h3>选择要导入的线条类型</h3>
+          <button class="btn-ghost" id="closeLineImportSelectBtn" type="button" aria-label="关闭">
+            <img src="/img/icon-close.svg" alt="关闭" />
+          </button>
+        </div>
+        <div class="modal-body">
+          <label class="manager-select-all" for="lineImportSelectAll">
+            <input id="lineImportSelectAll" class="library-select-all-checkbox" type="checkbox" />
+            <span>全选</span>
+          </label>
+          <div id="lineImportSelectList" class="import-select-list"></div>
+        </div>
+        <div class="modal-foot">
+          <button class="btn-ghost" id="cancelLineImportSelectBtn" type="button">取消</button>
+          <button class="btn-main" id="confirmLineImportSelectBtn" type="button">导入所选</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-backdrop import-select-backdrop" id="drawingImportSelectModal" hidden>
+      <div class="line-manager-modal import-select-modal" role="dialog" aria-modal="true" aria-label="导入选择">
+        <div class="modal-head">
+          <h3>选择要导入的绘图</h3>
+          <button class="btn-ghost" id="closeDrawingImportSelectBtn" type="button" aria-label="关闭">
+            <img src="/img/icon-close.svg" alt="关闭" />
+          </button>
+        </div>
+        <div class="modal-body drawing-import-select-body">
+          <label class="manager-select-all" for="drawingImportSelectAll">
+            <input id="drawingImportSelectAll" class="library-select-all-checkbox" type="checkbox" />
+            <span>全选</span>
+          </label>
+          <div id="drawingImportSelectList" class="drawing-import-select-list"></div>
+        </div>
+        <div class="modal-foot">
+          <button class="btn-ghost" id="cancelDrawingImportSelectBtn" type="button">取消</button>
+          <button class="btn-main" id="confirmDrawingImportSelectBtn" type="button">导入所选</button>
         </div>
       </div>
     </div>
@@ -259,7 +328,33 @@
               </div>
               <div class="shape-param-list" id="shapeParamList"></div>
             </section>
+            <div class="manager-detail-actions">
+              <button class="btn-ghost" id="shapeDetailCopyBtn" type="button">创建副本</button>
+              <button class="btn-ghost btn-danger" id="shapeDetailDeleteBtn" type="button">删除</button>
+            </div>
           </aside>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-backdrop import-select-backdrop" id="shapeImportSelectModal" hidden>
+      <div class="line-manager-modal import-select-modal" role="dialog" aria-modal="true" aria-label="导入选择">
+        <div class="modal-head">
+          <h3>选择要导入的图形</h3>
+          <button class="btn-ghost" id="closeShapeImportSelectBtn" type="button" aria-label="关闭">
+            <img src="/img/icon-close.svg" alt="关闭" />
+          </button>
+        </div>
+        <div class="modal-body drawing-import-select-body">
+          <label class="manager-select-all" for="shapeImportSelectAll">
+            <input id="shapeImportSelectAll" class="library-select-all-checkbox" type="checkbox" />
+            <span>全选</span>
+          </label>
+          <div id="shapeImportSelectList" class="drawing-import-select-list"></div>
+        </div>
+        <div class="modal-foot">
+          <button class="btn-ghost" id="cancelShapeImportSelectBtn" type="button">取消</button>
+          <button class="btn-main" id="confirmShapeImportSelectBtn" type="button">导入所选</button>
         </div>
       </div>
     </div>
@@ -420,6 +515,10 @@
                 </section>
               </div>
             </section>
+            <div class="manager-detail-actions">
+              <button class="btn-ghost" id="stationDetailCopyBtn" type="button">创建副本</button>
+              <button class="btn-ghost btn-danger" id="stationDetailDeleteBtn" type="button">删除</button>
+            </div>
           </aside>
         </div>
       </div>

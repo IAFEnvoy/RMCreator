@@ -21,7 +21,7 @@ export function createEventBinder({
   saveDrawing,
   exportDrawingAsSvg,
   openPngExportModal,
-  loadDrawingFromFile,
+  importDataFromFile,
   openDrawingManager,
   undo,
   redo,
@@ -52,6 +52,7 @@ export function createEventBinder({
     fileNewBtn,
     fileManageBtn,
     fileExportJsonBtn,
+    fileImportBtn,
     fileExportSvgBtn,
     fileExportPngBtn,
     fileUndoBtn,
@@ -307,6 +308,7 @@ export function createEventBinder({
       || !fileCutBtn
       || !fileCopyBtn
       || !filePasteBtn
+      || !fileImportBtn
       || !fileLoadInput
     ) {
       return;
@@ -374,6 +376,11 @@ export function createEventBinder({
       });
     }
 
+    fileImportBtn.addEventListener("click", () => {
+      closeAllMenus();
+      fileLoadInput.click();
+    });
+
     if (fileExportPngBtn) {
       fileExportPngBtn.addEventListener("click", () => {
         closeAllMenus();
@@ -418,7 +425,7 @@ export function createEventBinder({
       }
 
       try {
-        await loadDrawingFromFile(file);
+        await importDataFromFile(file);
       } finally {
         fileLoadInput.value = "";
       }

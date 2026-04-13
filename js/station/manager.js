@@ -52,6 +52,7 @@ export function createStationManager({
   onStateChanged,
   rerenderScene
 }) {
+  const exportType = "stationType";
   const {
     stationManagerModal,
     closeStationManagerBtn,
@@ -87,7 +88,9 @@ export function createStationManager({
     deleteStationPresetBtn,
     downloadStationPresetBtn,
     importStationPresetBtn,
-    stationPresetImportInput
+    stationPresetImportInput,
+    stationDetailCopyBtn,
+    stationDetailDeleteBtn
   } = elements;
 
   const previewState = {
@@ -229,6 +232,12 @@ export function createStationManager({
     downloadStationPresetBtn.addEventListener("click", downloadSelectedStationPreset);
     importStationPresetBtn.addEventListener("click", () => stationPresetImportInput.click());
     stationPresetImportInput.addEventListener("change", importStationPresetsFromFile);
+    if (stationDetailCopyBtn) {
+      stationDetailCopyBtn.addEventListener("click", createStationPresetCopy);
+    }
+    if (stationDetailDeleteBtn) {
+      stationDetailDeleteBtn.addEventListener("click", deleteSelectedStationPreset);
+    }
     stationSelectAllInput.addEventListener("change", () => {
       if (stationSelectAllInput.checked) {
         setCheckedPresetIds((Array.isArray(state.stationLibrary) ? state.stationLibrary : []).map((preset) => preset.id));
@@ -346,6 +355,62 @@ export function createStationManager({
     renderParamsPanel(preset);
     renderPreview(preset);
     syncStationBulkActionState();
+    syncStationDetailActionState();
+  }
+
+  function buildCopyName(baseName, existingNames) {
+    const cleaned = String(baseName || "车站预设").trim() || "车站预设";
+    const baseCopy = `${cleaned} 副本`;
+    if (!existingNames.includes(baseCopy)) {
+      return baseCopy;
+    }
+
+    let index = 2;
+    let next = `${baseCopy} ${index}`;
+    while (existingNames.includes(next)) {
+      index += 1;
+      next = `${baseCopy} ${index}`;
+    }
+    return next;
+  }
+
+  function createStationPresetCopy() {
+    const selected = getSelectedPreset();
+    if (!selected) {
+      return;
+    }
+
+    const nextId = createStationPresetId();
+    const existingNames = (Array.isArray(state.stationLibrary) ? state.stationLibrary : []).map((p) => String(p.name || ""));
+    const nextName = buildCopyName(String(selected.name || "车站预设"), existingNames);
+
+    const copy = sanitizePreset({
+      ...structuredClone(selected),
+      id: nextId,
+      name: nextName
+    });
+    if (!copy) {
+      return;
+    }
+
+    state.stationLibrary.push(copy);
+    state.stationManager.selectedId = copy.id;
+    persistStationLibrary();
+    resetPreviewView(copy);
+    renderStationManager();
+    renderSubmenu?.();
+    rerenderScene?.();
+    onStateChanged?.();
+  }
+
+  function syncStationDetailActionState() {
+    const selected = getSelectedPreset();
+    if (stationDetailCopyBtn) {
+      stationDetailCopyBtn.disabled = !selected;
+    }
+    if (stationDetailDeleteBtn) {
+      stationDetailDeleteBtn.disabled = !selected;
+    }
   }
 
   function refreshStationParamPanels(preset) {
@@ -501,10 +566,11 @@ export function createStationManager({
       return;
     }
 
-    const payload = payloadList.length === 1 ? payloadList[0] : payloadList;
-    const downloadName = payloadList.length === 1
-      ? `${payloadList[0].name}.json`
-      : "车站预设-批量导出.json";
+    const payload = {
+      type: exportType,
+      data: payloadList
+    };
+    const downloadName = `RMC_StationType_${buildExportTimestamp()}.json`;
 
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -523,33 +589,152 @@ export function createStationManager({
 
     try {
       const text = await file.text();
-      const raw = JSON.parse(text);
-      const entries = Array.isArray(raw) ? raw : [raw];
-      const imported = entries
-        .map((entry) => sanitizePreset(entry))
-        .filter(Boolean)
-        .map((entry, index) => ({
+      const payload = JSON.parse(text.replace(/^\uFEFF/, ""));
+      if (!payload || typeof payload !== "object") {
+        window.alert("导入失败：文件格式无效。");
+        return;
+      }
+      if (payload.type !== exportType) {
+        window.alert("导入失败：文件类型不匹配。");
+        return;
+      }
+      const entries = Array.isArray(payload.data) ? payload.data : [];
+      if (!entries.length) {
+        window.alert("导入失败：文件中没有可导入的车站预设。");
+        return;
+      }
+      showStationImportSelectionModal(entries, file.name);
+    } catch {
+      window.alert("导入失败：JSON 文件格式无效。\n需要 {type:\"stationType\", data:[...]} 格式。");
+    } finally {
+      stationPresetImportInput.value = "";
+    }
+  }
+
+  function openImportSelection(items, fileName) {
+    if (!Array.isArray(items) || !items.length) {
+      window.alert("导入失败：文件中没有可导入的车站预设。");
+      return;
+    }
+    showStationImportSelectionModal(items, fileName || "导入");
+  }
+
+  function showStationImportSelectionModal(items, fileName) {
+    const modalId = 'stationImportSelectModal';
+    const modal = (stationManagerModal && stationManagerModal.querySelector(`#${modalId}`)) || document.getElementById(modalId);
+    const listEl = modal ? modal.querySelector('#stationImportSelectList') : null;
+    const confirmBtn = modal ? modal.querySelector('#confirmStationImportSelectBtn') : null;
+    const cancelBtn = modal ? modal.querySelector('#cancelStationImportSelectBtn') : null;
+    const selectAllCheckbox = modal ? modal.querySelector('#stationImportSelectAll') : null;
+    const closeBtn2 = modal ? modal.querySelector('#closeStationImportSelectBtn') : null;
+
+    if (!modal || !listEl || !confirmBtn || !cancelBtn) {
+      // fallback: import all
+      try {
+        const imported = items
+          .map((entry) => sanitizePreset(entry))
+          .filter(Boolean)
+          .map((entry, index) => ({
+            ...entry,
+            id: createStationPresetId(),
+            name: String(entry.name || `车站预设 ${state.stationLibrary.length + index + 1}`).trim() || `车站预设 ${state.stationLibrary.length + index + 1}`
+          }));
+        if (!imported.length) return;
+        state.stationLibrary.push(...imported);
+        state.stationManager.selectedId = imported[0].id;
+        state.stationManager.selectedTextCardId = null;
+        persistStationLibrary();
+        resetPreviewView(imported[0]);
+        renderStationManager();
+        renderSubmenu?.();
+      } catch (err) {
+        // ignore
+      }
+      return;
+    }
+
+    listEl.innerHTML = '';
+    const normalized = items.map((it) => sanitizePreset(it)).map((it, idx) => ({ item: it, idx }));
+    normalized.forEach(({ item, idx }) => {
+      const row = document.createElement('div');
+      row.className = 'drawing-import-item';
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.className = 'drawing-import-item-checkbox';
+      checkbox.dataset.index = String(idx);
+      checkbox.checked = true;
+
+      const name = item && item.name ? item.name : `${fileName.replace(/\.[^/.]+$/, '')} ${idx + 1}`;
+      const usage = getStationUsageCountByPresetId(item?.id);
+      const label = document.createElement('label');
+      label.appendChild(checkbox);
+      const span = document.createElement('span');
+      span.textContent = `${name} — ${usage} 引用 (预览导入后可能变化)`;
+      label.appendChild(span);
+      row.appendChild(label);
+      listEl.appendChild(row);
+    });
+
+    function getSelectedIndexes() {
+      const boxes = listEl.querySelectorAll('.drawing-import-item-checkbox');
+      const res = [];
+      boxes.forEach((b) => { if (b.checked) res.push(Number(b.dataset.index)); });
+      return res;
+    }
+
+    function cleanupHandlers() {
+      confirmBtn.removeEventListener('click', confirmHandler);
+      cancelBtn.removeEventListener('click', cancelHandler);
+      if (selectAllCheckbox) selectAllCheckbox.removeEventListener('change', selectAllHandler);
+      if (closeBtn2) closeBtn2.removeEventListener('click', cancelHandler);
+    }
+
+    function confirmHandler() {
+      const idxs = getSelectedIndexes();
+      if (!idxs.length) {
+        window.alert('请先选择要导入的车站预设。');
+        return;
+      }
+      try {
+        const imported = idxs.map((i) => sanitizePreset(items[i])).filter(Boolean).map((entry, index) => ({
           ...entry,
           id: createStationPresetId(),
           name: String(entry.name || `车站预设 ${state.stationLibrary.length + index + 1}`).trim() || `车站预设 ${state.stationLibrary.length + index + 1}`
         }));
-
-      if (!imported.length) {
-        return;
+        if (!imported.length) return;
+        state.stationLibrary.push(...imported);
+        state.stationManager.selectedId = imported[0].id;
+        state.stationManager.selectedTextCardId = null;
+        persistStationLibrary();
+        resetPreviewView(imported[0]);
+        renderStationManager();
+        renderSubmenu?.();
+      } catch (err) {
+        // ignore
+      } finally {
+        cleanupHandlers();
+        modal.hidden = true;
       }
-
-      state.stationLibrary.push(...imported);
-      state.stationManager.selectedId = imported[0].id;
-      state.stationManager.selectedTextCardId = null;
-      persistStationLibrary();
-      resetPreviewView(imported[0]);
-      renderStationManager();
-      renderSubmenu?.();
-    } catch {
-      window.alert("导入失败：JSON 文件格式无效。\n支持导入单个车站预设对象或预设数组。");
-    } finally {
-      stationPresetImportInput.value = "";
     }
+
+    function cancelHandler() {
+      cleanupHandlers();
+      modal.hidden = true;
+    }
+
+    function selectAllHandler() {
+      const boxes = listEl.querySelectorAll('.drawing-import-item-checkbox');
+      boxes.forEach((b) => { b.checked = selectAllCheckbox.checked; });
+    }
+
+    if (selectAllCheckbox) {
+      selectAllCheckbox.checked = true;
+      selectAllCheckbox.addEventListener('change', selectAllHandler);
+    }
+    confirmBtn.addEventListener('click', confirmHandler);
+    cancelBtn.addEventListener('click', cancelHandler);
+    if (closeBtn2) closeBtn2.addEventListener('click', cancelHandler);
+    modal.hidden = false;
   }
 
   function renderStationLibraryList() {
@@ -2335,6 +2520,13 @@ export function createStationManager({
   return {
     bind,
     open,
-    close
+    close,
+    openImportSelection
   };
+}
+
+function buildExportTimestamp() {
+  const now = new Date();
+  const pad = (value) => String(value).padStart(2, "0");
+  return `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
 }

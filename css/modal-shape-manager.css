@@ -73,6 +73,10 @@
   gap: 10px;
 }
 
+.shape-side-panel .manager-detail-actions {
+  margin-top: auto;
+}
+
 .shape-side-tabs {
   display: grid;
   grid-template-columns: 1fr 1fr;

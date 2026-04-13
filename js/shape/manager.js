@@ -65,6 +65,7 @@ export function createShapeManager({
   onStateChanged,
   rerenderScene
 }) {
+  const exportType = "shapeType";
   const feedbackTimers = new WeakMap();
   const flashButtonText = (button, message) => {
     if (!button) {
@@ -116,7 +117,9 @@ export function createShapeManager({
     deleteShapeBtn,
     downloadShapeBtn,
     importShapeBtn,
-    shapeImportInput
+    shapeImportInput,
+    shapeDetailCopyBtn,
+    shapeDetailDeleteBtn
   } = elements;
 
   const panState = {
@@ -379,6 +382,12 @@ export function createShapeManager({
     downloadShapeBtn.addEventListener("click", downloadSelectedShape);
     importShapeBtn.addEventListener("click", () => shapeImportInput.click());
     shapeImportInput.addEventListener("change", importShapesFromFile);
+    if (shapeDetailCopyBtn) {
+      shapeDetailCopyBtn.addEventListener("click", createShapeCopy);
+    }
+    if (shapeDetailDeleteBtn) {
+      shapeDetailDeleteBtn.addEventListener("click", deleteSelectedShapeDefinition);
+    }
     shapeSelectAllInput.addEventListener("change", () => {
       if (shapeSelectAllInput.checked) {
         setCheckedShapeIds((Array.isArray(state.shapeLibrary) ? state.shapeLibrary : []).map((shape) => shape.id));
@@ -471,6 +480,63 @@ export function createShapeManager({
     renderPropertiesPanel(selectedShape);
     renderParameterList(selectedShape);
     syncShapeBulkActionState();
+    syncShapeDetailActionState();
+  }
+
+  function buildCopyName(baseName, existingNames) {
+    const cleaned = String(baseName || "图形").trim() || "图形";
+    const baseCopy = `${cleaned} 副本`;
+    if (!existingNames.includes(baseCopy)) {
+      return baseCopy;
+    }
+
+    let index = 2;
+    let next = `${baseCopy} ${index}`;
+    while (existingNames.includes(next)) {
+      index += 1;
+      next = `${baseCopy} ${index}`;
+    }
+    return next;
+  }
+
+  function createShapeCopy() {
+    const targets = resolveShapeTargets();
+    if (!targets.length) {
+      return;
+    }
+
+    const source = targets[0];
+    const nextId = createShapeId();
+    const existingNames = (Array.isArray(state.shapeLibrary) ? state.shapeLibrary : []).map((s) => String(s.name || ""));
+    const nextName = buildCopyName(String(source.name || "图形"), existingNames);
+
+    const copy = {
+      id: nextId,
+      name: nextName,
+      svg: source.svg,
+      editableElements: Array.isArray(source.editableElements) ? structuredClone(source.editableElements) : null,
+      parameters: normalizeShapeParameters(source.parameters),
+      imported: Boolean(source.imported)
+    };
+
+    state.shapeLibrary.push(copy);
+    state.shapeManager.selectedId = nextId;
+    setSingleSelectedPrimitive(copy, getFirstPrimitiveIndex(copy));
+    resetViewToSelectedShape();
+    persistShapeLibrary();
+    renderShapeManager();
+    renderSubmenu();
+    onStateChanged?.();
+  }
+
+  function syncShapeDetailActionState() {
+    const selected = getSelectedShape();
+    if (shapeDetailCopyBtn) {
+      shapeDetailCopyBtn.disabled = !selected;
+    }
+    if (shapeDetailDeleteBtn) {
+      shapeDetailDeleteBtn.disabled = !selected;
+    }
   }
 
   function deleteSelectedShapeDefinition() {
@@ -567,10 +633,11 @@ export function createShapeManager({
       return;
     }
 
-    const payload = payloadList.length === 1 ? payloadList[0] : payloadList;
-    const downloadName = payloadList.length === 1
-      ? `${payloadList[0].name}.json`
-      : "图形-批量导出.json";
+    const payload = {
+      type: exportType,
+      data: payloadList
+    };
+    const downloadName = `RMC_ShapeType_${buildExportTimestamp()}.json`;
 
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -589,33 +656,156 @@ export function createShapeManager({
 
     try {
       const text = await file.text();
-      const raw = JSON.parse(text);
-      const entries = Array.isArray(raw) ? raw : [raw];
-      const imported = entries
-        .map((item) => sanitizeShape(item))
-        .filter(Boolean)
-        .map((shape, index) => ({
-          ...shape,
-          id: createShapeId(),
-          name: String(shape.name || `图形 ${state.shapeLibrary.length + index + 1}`).trim() || `图形 ${state.shapeLibrary.length + index + 1}`
-        }));
-
-      if (!imported.length) {
+      const payload = JSON.parse(text.replace(/^\uFEFF/, ""));
+      if (!payload || typeof payload !== "object") {
+        window.alert("导入失败：文件格式无效。");
         return;
       }
-
-      state.shapeLibrary.push(...imported);
-      state.shapeManager.selectedId = imported[0].id;
-      setSingleSelectedPrimitive(imported[0], getFirstPrimitiveIndex(imported[0]));
-      resetViewToSelectedShape();
-      persistShapeLibrary();
-      renderShapeManager();
-      renderSubmenu();
+      if (payload.type !== exportType) {
+        window.alert("导入失败：文件类型不匹配。");
+        return;
+      }
+      const entries = Array.isArray(payload.data) ? payload.data : [];
+      if (!entries.length) {
+        window.alert("导入失败：文件中没有可导入的图形。");
+        return;
+      }
+      showShapeImportSelectionModal(entries, file.name);
     } catch {
-      window.alert("导入失败：JSON 文件格式无效。\n支持导入单个图形对象或图形数组。");
+      window.alert("导入失败：JSON 文件格式无效。\n需要 {type:\"shapeType\", data:[...]} 格式。");
     } finally {
       shapeImportInput.value = "";
     }
+  }
+
+  function openImportSelection(items, fileName) {
+    if (!Array.isArray(items) || !items.length) {
+      window.alert("导入失败：文件中没有可导入的图形。");
+      return;
+    }
+    showShapeImportSelectionModal(items, fileName || "导入");
+  }
+
+  function showShapeImportSelectionModal(items, fileName) {
+    const modalId = 'shapeImportSelectModal';
+    const modal = (shapeManagerModal && shapeManagerModal.querySelector(`#${modalId}`)) || document.getElementById(modalId);
+    const listEl = modal ? modal.querySelector('#shapeImportSelectList') : null;
+    const confirmBtn = modal ? modal.querySelector('#confirmShapeImportSelectBtn') : null;
+    const cancelBtn = modal ? modal.querySelector('#cancelShapeImportSelectBtn') : null;
+    const selectAllCheckbox = modal ? modal.querySelector('#shapeImportSelectAll') : null;
+    const closeBtn2 = modal ? modal.querySelector('#closeShapeImportSelectBtn') : null;
+
+    if (!modal || !listEl || !confirmBtn || !cancelBtn) {
+      // fallback: import all
+      try {
+        const imported = items
+          .map((item) => sanitizeShape(item))
+          .filter(Boolean)
+          .map((shape, index) => ({
+            ...shape,
+            id: createShapeId(),
+            name: String(shape.name || `图形 ${state.shapeLibrary.length + index + 1}`).trim() || `图形 ${state.shapeLibrary.length + index + 1}`
+          }));
+        if (!imported.length) return;
+        state.shapeLibrary.push(...imported);
+        state.shapeManager.selectedId = imported[0].id;
+        setSingleSelectedPrimitive(imported[0], getFirstPrimitiveIndex(imported[0]));
+        resetViewToSelectedShape();
+        persistShapeLibrary();
+        renderShapeManager();
+        renderSubmenu();
+      } catch (err) {
+        // ignore
+      }
+      return;
+    }
+
+    listEl.innerHTML = '';
+    const normalized = items.map((it) => sanitizeShape(it)).map((it, idx) => ({ item: it, idx }));
+    normalized.forEach(({ item, idx }) => {
+      const row = document.createElement('div');
+      row.className = 'drawing-import-item';
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.className = 'drawing-import-item-checkbox';
+      checkbox.dataset.index = String(idx);
+      checkbox.checked = true;
+
+      const name = item && item.name ? item.name : `${fileName.replace(/\.[^/.]+$/, '')} ${idx + 1}`;
+      const preview = item && item.svg ? '(包含 SVG)' : '';
+      const label = document.createElement('label');
+      label.appendChild(checkbox);
+      const span = document.createElement('span');
+      span.textContent = `${name} ${preview}`;
+      label.appendChild(span);
+      row.appendChild(label);
+      listEl.appendChild(row);
+    });
+
+    function getSelectedIndexes() {
+      const boxes = listEl.querySelectorAll('.drawing-import-item-checkbox');
+      const res = [];
+      boxes.forEach((b) => { if (b.checked) res.push(Number(b.dataset.index)); });
+      return res;
+    }
+
+    function cleanupHandlers() {
+      confirmBtn.removeEventListener('click', confirmHandler);
+      cancelBtn.removeEventListener('click', cancelHandler);
+      if (selectAllCheckbox) selectAllCheckbox.removeEventListener('change', selectAllHandler);
+      if (closeBtn2) closeBtn2.removeEventListener('click', cancelHandler);
+    }
+
+    function confirmHandler() {
+      const idxs = getSelectedIndexes();
+      if (!idxs.length) {
+        window.alert('请先选择要导入的图形。');
+        return;
+      }
+      try {
+        const imported = idxs
+          .map((i) => sanitizeShape(items[i]))
+          .filter(Boolean)
+          .map((shape, index) => ({
+            ...shape,
+            id: createShapeId(),
+            name: String(shape.name || `图形 ${state.shapeLibrary.length + index + 1}`).trim()
+              || `图形 ${state.shapeLibrary.length + index + 1}`
+          }));
+        if (!imported.length) return;
+        state.shapeLibrary.push(...imported);
+        state.shapeManager.selectedId = imported[0].id;
+        setSingleSelectedPrimitive(imported[0], getFirstPrimitiveIndex(imported[0]));
+        resetViewToSelectedShape();
+        persistShapeLibrary();
+        renderShapeManager();
+        renderSubmenu();
+      } catch (err) {
+        // ignore
+      } finally {
+        cleanupHandlers();
+        modal.hidden = true;
+      }
+    }
+
+    function cancelHandler() {
+      cleanupHandlers();
+      modal.hidden = true;
+    }
+
+    function selectAllHandler() {
+      const boxes = listEl.querySelectorAll('.drawing-import-item-checkbox');
+      boxes.forEach((b) => { b.checked = selectAllCheckbox.checked; });
+    }
+
+    if (selectAllCheckbox) {
+      selectAllCheckbox.checked = true;
+      selectAllCheckbox.addEventListener('change', selectAllHandler);
+    }
+    confirmBtn.addEventListener('click', confirmHandler);
+    cancelBtn.addEventListener('click', cancelHandler);
+    if (closeBtn2) closeBtn2.addEventListener('click', cancelHandler);
+    modal.hidden = false;
   }
 
   // param drag state handlers
@@ -3478,6 +3668,7 @@ export function createShapeManager({
     bind,
     open,
     close,
+    openImportSelection,
     undo,
     redo,
     copySelection: clipboard.copySelection,
@@ -3487,4 +3678,10 @@ export function createShapeManager({
     clearClipboard: clipboard.clear,
     hasClipboard: clipboard.hasData
   };
+}
+
+function buildExportTimestamp() {
+  const now = new Date();
+  const pad = (value) => String(value).padStart(2, "0");
+  return `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
 }

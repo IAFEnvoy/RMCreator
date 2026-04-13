@@ -1,0 +1,39 @@
+[
+  {
+    "id": "preset-thin",
+    "name": "细线",
+    "colorList": [
+      "#284f8fff"
+    ],
+    "segments": [
+      {
+        "width": 4,
+        "strokeStyle": "solid",
+        "colorMode": "fixed",
+        "fixedColor": "#284f8fff"
+      }
+    ]
+  },
+  {
+    "id": "preset-thick",
+    "name": "粗线",
+    "colorList": [
+      "#183c72ff",
+      "#ffffffff"
+    ],
+    "segments": [
+      {
+        "width": 8,
+        "strokeStyle": "solid",
+        "colorMode": "fixed",
+        "fixedColor": "#183c72ff"
+      },
+      {
+        "width": 4,
+        "strokeStyle": "solid",
+        "colorMode": "fixed",
+        "fixedColor": "#ffffffff"
+      }
+    ]
+  }
+]

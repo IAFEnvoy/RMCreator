@@ -1,0 +1,226 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "schema/stationPreset.schema.json",
+  "title": "Station Type Export (车站类型导出)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "type",
+    "data"
+  ],
+  "properties": {
+    "type": {
+      "const": "stationType"
+    },
+    "data": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/stationPreset"
+      }
+    }
+  },
+  "definitions": {
+    "stationPreset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "shapeId": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "textCards": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/textCard"
+          }
+        },
+        "textPlacement": {
+          "$ref": "#/definitions/textPlacement"
+        },
+        "virtualNode": {
+          "type": "boolean"
+        },
+        "radius": {
+          "type": "number"
+        },
+        "oval": {
+          "type": "boolean"
+        },
+        "shapeParamSettings": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "default",
+                  "locked"
+                ]
+              },
+              "value": {}
+            }
+          }
+        },
+        "params": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/parameter"
+          }
+        }
+      }
+    },
+    "textCard": {
+      "type": "object",
+      "required": [
+        "id",
+        "label",
+        "defaultValue"
+      ],
+      "additionalProperties": true,
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "defaultValue": {
+          "type": "string"
+        },
+        "allowMultiline": {
+          "type": "boolean"
+        },
+        "bold": {
+          "type": "boolean"
+        },
+        "italic": {
+          "type": "boolean"
+        },
+        "underline": {
+          "type": "boolean"
+        },
+        "strikethrough": {
+          "type": "boolean"
+        },
+        "fontFamily": {
+          "type": "string"
+        },
+        "colorBinding": {
+          "$ref": "#/definitions/binding"
+        },
+        "fontSizeBinding": {
+          "$ref": "#/definitions/binding"
+        }
+      }
+    },
+    "binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "value"
+      ],
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": [
+            "value",
+            "param"
+          ]
+        },
+        "value": {},
+        "paramId": {
+          "type": "string"
+        }
+      }
+    },
+    "textPlacement": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "slot": {
+          "type": "string",
+          "enum": [
+            "nw",
+            "n",
+            "ne",
+            "w",
+            "e",
+            "sw",
+            "s",
+            "se"
+          ]
+        },
+        "distanceBinding": {
+          "$ref": "#/definitions/binding"
+        },
+        "lineGapBinding": {
+          "$ref": "#/definitions/binding"
+        }
+      }
+    },
+    "parameter": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "id",
+        "type",
+        "label",
+        "defaultValue"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "color",
+            "text",
+            "number",
+            "checkbox"
+          ]
+        },
+        "label": {
+          "type": "string"
+        },
+        "defaultValue": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "boolean"
+            }
+          ]
+        },
+        "conditions": {
+          "type": "array",
+          "items": {}
+        },
+        "extensions": {
+          "type": "object"
+        }
+      }
+    }
+  }
+}

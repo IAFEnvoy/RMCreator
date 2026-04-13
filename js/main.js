@@ -2,7 +2,6 @@ import { elements } from "./dom.js";
 import "./modal-a11y.js";
 import {
   createRandomLineTypeId,
-  createDefaultLineTypes,
   getColorListDefault,
   getLineTypeById,
   loadCustomLineTypes,
@@ -66,6 +65,8 @@ const state = {
   appSettings: { ...defaultAppSettings },
   stationTypes: [],
   lineTypes: [],
+  stationPresetSource: [],
+  shapePresetSource: [],
   menuSelection: {
     station: null,
     lineType: null,
@@ -335,7 +336,7 @@ const eventBinder = createEventBinder({
   saveDrawing,
   exportDrawingAsSvg: exportManager.exportDrawingAsSvg,
   openPngExportModal: exportManager.openPngExportModal,
-  loadDrawingFromFile,
+  importDataFromFile,
   openDrawingManager: () => drawingManager?.open?.(),
   undo,
   redo,
@@ -566,15 +567,18 @@ function toRgba(hexColor, alpha = 1) {
 }
 
 async function loadMenus() {
-  const [stationsRes, linesRes] = await Promise.all([
-    fetch("data/station.json"),
-    fetch("data/line.json")
+  const [stationRaw, lineRaw, shapeRaw] = await Promise.all([
+    loadPresetJson("preset/stations.json"),
+    loadPresetJson("preset/lines.json"),
+    loadPresetJson("preset/shapes.json")
   ]);
 
-  state.stationTypes = await stationsRes.json();
+  state.stationPresetSource = normalizePresetEntries(stationRaw);
+  state.shapePresetSource = normalizePresetEntries(shapeRaw);
 
-  const lineJson = await linesRes.json();
-  defaultLineTypes = createDefaultLineTypes(lineJson);
+  const presetLineTypes = normalizePresetLineTypes(lineRaw);
+  defaultLineTypes = presetLineTypes.map((item) => structuredClone(item));
+
   const customs = loadCustomLineTypes();
   const { customLineTypes, hasIdRepair } = resolveCustomLineTypes(customs);
   state.lineTypes = [...defaultLineTypes.map((item) => structuredClone(item)), ...customLineTypes];
@@ -582,6 +586,63 @@ async function loadMenus() {
   if (hasIdRepair) {
     persistCustomLineTypes(state.lineTypes);
   }
+}
+
+async function loadPresetJson(url) {
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      return null;
+    }
+    return await response.json();
+  } catch {
+    return null;
+  }
+}
+
+function normalizePresetEntries(raw) {
+  if (!raw) {
+    return [];
+  }
+  return Array.isArray(raw) ? raw : [raw];
+}
+
+function normalizePresetLineTypes(raw) {
+  const entries = normalizePresetEntries(raw);
+  const usedIds = new Set();
+
+  return entries
+    .map((entry, index) => {
+      if (!entry || typeof entry !== "object") {
+        return null;
+      }
+
+      const baseId = String(entry.id || "").trim() || `preset-line-${index + 1}`;
+      let nextId = baseId;
+      let suffix = 2;
+      while (usedIds.has(nextId)) {
+        nextId = `${baseId}-${suffix}`;
+        suffix += 1;
+      }
+      usedIds.add(nextId);
+
+      const normalized = normalizeLineType({
+        ...entry,
+        id: nextId,
+        source: "custom"
+      });
+      if (!normalized) {
+        return null;
+      }
+
+      return {
+        ...normalized,
+        id: nextId,
+        source: "preset",
+        isTemporaryImported: false
+      };
+    })
+    .filter(Boolean);
 }
 
 function createNewDrawing() {
@@ -642,6 +703,54 @@ async function loadDrawingFromFile(file) {
   } catch (error) {
     const message = error instanceof Error ? error.message : "未知错误";
     window.alert(`加载失败：${message}`);
+  }
+}
+
+async function importDataFromFile(file) {
+  if (!file) {
+    return;
+  }
+
+  try {
+    const text = await file.text();
+    const payload = JSON.parse(text.replace(/^\uFEFF/, ""));
+    if (!payload || typeof payload !== "object") {
+      window.alert("导入失败：文件格式无效。");
+      return;
+    }
+
+    const type = String(payload.type || "").trim();
+    const data = Array.isArray(payload.data) ? payload.data : [];
+    if (!type) {
+      window.alert("导入失败：缺少类型标识 type。");
+      return;
+    }
+    if (!data.length) {
+      window.alert("导入失败：文件中没有可导入的数据。");
+      return;
+    }
+
+    if (type === "drawing") {
+      drawingManager?.openImportSelection?.(data, file.name);
+      return;
+    }
+    if (type === "lineType") {
+      lineManager?.openImportSelection?.(data, file.name);
+      return;
+    }
+    if (type === "shapeType") {
+      shapeManager?.openImportSelection?.(data, file.name);
+      return;
+    }
+    if (type === "stationType") {
+      stationManager?.openImportSelection?.(data, file.name);
+      return;
+    }
+
+    window.alert("导入失败：文件类型不匹配。仅支持 drawing、lineType、shapeType、stationType。");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "未知错误";
+    window.alert(`导入失败：${message}`);
   }
 }
 

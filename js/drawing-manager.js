@@ -4,6 +4,7 @@ import { getTemplate } from "./template-store.js";
 export function createDrawingManager({ state, elements, parseDrawingJson: parseFn, safeSerializeSnapshot, applyDrawingData, confirmOverwrite }) {
   const mount = elements.drawingManagerModal;
   let injected = false;
+  const exportType = "drawing";
 
   if (!state.drawingManager) {
     state.drawingManager = { selectedId: null, checkedIds: [], isOpen: false, activeId: null };
@@ -136,6 +137,12 @@ export function createDrawingManager({ state, elements, parseDrawingJson: parseF
       shapes: [],
       customLineTypes: []
     });
+  }
+
+  function buildExportTimestamp() {
+    const now = new Date();
+    const pad = (value) => String(value).padStart(2, "0");
+    return `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
   }
 
   function getSavedList() {
@@ -365,21 +372,152 @@ export function createDrawingManager({ state, elements, parseDrawingJson: parseF
   function exportSaved(ids) {
     const list = getSavedList();
     const targets = list.filter((i) => ids.includes(String(i.id)));
-    targets.forEach((t) => {
+    if (!targets.length) return;
+    try {
+      const exportArray = targets.map((t) => {
+        let snapshotObj;
+        try {
+          snapshotObj = parseFn ? parseFn(t.snapshot) : JSON.parse(t.snapshot);
+        } catch {
+          snapshotObj = t.snapshot;
+        }
+        return {
+          name: t.name || "",
+          author: t.author || "",
+          snapshot: snapshotObj,
+          counts: t.counts || {},
+          createdAt: t.createdAt,
+          modifiedAt: t.modifiedAt
+        };
+      });
+      const payload = {
+        type: exportType,
+        data: exportArray
+      };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `RMC_Drawing_${buildExportTimestamp()}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      // ignore
+    }
+  }
+
+  function openImportSelection(items, fileName) {
+    if (!Array.isArray(items) || !items.length) {
+      window.alert("导入失败：文件中没有可导入的绘图。");
+      return;
+    }
+
+    const modalId = 'drawingImportSelectModal';
+    const modal = (mount && mount.querySelector(`#${modalId}`)) || document.getElementById(modalId);
+    const listEl = modal ? modal.querySelector('#drawingImportSelectList') : null;
+    const confirmBtn = modal ? modal.querySelector('#confirmDrawingImportSelectBtn') : null;
+    const cancelBtn = modal ? modal.querySelector('#cancelDrawingImportSelectBtn') : null;
+    const selectAllCheckbox = modal ? modal.querySelector('#drawingImportSelectAll') : null;
+    const closeBtn2 = modal ? modal.querySelector('#closeDrawingImportSelectBtn') : null;
+
+    if (!modal || !listEl || !confirmBtn || !cancelBtn) {
+      // fallback: import all items
       try {
-        const blob = new Blob([t.snapshot], { type: "application/json" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        const timestamp = new Date().toISOString().slice(0, 19).replace(/[T:]/g, "-");
-        const safeName = String(t.name || "drawing").replace(/[^a-zA-Z0-9_-\u4e00-\u9fa5]/g, "_");
-        a.href = url;
-        a.download = `rmcreator-drawing-${safeName}-${timestamp}.json`;
-        a.click();
-        URL.revokeObjectURL(url);
-      } catch {
-        // ignore per-item errors
+        items.forEach((entry, idx) => {
+          const snapshot = entry && entry.snapshot !== undefined ? entry.snapshot : entry;
+          const name = entry && entry.name ? entry.name : `${String(fileName || '').replace(/\.[^/.]+$/, '')} ${idx + 1}`;
+          addSavedDrawing(snapshot, name);
+        });
+        renderDrawingLibraryList();
+        syncBulkActionState();
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        window.alert(`导入失败：${msg}`);
       }
+      return;
+    }
+
+    listEl.innerHTML = '';
+    items.forEach((entry, idx) => {
+      const row = document.createElement('div');
+      row.className = 'drawing-import-item';
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.className = 'drawing-import-item-checkbox';
+      checkbox.dataset.index = String(idx);
+      checkbox.checked = true;
+
+      const baseName = String(fileName || '').replace(/\.[^/.]+$/, '');
+      const previewName = (entry && typeof entry === 'object' && entry.name) ? entry.name : `${baseName} ${idx + 1}`;
+      const counts = computeCountsFromSnapshot(entry && entry.snapshot !== undefined ? entry.snapshot : entry);
+      const meta = `${counts.nodes || 0} 车站 · ${counts.edges || 0} 线段`;
+
+      const label = document.createElement('label');
+      label.appendChild(checkbox);
+      const span = document.createElement('span');
+      span.textContent = `${previewName} — ${meta}`;
+      label.appendChild(span);
+      row.appendChild(label);
+      listEl.appendChild(row);
     });
+
+    function getSelectedIndexes() {
+      const boxes = listEl.querySelectorAll('.drawing-import-item-checkbox');
+      const res = [];
+      boxes.forEach((b) => { if (b.checked) res.push(Number(b.dataset.index)); });
+      return res;
+    }
+
+    function cleanupHandlers() {
+      confirmBtn.removeEventListener('click', confirmHandler);
+      cancelBtn.removeEventListener('click', cancelHandler);
+      if (selectAllCheckbox) selectAllCheckbox.removeEventListener('change', selectAllHandler);
+      if (closeBtn2) closeBtn2.removeEventListener('click', cancelHandler);
+    }
+
+    function confirmHandler() {
+      const idxs = getSelectedIndexes();
+      if (!idxs.length) {
+        window.alert('请先选择要导入的绘图。');
+        return;
+      }
+      try {
+        const baseName = String(fileName || '').replace(/\.[^/.]+$/, '');
+        idxs.forEach((i) => {
+          const entry = items[i];
+          const snapshot = entry && entry.snapshot !== undefined ? entry.snapshot : entry;
+          const name = entry && entry.name ? entry.name : `${baseName} ${i + 1}`;
+          addSavedDrawing(snapshot, name);
+        });
+        renderDrawingLibraryList();
+        syncBulkActionState();
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        window.alert(`导入失败：${msg}`);
+      } finally {
+        cleanupHandlers();
+        modal.hidden = true;
+      }
+    }
+
+    function cancelHandler() {
+      cleanupHandlers();
+      modal.hidden = true;
+    }
+
+    function selectAllHandler() {
+      const boxes = listEl.querySelectorAll('.drawing-import-item-checkbox');
+      boxes.forEach((b) => { b.checked = selectAllCheckbox.checked; });
+    }
+
+    if (selectAllCheckbox) {
+      selectAllCheckbox.checked = true;
+      selectAllCheckbox.addEventListener('change', selectAllHandler);
+    }
+    confirmBtn.addEventListener('click', confirmHandler);
+    cancelBtn.addEventListener('click', cancelHandler);
+    if (closeBtn2) closeBtn2.addEventListener('click', cancelHandler);
+    modal.hidden = false;
   }
 
   function open() {
@@ -521,10 +659,21 @@ export function createDrawingManager({ state, elements, parseDrawingJson: parseF
       if (!file) return;
       try {
         const text = await file.text();
-        const parsed = parseFn ? parseFn(text) : JSON.parse(text);
-        const snapshot = JSON.stringify(parsed);
-        const name = file.name.replace(/\.[^/.]+$/, '');
-        addSavedDrawing(snapshot, name);
+        const parsed = JSON.parse(text.replace(/^\uFEFF/, ""));
+        if (!parsed || typeof parsed !== "object") {
+          window.alert("导入失败：文件格式无效。");
+          return;
+        }
+        if (parsed.type !== exportType) {
+          window.alert("导入失败：文件类型不匹配。");
+          return;
+        }
+        const items = Array.isArray(parsed.data) ? parsed.data : [];
+        if (!items.length) {
+          window.alert("导入失败：文件中没有可导入的绘图。");
+          return;
+        }
+        openImportSelection(items, file.name);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         window.alert(`导入失败：${msg}`);
@@ -564,6 +713,7 @@ export function createDrawingManager({ state, elements, parseDrawingJson: parseF
     bind,
     open,
     close,
-    getSavedList
+    getSavedList,
+    openImportSelection
   };
 }

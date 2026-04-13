@@ -1,0 +1,28 @@
+[
+  {
+    "id": "preset-station-1",
+    "name": "默认车站",
+    "shapeId": "preset-shape-circle",
+    "textCards": [
+      {
+        "id": "preset-station-1-text-1",
+        "label": "文本 1",
+        "defaultValue": "站名"
+      }
+    ],
+    "textPlacement": {
+      "slot": "s",
+      "distanceBinding": {
+        "mode": "value",
+        "value": 18
+      },
+      "lineGapBinding": {
+        "mode": "value",
+        "value": 4
+      }
+    },
+    "virtualNode": false,
+    "radius": 12,
+    "oval": false
+  }
+]
