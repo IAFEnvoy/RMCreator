@@ -859,7 +859,18 @@ export function createLineManager({
 
   function showLineImportSelectionModal(items, fileName) {
     const modalId = 'lineImportSelectModal';
-    const modal = (lineManagerModal && lineManagerModal.querySelector(`#${modalId}`)) || document.getElementById(modalId);
+    let modal = typeof lineManagerModal !== 'undefined' && lineManagerModal ? lineManagerModal.querySelector('#' + modalId) : null;
+    if (!modal) {
+        modal = document.getElementById(modalId);
+    }
+    if (modal && !modal.innerHTML.trim()) {
+      modal.innerHTML = renderTemplate('import-select-modal', {
+        title: '线条类型',
+        type: 'line',
+        Type: 'Line'
+      });
+    }
+    
     const listEl = modal ? modal.querySelector('#lineImportSelectList') : null;
     const confirmBtn = modal ? modal.querySelector('#confirmLineImportSelectBtn') : null;
     const cancelBtn = modal ? modal.querySelector('#cancelLineImportSelectBtn') : null;

@@ -1,5 +1,5 @@
 import { activeDrawingIdStorageKey, drawingsListStorageKey, drawingStorageKey } from "./constants.js";
-import { getTemplate } from "./template-store.js";
+import { getTemplate, renderTemplate } from "./template-store.js";
 
 export function createDrawingManager({ state, elements, parseDrawingJson: parseFn, safeSerializeSnapshot, applyDrawingData, confirmOverwrite }) {
   const mount = elements.drawingManagerModal;
@@ -413,7 +413,15 @@ export function createDrawingManager({ state, elements, parseDrawingJson: parseF
     }
 
     const modalId = 'drawingImportSelectModal';
-    const modal = (mount && mount.querySelector(`#${modalId}`)) || document.getElementById(modalId);
+    let modal = (typeof mount !== 'undefined' && mount ? mount.querySelector('#' + modalId) : null) || document.getElementById(modalId);
+    if (modal && !modal.innerHTML.trim()) {
+      modal.innerHTML = renderTemplate('import-select-modal', {
+        title: '绘图',
+        type: 'drawing',
+        Type: 'Drawing'
+      });
+    }
+    
     const listEl = modal ? modal.querySelector('#drawingImportSelectList') : null;
     const confirmBtn = modal ? modal.querySelector('#confirmDrawingImportSelectBtn') : null;
     const cancelBtn = modal ? modal.querySelector('#cancelDrawingImportSelectBtn') : null;

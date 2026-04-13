@@ -30,9 +30,10 @@ const templateSources = {
   "station-manager-existing-param-empty": "/template/manager/station/existing-param-empty.html",
   "station-manager-existing-param-unselected": "/template/manager/station/existing-param-unselected.html",
   "station-manager-existing-param-no-shape": "/template/manager/station/existing-param-no-shape.html",
-  "shortcuts-modal": "/template/manager/shortcuts/shortcuts-modal.html"
-  , "drawing-manager": "/template/manager/drawing-manager.html"
-  , "context-menu": "/template/menu/context-menu.html"
+  "shortcuts-modal": "/template/manager/shortcuts/shortcuts-modal.html",
+  "import-select-modal": "/template/manager/import-select-modal.html",
+  "drawing-manager": "/template/manager/drawing-manager.html",
+  "context-menu": "/template/menu/context-menu.html"
 };
 
 function preloadImage(src) {

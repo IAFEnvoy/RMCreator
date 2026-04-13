@@ -688,7 +688,18 @@ export function createShapeManager({
 
   function showShapeImportSelectionModal(items, fileName) {
     const modalId = 'shapeImportSelectModal';
-    const modal = (shapeManagerModal && shapeManagerModal.querySelector(`#${modalId}`)) || document.getElementById(modalId);
+    let modal = typeof shapeManagerModal !== 'undefined' && shapeManagerModal ? shapeManagerModal.querySelector('#' + modalId) : null;
+    if (!modal) {
+        modal = document.getElementById(modalId);
+    }
+    if (modal && !modal.innerHTML.trim()) {
+      modal.innerHTML = renderTemplate('import-select-modal', {
+        title: '图形',
+        type: 'shape',
+        Type: 'Shape'
+      });
+    }
+    
     const listEl = modal ? modal.querySelector('#shapeImportSelectList') : null;
     const confirmBtn = modal ? modal.querySelector('#confirmShapeImportSelectBtn') : null;
     const cancelBtn = modal ? modal.querySelector('#cancelShapeImportSelectBtn') : null;

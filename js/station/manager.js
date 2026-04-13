@@ -29,7 +29,7 @@ import {
   normalizeTextBinding,
   normalizeTextSlot
 } from "./text-utils.js";
-import { getTemplate } from "../template-store.js";
+import { getTemplate, renderTemplate } from "../template-store.js";
 
 const previewDefaultViewBox = Object.freeze({ x: -120, y: -120, width: 480, height: 480 });
 const previewInitialScale = 0.25;
@@ -621,7 +621,18 @@ export function createStationManager({
 
   function showStationImportSelectionModal(items, fileName) {
     const modalId = 'stationImportSelectModal';
-    const modal = (stationManagerModal && stationManagerModal.querySelector(`#${modalId}`)) || document.getElementById(modalId);
+    let modal = typeof stationManagerModal !== 'undefined' && stationManagerModal ? stationManagerModal.querySelector('#' + modalId) : null;
+    if (!modal) {
+      modal = document.getElementById(modalId);
+    }
+    if (modal && !modal.innerHTML.trim()) {
+      modal.innerHTML = renderTemplate('import-select-modal', {
+        title: '车站预设',
+        type: 'station',
+        Type: 'Station'
+      });
+    }
+
     const listEl = modal ? modal.querySelector('#stationImportSelectList') : null;
     const confirmBtn = modal ? modal.querySelector('#confirmStationImportSelectBtn') : null;
     const cancelBtn = modal ? modal.querySelector('#cancelStationImportSelectBtn') : null;
