@@ -53,45 +53,93 @@ export function createStationManager({
   rerenderScene
 }) {
   const exportType = "stationType";
-  const {
-    stationManagerModal,
-    closeStationManagerBtn,
-    newStationPresetBtn,
-    stationLibraryList,
-    stationSelectAllInput,
-    stationPresetNameInput,
-    stationShapeSearchInput,
-    stationShapeSelect,
-    stationTextPlacementPanel,
-    stationPlacementTitle,
-    stationPositionGrid,
-    stationTextDistanceUseParam,
-    stationTextDistanceValue,
-    stationTextDistanceParamSelect,
-    stationTextLineGapUseParam,
-    stationTextLineGap,
-    stationTextLineGapParamSelect,
-    stationVirtualToggle,
-    stationPreviewResetBtn,
-    stationPreviewCanvasWrap,
-    stationPreviewCanvas,
-    stationTabTextBtn,
-    stationTabParamsBtn,
-    stationTextPanel,
-    stationParamsPanel,
-    stationAddTextCardBtn,
-    stationParamTypeSelect,
-    stationAddParamBtn,
-    stationCustomParamList,
-    stationExistingParamList,
-    stationTextCardList,
-    deleteStationPresetBtn,
-    downloadStationPresetBtn,
-    importStationPresetBtn,
-    stationPresetImportInput,
-    stationDetailCopyBtn,
-    stationDetailDeleteBtn
-  } = elements;
+  const stationManagerModal = elements.stationManagerModal;
+  let closeStationManagerBtn = null;
+  let newStationPresetBtn = null;
+  let stationLibraryList = null;
+  let stationSelectAllInput = null;
+  let stationPresetNameInput = null;
+  let stationShapeSearchInput = null;
+  let stationShapeSelect = null;
+  let stationTextPlacementPanel = null;
+  let stationPlacementTitle = null;
+  let stationPositionGrid = null;
+  let stationTextDistanceUseParam = null;
+  let stationTextDistanceValue = null;
+  let stationTextDistanceParamSelect = null;
+  let stationTextLineGapUseParam = null;
+  let stationTextLineGap = null;
+  let stationTextLineGapParamSelect = null;
+  let stationVirtualToggle = null;
+  let stationPreviewResetBtn = null;
+  let stationPreviewCanvasWrap = null;
+  let stationPreviewCanvas = null;
+  let stationTabTextBtn = null;
+  let stationTabParamsBtn = null;
+  let stationTextPanel = null;
+  let stationParamsPanel = null;
+  let stationAddTextCardBtn = null;
+  let stationParamTypeSelect = null;
+  let stationAddParamBtn = null;
+  let stationCustomParamList = null;
+  let stationExistingParamList = null;
+  let stationTextCardList = null;
+  let deleteStationPresetBtn = null;
+  let downloadStationPresetBtn = null;
+  let importStationPresetBtn = null;
+  let stationPresetImportInput = null;
+  let stationDetailCopyBtn = null;
+  let stationDetailDeleteBtn = null;
+
+  const getEl = (selector) => (stationManagerModal ? stationManagerModal.querySelector(selector) : null);
+
+  function ensureInjected() {
+    if (!stationManagerModal) {
+      return;
+    }
+    if (!stationManagerModal.innerHTML.trim()) {
+      stationManagerModal.innerHTML = getTemplate("station-manager");
+    }
+  }
+
+  function syncElements() {
+    closeStationManagerBtn = getEl("#closeStationManagerBtn");
+    newStationPresetBtn = getEl("#newStationPresetBtn");
+    stationLibraryList = getEl("#stationLibraryList");
+    stationSelectAllInput = getEl("#stationSelectAllInput");
+    stationPresetNameInput = getEl("#stationPresetNameInput");
+    stationShapeSearchInput = getEl("#stationShapeSearchInput");
+    stationShapeSelect = getEl("#stationShapeSelect");
+    stationTextPlacementPanel = getEl("#stationTextPlacementPanel");
+    stationPlacementTitle = getEl("#stationPlacementTitle");
+    stationPositionGrid = getEl("#stationPositionGrid");
+    stationTextDistanceUseParam = getEl("#stationTextDistanceUseParam");
+    stationTextDistanceValue = getEl("#stationTextDistanceValue");
+    stationTextDistanceParamSelect = getEl("#stationTextDistanceParamSelect");
+    stationTextLineGapUseParam = getEl("#stationTextLineGapUseParam");
+    stationTextLineGap = getEl("#stationTextLineGap");
+    stationTextLineGapParamSelect = getEl("#stationTextLineGapParamSelect");
+    stationVirtualToggle = getEl("#stationVirtualToggle");
+    stationPreviewResetBtn = getEl("#stationPreviewResetBtn");
+    stationPreviewCanvasWrap = getEl("#stationPreviewCanvasWrap");
+    stationPreviewCanvas = getEl("#stationPreviewCanvas");
+    stationTabTextBtn = getEl("#stationTabTextBtn");
+    stationTabParamsBtn = getEl("#stationTabParamsBtn");
+    stationTextPanel = getEl("#stationTextPanel");
+    stationParamsPanel = getEl("#stationParamsPanel");
+    stationAddTextCardBtn = getEl("#stationAddTextCardBtn");
+    stationParamTypeSelect = getEl("#stationParamTypeSelect");
+    stationAddParamBtn = getEl("#stationAddParamBtn");
+    stationCustomParamList = getEl("#stationCustomParamList");
+    stationExistingParamList = getEl("#stationExistingParamList");
+    stationTextCardList = getEl("#stationTextCardList");
+    deleteStationPresetBtn = getEl("#deleteStationPresetBtn");
+    downloadStationPresetBtn = getEl("#downloadStationPresetBtn");
+    importStationPresetBtn = getEl("#importStationPresetBtn");
+    stationPresetImportInput = getEl("#stationPresetImportInput");
+    stationDetailCopyBtn = getEl("#stationDetailCopyBtn");
+    stationDetailDeleteBtn = getEl("#stationDetailDeleteBtn");
+  }
 
   const previewState = {
     viewBox: { ...previewDefaultViewBox },
@@ -148,6 +196,9 @@ export function createStationManager({
   }
 
   function bind() {
+    ensureInjected();
+    syncElements();
+
     if (
       !stationManagerModal
       || !closeStationManagerBtn
@@ -302,6 +353,9 @@ export function createStationManager({
   }
 
   function open() {
+    ensureInjected();
+    syncElements();
+
     if (!stationManagerModal) {
       return;
     }

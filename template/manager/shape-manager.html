@@ -1,0 +1,80 @@
+<div class="line-manager-modal shape-manager-modal" role="dialog" aria-modal="true" aria-label="图形管理器">
+  <div class="modal-head">
+    <h2>图形管理器</h2>
+    <button class="btn-ghost" id="closeShapeManagerBtn" type="button" aria-label="关闭">
+      <img src="/img/icon-close.svg" alt="关闭" />
+    </button>
+  </div>
+  <div class="modal-body shape-manager-body">
+    <section class="line-library shape-library-panel">
+      <div class="line-library-head">
+        <label class="manager-select-all" for="shapeSelectAllInput">
+          <input id="shapeSelectAllInput" class="library-select-all-checkbox" type="checkbox" />
+          <span>全选</span>
+        </label>
+        <span class="line-library-name">图形库</span>
+      </div>
+      <div class="manager-library-toolbar">
+        <div class="manager-bulk-actions">
+          <button class="btn-main" id="newShapeBtn" type="button">新建</button>
+          <button class="btn-ghost" id="downloadShapeBtn" type="button">分享</button>
+          <button class="btn-ghost" id="importShapeBtn" type="button">导入</button>
+          <button class="btn-ghost btn-danger" id="deleteShapeBtn" type="button">删除</button>
+          <input id="shapeImportInput" type="file" accept="application/json,.json" hidden />
+        </div>
+      </div>
+      <div class="line-library-list" id="shapeLibraryList"></div>
+    </section>
+
+    <section class="shape-editor-panel">
+      <div class="shape-editor-head field">
+        <label for="shapeNameInput">图形名称</label>
+        <input id="shapeNameInput" type="text" placeholder="输入图形名称" />
+      </div>
+      <div class="shape-editor-toolbar">
+        <label for="shapePrimitiveSelect">图形类型</label>
+        <select id="shapePrimitiveSelect">
+          <option value="line">线段</option>
+          <option value="circle">圆形</option>
+          <option value="rect">方形</option>
+          <option value="hexagon">六边形</option>
+          <option value="octagon">八边形</option>
+          <option value="bezier">贝塞尔曲线</option>
+          <option value="text">文本</option>
+        </select>
+        <button class="btn-main" id="shapeAddPrimitiveBtn" type="button"> 添加图元</button>
+        <button class="btn-ghost" id="shapeResetViewBtn" type="button">复 位视图</button>
+        <button class="btn-ghost" id="shapeImportSvgBtn" type="button">导 入SVG</button>
+        <input id="shapeImportSvgInput" type="file" accept="image/svg+xml,.svg" hidden />
+        <button class="btn-ghost" id="shapeUndoBtn" type="button">撤回 (Ctrl+Z)</button>
+        <button class="btn-ghost" id="shapeRedoBtn" type="button">重做 (Ctrl+Shift+Z)</button>
+      </div>
+      <div class="shape-editor-canvas-wrap" id="shapeEditorCanvasWrap">
+        <svg id="shapeEditorCanvas" class="shape-editor-canvas" viewBox="0 0 240 240"
+          xmlns="http://www.w3.org/2000/svg"></svg>
+      </div>
+    </section>
+
+    <aside class="shape-side-panel">
+      <div class="shape-side-tabs">
+        <button class="shape-tab-btn" id="shapeTabPropsBtn" type="button">图形属性</button>
+        <button class="shape-tab-btn" id="shapeTabParamsBtn" type="button">参数列表</button>
+      </div>
+      <section class="shape-tab-panel" id="shapePropsPanel">
+        <div class="shape-prop-list" id="shapePropsList"></div>
+      </section>
+      <section class="shape-tab-panel" id="shapeParamsPanel" hidden>
+        <div class="shape-param-actions">
+          <select id="shapeParamTypeSelect" aria-label="参数类型">
+            <option value="color">颜色参数</option>
+            <option value="text">文本参数</option>
+            <option value="number">数字参数</option>
+            <option value="checkbox">勾选参数</option>
+          </select>
+          <button class="btn-main" id="shapeAddParamBtn" type="button">添 加参数</button>
+        </div>
+        <div class="shape-param-list" id="shapeParamList"></div>
+      </section>
+    </aside>
+  </div>
+</div>

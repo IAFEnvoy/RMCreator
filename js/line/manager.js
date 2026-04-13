@@ -14,7 +14,7 @@ import {
   normalizeColor,
   splitColorAndAlpha
 } from "../utils.js";
-import { renderTemplate } from "../template-store.js";
+import { getTemplate, renderTemplate } from "../template-store.js";
 
 export function createLineManager({
   state,
@@ -27,27 +27,57 @@ export function createLineManager({
   onStateChanged
 }) {
   const exportType = "lineType";
-  const {
-    lineManagerModal,
-    closeLineManagerBtn,
-    newLineTypeBtn,
-    lineLibraryList,
-    lineSelectAllInput,
-    lineTypeTempNotice,
-    makeLineTypePermanentBtn,
-    lineTypeNameInput,
-    lineTypePreview,
-    addColorRefBtn,
-    colorListEditor,
-    addSegmentBtn,
-    segmentEditorList,
-    deleteLineTypeBtn,
-    downloadLineTypeBtn,
-    importLineTypeBtn,
-    lineTypeImportInput,
-    lineDetailCopyBtn,
-    lineDetailDeleteBtn
-  } = elements;
+  const lineManagerModal = elements.lineManagerModal;
+  let closeLineManagerBtn = null;
+  let newLineTypeBtn = null;
+  let lineLibraryList = null;
+  let lineSelectAllInput = null;
+  let lineTypeTempNotice = null;
+  let makeLineTypePermanentBtn = null;
+  let lineTypeNameInput = null;
+  let lineTypePreview = null;
+  let addColorRefBtn = null;
+  let colorListEditor = null;
+  let addSegmentBtn = null;
+  let segmentEditorList = null;
+  let deleteLineTypeBtn = null;
+  let downloadLineTypeBtn = null;
+  let importLineTypeBtn = null;
+  let lineTypeImportInput = null;
+  let lineDetailCopyBtn = null;
+  let lineDetailDeleteBtn = null;
+
+  const getEl = (selector) => (lineManagerModal ? lineManagerModal.querySelector(selector) : null);
+
+  function ensureInjected() {
+    if (!lineManagerModal) {
+      return;
+    }
+    if (!lineManagerModal.innerHTML.trim()) {
+      lineManagerModal.innerHTML = getTemplate("line-manager");
+    }
+  }
+
+  function syncElements() {
+    closeLineManagerBtn = getEl("#closeLineManagerBtn");
+    newLineTypeBtn = getEl("#newLineTypeBtn");
+    lineLibraryList = getEl("#lineLibraryList");
+    lineSelectAllInput = getEl("#lineSelectAllInput");
+    lineTypeTempNotice = getEl("#lineTypeTempNotice");
+    makeLineTypePermanentBtn = getEl("#makeLineTypePermanentBtn");
+    lineTypeNameInput = getEl("#lineTypeName");
+    lineTypePreview = getEl("#lineTypePreview");
+    addColorRefBtn = getEl("#addColorRefBtn");
+    colorListEditor = getEl("#colorListEditor");
+    addSegmentBtn = getEl("#addSegmentBtn");
+    segmentEditorList = getEl("#segmentEditorList");
+    deleteLineTypeBtn = getEl("#deleteLineTypeBtn");
+    downloadLineTypeBtn = getEl("#downloadLineTypeBtn");
+    importLineTypeBtn = getEl("#importLineTypeBtn");
+    lineTypeImportInput = getEl("#lineTypeImportInput");
+    lineDetailCopyBtn = getEl("#lineDetailCopyBtn");
+    lineDetailDeleteBtn = getEl("#lineDetailDeleteBtn");
+  }
 
   const findLineType = (id) => getLineTypeById(state.lineTypes, id);
 
@@ -115,11 +145,34 @@ export function createLineManager({
   }
 
   function bind() {
+    ensureInjected();
+    syncElements();
+
     if (!Array.isArray(state.lineManager.checkedIds)) {
       state.lineManager.checkedIds = [];
     }
 
-    if (!lineDetailCopyBtn || !lineDetailDeleteBtn) {
+    if (
+      !lineManagerModal
+      || !closeLineManagerBtn
+      || !newLineTypeBtn
+      || !lineLibraryList
+      || !lineSelectAllInput
+      || !lineTypeTempNotice
+      || !makeLineTypePermanentBtn
+      || !lineTypeNameInput
+      || !lineTypePreview
+      || !addColorRefBtn
+      || !colorListEditor
+      || !addSegmentBtn
+      || !segmentEditorList
+      || !deleteLineTypeBtn
+      || !downloadLineTypeBtn
+      || !importLineTypeBtn
+      || !lineTypeImportInput
+      || !lineDetailCopyBtn
+      || !lineDetailDeleteBtn
+    ) {
       return;
     }
 
@@ -156,6 +209,12 @@ export function createLineManager({
   }
 
   function open() {
+    ensureInjected();
+    syncElements();
+    if (!lineManagerModal || !lineLibraryList || !lineSelectAllInput || !lineTypeNameInput || !lineTypePreview) {
+      return;
+    }
+
     state.lineManager.isOpen = true;
     lineManagerModal.hidden = false;
 
@@ -861,7 +920,7 @@ export function createLineManager({
     const modalId = 'lineImportSelectModal';
     let modal = typeof lineManagerModal !== 'undefined' && lineManagerModal ? lineManagerModal.querySelector('#' + modalId) : null;
     if (!modal) {
-        modal = document.getElementById(modalId);
+      modal = document.getElementById(modalId);
     }
     if (modal && !modal.innerHTML.trim()) {
       modal.innerHTML = renderTemplate('import-select-modal', {
@@ -870,7 +929,7 @@ export function createLineManager({
         Type: 'Line'
       });
     }
-    
+
     const listEl = modal ? modal.querySelector('#lineImportSelectList') : null;
     const confirmBtn = modal ? modal.querySelector('#confirmLineImportSelectBtn') : null;
     const cancelBtn = modal ? modal.querySelector('#cancelLineImportSelectBtn') : null;

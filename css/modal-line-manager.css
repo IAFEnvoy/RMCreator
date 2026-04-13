@@ -23,6 +23,11 @@
   overflow: hidden;
 }
 
+.import-select-modal {
+  width: min(520px, calc(100% - 30px));
+  height: min(520px, calc(100% - 30px));
+}
+
 .modal-head {
   height: 58px;
   padding: 0 14px;
@@ -44,12 +49,21 @@
   grid-template-columns: 300px 1fr;
 }
 
+.import-select-modal .modal-body {
+  display: block;
+}
+
 .line-library {
   border-right: 1px solid var(--line);
   padding: 12px;
   display: flex;
   flex-direction: column;
   min-height: 0;
+}
+
+.import-select-modal .line-library {
+  border-right: none;
+  padding: 12px;
 }
 
 .line-library-head {
@@ -108,6 +122,60 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.import-select-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.import-select-actions .btn-main,
+.import-select-actions .btn-ghost {
+  width: 100%;
+  min-width: 0;
+  padding: 7px 4px;
+}
+
+.drawing-import-item {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 8px;
+  background: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  text-align: left;
+}
+
+.drawing-import-item:hover {
+  border-color: #b8c7df;
+  background: #f9fbff;
+}
+
+.drawing-import-item label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+  font-size: 13px;
+  font-weight: 600;
+  color: #334764;
+}
+
+.drawing-import-item label span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.drawing-import-item-checkbox {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--accent);
 }
 
 .line-library-item {

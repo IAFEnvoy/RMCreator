@@ -31,6 +31,7 @@ import {
   toNumber,
   toSvgDataUrl
 } from "./utils.js";
+import { getTemplate, renderTemplate } from "../template-store.js";
 
 const defaultViewBox = Object.freeze({ x: 0, y: 0, width: 240, height: 240 });
 const snapConfig = Object.freeze({
@@ -90,37 +91,77 @@ export function createShapeManager({
     }, durationSec * 1000);
     feedbackTimers.set(button, timer);
   };
-  const {
-    shapeManagerModal,
-    closeShapeManagerBtn,
-    newShapeBtn,
-    shapeLibraryList,
-    shapeSelectAllInput,
-    shapeNameInput,
-    shapePrimitiveSelect,
-    shapeAddPrimitiveBtn,
-    shapeResetViewBtn,
-    shapeImportSvgBtn,
-    shapeImportSvgInput,
-    shapeUndoBtn,
-    shapeRedoBtn,
-    shapeEditorCanvasWrap,
-    shapeEditorCanvas,
-    shapeTabPropsBtn,
-    shapeTabParamsBtn,
-    shapePropsPanel,
-    shapeParamsPanel,
-    shapePropsList,
-    shapeParamTypeSelect,
-    shapeAddParamBtn,
-    shapeParamList,
-    deleteShapeBtn,
-    downloadShapeBtn,
-    importShapeBtn,
-    shapeImportInput,
-    shapeDetailCopyBtn,
-    shapeDetailDeleteBtn
-  } = elements;
+  const shapeManagerModal = elements.shapeManagerModal;
+  let closeShapeManagerBtn = null;
+  let newShapeBtn = null;
+  let shapeLibraryList = null;
+  let shapeSelectAllInput = null;
+  let shapeNameInput = null;
+  let shapePrimitiveSelect = null;
+  let shapeAddPrimitiveBtn = null;
+  let shapeResetViewBtn = null;
+  let shapeImportSvgBtn = null;
+  let shapeImportSvgInput = null;
+  let shapeUndoBtn = null;
+  let shapeRedoBtn = null;
+  let shapeEditorCanvasWrap = null;
+  let shapeEditorCanvas = null;
+  let shapeTabPropsBtn = null;
+  let shapeTabParamsBtn = null;
+  let shapePropsPanel = null;
+  let shapeParamsPanel = null;
+  let shapePropsList = null;
+  let shapeParamTypeSelect = null;
+  let shapeAddParamBtn = null;
+  let shapeParamList = null;
+  let deleteShapeBtn = null;
+  let downloadShapeBtn = null;
+  let importShapeBtn = null;
+  let shapeImportInput = null;
+  let shapeDetailCopyBtn = null;
+  let shapeDetailDeleteBtn = null;
+
+  const getEl = (selector) => (shapeManagerModal ? shapeManagerModal.querySelector(selector) : null);
+
+  function ensureInjected() {
+    if (!shapeManagerModal) {
+      return;
+    }
+    if (!shapeManagerModal.innerHTML.trim()) {
+      shapeManagerModal.innerHTML = getTemplate("shape-manager");
+    }
+  }
+
+  function syncElements() {
+    closeShapeManagerBtn = getEl("#closeShapeManagerBtn");
+    newShapeBtn = getEl("#newShapeBtn");
+    shapeLibraryList = getEl("#shapeLibraryList");
+    shapeSelectAllInput = getEl("#shapeSelectAllInput");
+    shapeNameInput = getEl("#shapeNameInput");
+    shapePrimitiveSelect = getEl("#shapePrimitiveSelect");
+    shapeAddPrimitiveBtn = getEl("#shapeAddPrimitiveBtn");
+    shapeResetViewBtn = getEl("#shapeResetViewBtn");
+    shapeImportSvgBtn = getEl("#shapeImportSvgBtn");
+    shapeImportSvgInput = getEl("#shapeImportSvgInput");
+    shapeUndoBtn = getEl("#shapeUndoBtn");
+    shapeRedoBtn = getEl("#shapeRedoBtn");
+    shapeEditorCanvasWrap = getEl("#shapeEditorCanvasWrap");
+    shapeEditorCanvas = getEl("#shapeEditorCanvas");
+    shapeTabPropsBtn = getEl("#shapeTabPropsBtn");
+    shapeTabParamsBtn = getEl("#shapeTabParamsBtn");
+    shapePropsPanel = getEl("#shapePropsPanel");
+    shapeParamsPanel = getEl("#shapeParamsPanel");
+    shapePropsList = getEl("#shapePropsList");
+    shapeParamTypeSelect = getEl("#shapeParamTypeSelect");
+    shapeAddParamBtn = getEl("#shapeAddParamBtn");
+    shapeParamList = getEl("#shapeParamList");
+    deleteShapeBtn = getEl("#deleteShapeBtn");
+    downloadShapeBtn = getEl("#downloadShapeBtn");
+    importShapeBtn = getEl("#importShapeBtn");
+    shapeImportInput = getEl("#shapeImportInput");
+    shapeDetailCopyBtn = getEl("#shapeDetailCopyBtn");
+    shapeDetailDeleteBtn = getEl("#shapeDetailDeleteBtn");
+  }
 
   const panState = {
     isPanning: false,
@@ -311,6 +352,9 @@ export function createShapeManager({
   }
 
   function bind() {
+    ensureInjected();
+    syncElements();
+
     if (
       !shapeManagerModal
       || !closeShapeManagerBtn
@@ -431,6 +475,9 @@ export function createShapeManager({
   }
 
   function open() {
+    ensureInjected();
+    syncElements();
+
     if (!shapeManagerModal) {
       return;
     }
@@ -690,7 +737,7 @@ export function createShapeManager({
     const modalId = 'shapeImportSelectModal';
     let modal = typeof shapeManagerModal !== 'undefined' && shapeManagerModal ? shapeManagerModal.querySelector('#' + modalId) : null;
     if (!modal) {
-        modal = document.getElementById(modalId);
+      modal = document.getElementById(modalId);
     }
     if (modal && !modal.innerHTML.trim()) {
       modal.innerHTML = renderTemplate('import-select-modal', {
@@ -699,7 +746,7 @@ export function createShapeManager({
         Type: 'Shape'
       });
     }
-    
+
     const listEl = modal ? modal.querySelector('#shapeImportSelectList') : null;
     const confirmBtn = modal ? modal.querySelector('#confirmShapeImportSelectBtn') : null;
     const cancelBtn = modal ? modal.querySelector('#cancelShapeImportSelectBtn') : null;

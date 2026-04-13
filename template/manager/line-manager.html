@@ -1,0 +1,59 @@
+<div class="line-manager-modal" role="dialog" aria-modal="true" aria-label="线条管理器">
+  <div class="modal-head">
+    <h2>线条管理器</h2>
+    <button class="btn-ghost" id="closeLineManagerBtn" type="button" aria-label="关闭">
+      <img src="/img/icon-close.svg" alt="关闭" />
+    </button>
+  </div>
+  <div class="modal-body">
+    <section class="line-library">
+      <div class="line-library-head">
+        <label class="manager-select-all" for="lineSelectAllInput">
+          <input id="lineSelectAllInput" class="library-select-all-checkbox" type="checkbox" />
+          <span>全选</span>
+        </label>
+        <span class="line-library-name">线条库</span>
+      </div>
+      <div class="manager-library-toolbar">
+        <div class="manager-bulk-actions">
+          <button class="btn-main" id="newLineTypeBtn" type="button">新建</button>
+          <button class="btn-ghost" id="importLineTypeBtn" type="button">导入</button>
+          <button class="btn-ghost" id="downloadLineTypeBtn" type="button">导出</button>
+          <button class="btn-ghost btn-danger" id="deleteLineTypeBtn" type="button">删除</button>
+          <input id="lineTypeImportInput" type="file" accept="application/json" hidden />
+        </div>
+      </div>
+      <div class="line-library-list" id="lineLibraryList"></div>
+    </section>
+
+    <section class="line-editor" id="lineEditorPanel">
+      <div class="line-type-temp-warning" id="lineTypeTempNotice" hidden>
+        <div class="line-type-temp-warning-text">这是从外部文件导入的临时线条类型。新建或加载新绘图时会被清除。</div>
+        <button class="btn-main" id="makeLineTypePermanentBtn" type="button">转为永久</button>
+      </div>
+      <div class="field">
+        <label for="lineTypeName">名称</label>
+        <input id="lineTypeName" type="text" />
+      </div>
+      <div class="field">
+        <label>线条浏览</label>
+        <svg id="lineTypePreview" class="line-type-preview" viewBox="0 0 240 90"
+          xmlns="http://www.w3.org/2000/svg"></svg>
+      </div>
+      <div class="segments-head">
+        <span>颜色列表</span>
+        <button class="btn-main" id="addColorRefBtn" type="button">添加颜色</button>
+      </div>
+      <div class="color-list-editor" id="colorListEditor"></div>
+      <div class="segments-head">
+        <span>小线条列表</span>
+        <button class="btn-main" id="addSegmentBtn" type="button">添加小线条</button>
+      </div>
+      <div class="segments-list" id="segmentEditorList"></div>
+      <div class="manager-detail-actions">
+        <button class="btn-ghost" id="lineDetailCopyBtn" type="button">创建副本</button>
+        <button class="btn-ghost btn-danger" id="lineDetailDeleteBtn" type="button">删除</button>
+      </div>
+    </section>
+  </div>
+</div>

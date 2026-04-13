@@ -5,21 +5,22 @@
       <img src="/img/icon-close.svg" alt="关闭" />
     </button>
   </div>
-  <div class="modal-body import-select-body" style="padding: 14px; display: flex; flex-direction: column;">
-    <div class="field field-toggle"
-      style="margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border-color, #e1e5ea); padding-bottom: 12px;">
-      <span style="font-weight: 500; font-size: 14px;">全部选中</span>
-      <label class="toggle-switch" for="{{type}}ImportSelectAll">
-        <input id="{{type}}ImportSelectAll" class="toggle-checkbox" type="checkbox" />
-        <span class="toggle-slider" aria-hidden="true"></span>
-      </label>
-    </div>
-    <div id="{{type}}ImportSelectList" class="import-select-list"
-      style="flex: 1; overflow-y: auto; border: 1px solid var(--border-color, #e1e5ea); border-radius: 6px; padding: 8px; background: var(--bg-hover, #fafbfc); display: flex; flex-direction: column; gap: 6px;">
-    </div>
-    <div class="modal-actions" style="justify-content: flex-end; margin-top: 14px;">
-      <button class="btn-ghost" id="cancel{{Type}}ImportSelectBtn" type="button">取消</button>
-      <button class="btn-main" id="confirm{{Type}}ImportSelectBtn" type="button">导入所选</button>
-    </div>
+  <div class="modal-body import-select-body">
+    <section class="line-library import-select-panel">
+      <div class="line-library-head">
+        <label class="manager-select-all" for="{{type}}ImportSelectAll">
+          <input id="{{type}}ImportSelectAll" class="library-select-all-checkbox" type="checkbox" />
+          <span>全选</span>
+        </label>
+        <span class="line-library-name">导入列表</span>
+      </div>
+      <div class="manager-library-toolbar">
+        <div class="import-select-actions">
+          <button class="btn-ghost" id="cancel{{Type}}ImportSelectBtn" type="button">取消</button>
+          <button class="btn-main" id="confirm{{Type}}ImportSelectBtn" type="button">导入所选</button>
+        </div>
+      </div>
+      <div id="{{type}}ImportSelectList" class="line-library-list import-select-list"></div>
+    </section>
   </div>
 </div>
