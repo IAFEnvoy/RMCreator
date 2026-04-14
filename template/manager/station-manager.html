@@ -42,35 +42,18 @@
         </div>
       </div>
       <section class="station-text-placement" id="stationTextPlacementPanel">
-        <div class="line-library-head station-preview-head">
-          <span id="stationPlacementTitle">文字位置</span>
-        </div>
-        <div class="station-position-grid" id="stationPositionGrid" role="group" aria-label="文字位置">
-          <button type="button" data-slot="nw">
-            <img src="/img/arrow/icon-arrow-up-left.svg" alt="左上" />
-          </button>
-          <button type="button" data-slot="n">
-            <img src="/img/arrow/icon-arrow-up.svg" alt="上" />
-          </button>
-          <button type="button" data-slot="ne">
-            <img src="/img/arrow/icon-arrow-up-right.svg" alt="右上" />
-          </button>
-          <button type="button" data-slot="w">
-            <img src="/img/arrow/icon-arrow-left.svg" alt="左" />
-          </button>
-          <button type="button" class="disabled" disabled></button>
-          <button type="button" data-slot="e">
-            <img src="/img/arrow/icon-arrow-right.svg" alt="右" />
-          </button>
-          <button type="button" data-slot="sw">
-            <img src="/img/arrow/icon-arrow-down-left.svg" alt="左下" />
-          </button>
-          <button type="button" data-slot="s">
-            <img src="/img/arrow/icon-arrow-down.svg" alt="下" />
-          </button>
-          <button type="button" data-slot="se">
-            <img src="/img/arrow/icon-arrow-down-right.svg" alt="右下" />
-          </button>
+        <div class="station-placement-row">
+          <label class="station-option-label" for="stationTextPlacementSelect">文字位置</label>
+          <select id="stationTextPlacementSelect" aria-label="文字位置">
+            <option value="nw">左上</option>
+            <option value="n">上</option>
+            <option value="ne" selected>右上</option>
+            <option value="w">左</option>
+            <option value="e">右</option>
+            <option value="sw">左下</option>
+            <option value="s">下</option>
+            <option value="se">右下</option>
+          </select>
         </div>
         <div class="station-distance-controls">
           <label for="stationTextDistanceValue">文字距离</label>
@@ -104,16 +87,17 @@
           </label>
         </div>
       </section>
-      <div class="field">
-        <div class="line-library-head station-preview-head">
-          <span>车站浏览</span>
-          <button class="btn-ghost" id="stationPreviewResetBtn" type="button">重置视图</button>
-        </div>
+      <div class="field station-preview-field">
         <div class="station-preview" id="stationPreview">
+          <button class="btn-ghost station-preview-reset" id="stationPreviewResetBtn" type="button">重置视图</button>
           <div class="station-preview-canvas-wrap" id="stationPreviewCanvasWrap">
             <svg id="stationPreviewCanvas" class="station-preview-canvas" viewBox="0 0 240 240"
               xmlns="http://www.w3.org/2000/svg"></svg>
           </div>
+        </div>
+        <div class="station-preview-actions">
+          <button class="btn-ghost" id="stationDetailCopyBtn" type="button">创建副本</button>
+          <button class="btn-ghost btn-danger" id="stationDetailDeleteBtn" type="button">删除</button>
         </div>
       </div>
     </section>
@@ -153,10 +137,6 @@
           </section>
         </div>
       </section>
-      <div class="manager-detail-actions">
-        <button class="btn-ghost" id="stationDetailCopyBtn" type="button">创建副本</button>
-        <button class="btn-ghost btn-danger" id="stationDetailDeleteBtn" type="button">删除</button>
-      </div>
     </aside>
   </div>
 </div>

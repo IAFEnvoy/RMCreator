@@ -62,8 +62,7 @@ export function createStationManager({
   let stationShapeSearchInput = null;
   let stationShapeSelect = null;
   let stationTextPlacementPanel = null;
-  let stationPlacementTitle = null;
-  let stationPositionGrid = null;
+  let stationTextPlacementSelect = null;
   let stationTextDistanceUseParam = null;
   let stationTextDistanceValue = null;
   let stationTextDistanceParamSelect = null;
@@ -111,8 +110,7 @@ export function createStationManager({
     stationShapeSearchInput = getEl("#stationShapeSearchInput");
     stationShapeSelect = getEl("#stationShapeSelect");
     stationTextPlacementPanel = getEl("#stationTextPlacementPanel");
-    stationPlacementTitle = getEl("#stationPlacementTitle");
-    stationPositionGrid = getEl("#stationPositionGrid");
+    stationTextPlacementSelect = getEl("#stationTextPlacementSelect");
     stationTextDistanceUseParam = getEl("#stationTextDistanceUseParam");
     stationTextDistanceValue = getEl("#stationTextDistanceValue");
     stationTextDistanceParamSelect = getEl("#stationTextDistanceParamSelect");
@@ -209,8 +207,7 @@ export function createStationManager({
       || !stationShapeSearchInput
       || !stationShapeSelect
       || !stationTextPlacementPanel
-      || !stationPlacementTitle
-      || !stationPositionGrid
+      || !stationTextPlacementSelect
       || !stationTextDistanceUseParam
       || !stationTextDistanceValue
       || !stationTextDistanceParamSelect
@@ -328,7 +325,7 @@ export function createStationManager({
       refreshStationParamPanels(preset);
     });
 
-    stationPositionGrid.addEventListener("click", onPositionGridClicked);
+    stationTextPlacementSelect.addEventListener("change", onTextPlacementChanged);
     stationTextDistanceUseParam.addEventListener("change", onTextDistanceChanged);
     stationTextDistanceValue.addEventListener("change", onTextDistanceChanged);
     stationTextDistanceParamSelect.addEventListener("change", onTextDistanceChanged);
@@ -1507,11 +1504,8 @@ export function createStationManager({
 
   function renderTextPlacementPanel(preset) {
     if (!preset) {
-      stationPlacementTitle.textContent = "文字位置";
-      stationPositionGrid.querySelectorAll("button[data-slot]").forEach((button) => {
-        button.classList.remove("active");
-        button.disabled = true;
-      });
+      stationTextPlacementSelect.value = "ne";
+      stationTextPlacementSelect.disabled = true;
       const distanceToggleWrap = stationTextDistanceUseParam.closest(".shape-prop-param-toggle");
       if (distanceToggleWrap) {
         distanceToggleWrap.classList.add("is-disabled");
@@ -1537,18 +1531,14 @@ export function createStationManager({
 
     ensureSelectedTextCard(preset);
 
-    stationPlacementTitle.textContent = "文字位置";
     preset.textPlacement = normalizeStationTextPlacement(preset.textPlacement || {
       slot: preset.textCards?.[0]?.placement?.slot,
       distanceBinding: preset.textCards?.[0]?.placement?.distanceBinding,
       lineGapBinding: { mode: "value", value: 4, paramId: "" }
     });
     const slot = normalizeTextSlot(preset.textPlacement.slot);
-    stationPositionGrid.querySelectorAll("button[data-slot]").forEach((button) => {
-      const isActive = button.getAttribute("data-slot") === slot;
-      button.classList.toggle("active", isActive);
-      button.disabled = false;
-    });
+    stationTextPlacementSelect.value = slot;
+    stationTextPlacementSelect.disabled = false;
 
     const shape = getShapeById(preset.shapeId);
     const options = buildStationTextParamOptions({ preset, shape }).filter((item) => item.type === "number");
@@ -1608,19 +1598,14 @@ export function createStationManager({
     stationTextLineGapParamSelect.disabled = !stationTextLineGapUseParam.checked || !hasNumberParams;
   }
 
-  function onPositionGridClicked(event) {
-    const button = event.target.closest("button[data-slot]");
-    if (!button) {
-      return;
-    }
-
+  function onTextPlacementChanged() {
     const preset = getSelectedPreset();
     if (!preset) {
       return;
     }
 
     preset.textPlacement = normalizeStationTextPlacement(preset.textPlacement);
-    preset.textPlacement.slot = normalizeTextSlot(button.getAttribute("data-slot"));
+    preset.textPlacement.slot = normalizeTextSlot(stationTextPlacementSelect.value);
     persistStationLibrary();
     renderTextPlacementPanel(preset);
     renderPreview(preset);

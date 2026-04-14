@@ -12,7 +12,7 @@ const defaultTextColor = "#000000";
 const defaultTextFontFamily = "Segoe UI";
 const defaultTextFontSize = 18;
 const defaultTextDistance = 18;
-const defaultTextSlot = "s";
+const defaultTextSlot = "ne";
 const defaultBlockGap = 4;
 
 const slotSet = new Set(["nw", "n", "ne", "w", "e", "sw", "s", "se"]);
