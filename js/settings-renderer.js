@@ -15,9 +15,11 @@ import {
   shapeParameterTypeDefinitions
 } from "./shape/utils.js";
 import {
+  buildStationRuntimeParamMap,
   normalizeStationTextContent,
   normalizeStationTextCards,
-  normalizeTextSlot
+  normalizeTextSlot,
+  resolveTextBindingValue
 } from "./station/text-utils.js";
 import { renderTemplate } from "./template-store.js";
 
@@ -594,11 +596,24 @@ export function createSettingsRenderer({
     const stationParams = buildStationParameterDescriptors(station);
     ensureStationParameterValues(station, stationParams);
 
-    const textFieldsHtml = stationTextCards.length
+    const shape = state.shapeLibrary.find((item) => item.id === stationPreset?.shapeId) || null;
+    const stationRuntimeParamMap = buildStationRuntimeParamMap({
+      preset: stationPreset,
+      shape,
+      stationParamValues: station.paramValues
+    });
+    const visibleStationTextCards = stationTextCards.filter((card) => {
+      const isVisible = Boolean(
+        resolveTextBindingValue(card.visibilityBinding, "checkbox", stationRuntimeParamMap, true)
+      );
+      return isVisible && !Boolean(card.locked);
+    });
+
+    const textFieldsHtml = visibleStationTextCards.length
       ? `
         <div class="station-instance-text-panel">
           <div class="station-instance-text-title">站点文本</div>
-          ${stationTextCards.map((card, index) => {
+          ${visibleStationTextCards.map((card, index) => {
         const cardId = escapeHtml(String(card.id || ""));
         const controlId = `stationTextValue-${escapeHtml(station.id)}-${cardId}`;
         const label = escapeHtml(String(card.label || `文本 ${index + 1}`));

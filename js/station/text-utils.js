@@ -33,7 +33,13 @@ export function createDefaultStationTextCard(index = 0, createId) {
     italic: false,
     underline: false,
     strikethrough: false,
+    locked: false,
     fontFamily: defaultTextFontFamily,
+    visibilityBinding: {
+      mode: "value",
+      value: true,
+      paramId: ""
+    },
     colorBinding: {
       mode: "value",
       value: defaultTextColor,
@@ -91,6 +97,20 @@ export function normalizeStationTextCard(raw, index = 0, createId) {
   }
 
   const allowMultiline = Boolean(raw.allowMultiline);
+  const visibilityBinding = normalizeTextBinding(
+    raw.visibilityBinding
+    || (Object.prototype.hasOwnProperty.call(raw, "visible")
+      ? { mode: "value", value: raw.visible }
+      : null),
+    "checkbox",
+    true
+  );
+
+  if (visibilityBinding.mode !== "param") {
+    visibilityBinding.mode = "value";
+    visibilityBinding.value = true;
+    visibilityBinding.paramId = "";
+  }
 
   const card = {
     ...fallback,
@@ -98,8 +118,10 @@ export function normalizeStationTextCard(raw, index = 0, createId) {
     label: String(raw.label || fallback.label).trim() || fallback.label,
     allowMultiline,
     ...normalizeTextStyleFlags(raw, fallback),
+    locked: Boolean(raw.locked),
     defaultValue: normalizeStationTextContent(raw.defaultValue ?? "", allowMultiline),
     fontFamily: String(raw.fontFamily || fallback.fontFamily).trim() || fallback.fontFamily,
+    visibilityBinding,
     colorBinding: normalizeTextBinding(
       raw.colorBinding || (Object.prototype.hasOwnProperty.call(raw, "color") ? { mode: "value", value: raw.color } : null),
       "color",
@@ -292,6 +314,11 @@ export function appendStationTexts({
   )) || defaultTextDistance);
 
   const blocks = cards.map((card) => {
+    const visible = Boolean(resolveTextBindingValue(card.visibilityBinding, "checkbox", runtimeParamMap, true));
+    if (!visible) {
+      return null;
+    }
+
     const color = resolveTextBindingValue(card.colorBinding, "color", runtimeParamMap, defaultTextColor);
     const fontSize = Math.max(1, Number(resolveTextBindingValue(card.fontSizeBinding, "number", runtimeParamMap, defaultTextFontSize)) || defaultTextFontSize);
     const hasOverride = textValueMap && typeof textValueMap === "object"
@@ -321,7 +348,11 @@ export function appendStationTexts({
       lines,
       metrics
     };
-  });
+  }).filter(Boolean);
+
+  if (!blocks.length) {
+    return;
+  }
 
   const blockGap = Math.max(0, Number(resolveTextBindingValue(
     placement.lineGapBinding,

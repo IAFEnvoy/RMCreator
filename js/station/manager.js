@@ -957,6 +957,7 @@ export function createStationManager({
     const paramOptions = buildStationTextParamOptions({ preset, shape });
     const colorParamOptions = paramOptions.filter((item) => item.type === "color");
     const numberParamOptions = paramOptions.filter((item) => item.type === "number");
+    const checkboxParamOptions = paramOptions.filter((item) => item.type === "checkbox");
 
     if (!cards.length) {
       const empty = document.createElement("div");
@@ -1053,6 +1054,126 @@ export function createStationManager({
         persistStationLibrary();
         renderTextCards(preset);
         renderPreview(preset);
+        renderSubmenu?.();
+      });
+
+      const visibilityField = document.createElement("div");
+      visibilityField.className = "station-text-card-field";
+      const visibilityLabel = document.createElement("span");
+      visibilityLabel.textContent = "显示隐藏";
+      visibilityField.appendChild(visibilityLabel);
+
+      const visibilityModeRow = document.createElement("div");
+      visibilityModeRow.className = "station-binding-row";
+      const visibilityToggleWrap = document.createElement("div");
+      visibilityToggleWrap.className = "shape-prop-param-toggle";
+      const visibilityToggleText = document.createElement("span");
+      visibilityToggleText.textContent = "参数";
+      const visibilityToggle = document.createElement("input");
+      visibilityToggle.type = "checkbox";
+      visibilityToggle.className = "toggle-checkbox";
+      const visibilityToggleId = `station-text-visible-toggle-${card.id}`;
+      visibilityToggle.id = visibilityToggleId;
+      const visibilityToggleSlider = document.createElement("span");
+      visibilityToggleSlider.className = "toggle-slider";
+      visibilityToggleSlider.setAttribute("aria-hidden", "true");
+      const visibilityToggleSwitch = document.createElement("label");
+      visibilityToggleSwitch.className = "toggle-switch";
+      visibilityToggleSwitch.setAttribute("for", visibilityToggleId);
+      visibilityToggleSwitch.appendChild(visibilityToggle);
+      visibilityToggleSwitch.appendChild(visibilityToggleSlider);
+      visibilityToggleWrap.appendChild(visibilityToggleText);
+      visibilityToggleWrap.appendChild(visibilityToggleSwitch);
+      visibilityModeRow.appendChild(visibilityToggleWrap);
+
+      const visibilityValue = document.createElement("input");
+      visibilityValue.type = "text";
+      visibilityValue.className = "station-binding-static";
+      visibilityValue.value = "固定为显示";
+      visibilityValue.disabled = true;
+
+      const visibilityParam = document.createElement("select");
+      visibilityParam.innerHTML = checkboxParamOptions.length
+        ? checkboxParamOptions.map((option) => `<option value=\"${option.id}\">${option.label}</option>`).join("")
+        : "<option value=\"\">无可用布尔参数</option>";
+      visibilityParam.value = checkboxParamOptions.some((option) => option.id === card.visibilityBinding?.paramId)
+        ? card.visibilityBinding.paramId
+        : (checkboxParamOptions[0]?.id || "");
+
+      visibilityModeRow.appendChild(visibilityValue);
+      visibilityModeRow.appendChild(visibilityParam);
+      visibilityField.appendChild(visibilityModeRow);
+
+      const hasCheckboxParams = checkboxParamOptions.length > 0;
+      visibilityToggle.disabled = !hasCheckboxParams;
+      if (!hasCheckboxParams) {
+        visibilityToggleWrap.classList.add("is-disabled");
+        const disabledHint = "暂无可用布尔参数，请先在参数区添加勾选参数。";
+        visibilityToggleWrap.title = disabledHint;
+        visibilityToggleSwitch.title = disabledHint;
+      }
+      visibilityToggle.checked = hasCheckboxParams && card.visibilityBinding?.mode === "param";
+
+      const syncVisibilityBindingView = () => {
+        const useParam = visibilityToggle.checked && hasCheckboxParams;
+        visibilityValue.hidden = useParam;
+        visibilityParam.hidden = !useParam;
+        visibilityParam.disabled = !useParam;
+      };
+
+      const applyVisibilityBinding = () => {
+        const useParam = visibilityToggle.checked && hasCheckboxParams;
+        if (useParam && !checkboxParamOptions.some((option) => option.id === visibilityParam.value)) {
+          visibilityParam.value = checkboxParamOptions[0]?.id || "";
+        }
+
+        mutateSelectedTextCard(card.id, (liveCard) => {
+          liveCard.visibilityBinding = normalizeTextBinding({
+            mode: useParam ? "param" : "value",
+            value: true,
+            paramId: visibilityParam.value
+          }, "checkbox", true);
+          if (liveCard.visibilityBinding.mode !== "param") {
+            liveCard.visibilityBinding.value = true;
+            liveCard.visibilityBinding.paramId = "";
+          }
+        });
+
+        syncVisibilityBindingView();
+        persistStationLibrary();
+        renderPreview(preset);
+        renderSubmenu?.();
+      };
+
+      visibilityToggle.addEventListener("change", applyVisibilityBinding);
+      visibilityParam.addEventListener("change", applyVisibilityBinding);
+      syncVisibilityBindingView();
+      item.appendChild(visibilityField);
+
+      const lockField = document.createElement("div");
+      lockField.className = "station-text-card-field station-text-card-toggle-row";
+      const lockLabel = document.createElement("span");
+      lockLabel.textContent = "文字锁定";
+      const lockSwitch = document.createElement("label");
+      lockSwitch.className = "toggle-switch";
+      const lockInput = document.createElement("input");
+      lockInput.type = "checkbox";
+      lockInput.className = "toggle-checkbox";
+      lockInput.checked = Boolean(card.locked);
+      const lockSlider = document.createElement("span");
+      lockSlider.className = "toggle-slider";
+      lockSlider.setAttribute("aria-hidden", "true");
+      lockSwitch.appendChild(lockInput);
+      lockSwitch.appendChild(lockSlider);
+      lockField.appendChild(lockLabel);
+      lockField.appendChild(lockSwitch);
+      item.appendChild(lockField);
+
+      lockInput.addEventListener("change", () => {
+        mutateSelectedTextCard(card.id, (liveCard) => {
+          liveCard.locked = Boolean(lockInput.checked);
+        });
+        persistStationLibrary();
         renderSubmenu?.();
       });
 
@@ -1812,6 +1933,9 @@ export function createStationManager({
 
     const cards = normalizeStationTextCards(preset.textCards, createStationPresetId);
     cards.forEach((card) => {
+      if (card.visibilityBinding?.mode === "param" && card.visibilityBinding.paramId) {
+        referenced.add(String(card.visibilityBinding.paramId));
+      }
       if (card.colorBinding?.mode === "param" && card.colorBinding.paramId) {
         referenced.add(String(card.colorBinding.paramId));
       }
