@@ -3,6 +3,7 @@ import "./modal-a11y.js";
 import {
   createRandomLineTypeId,
   getColorListDefault,
+  getEffectiveColorList,
   getLineTypeById,
   loadCustomLineTypes,
   normalizeLineType,
@@ -83,6 +84,13 @@ const state = {
   shapeLibrary: [],
   stationLibrary: [],
   selectedEntities: [],
+  selectionFilter: {
+    station: true,
+    line: true,
+    text: true,
+    shape: true
+  },
+  tempLineColorOverrides: {},
   lineMoveMode: null,
   drag: {
     mode: null,
@@ -1287,6 +1295,15 @@ function onLineTypeUpdated({ previousLineType, nextLineType, syncUsage = true } 
     return;
   }
 
+  // 线条类型更新后清除对应临时颜色覆盖
+  if (state.tempLineColorOverrides && typeof state.tempLineColorOverrides === "object") {
+    delete state.tempLineColorOverrides[nextLineType.id];
+    if (!Object.keys(state.tempLineColorOverrides).length) {
+      state.tempLineColorOverrides = {};
+    }
+    renderer?.renderSubmenu?.();
+  }
+
   const previousColorList = Array.isArray(previousLineType?.colorList)
     ? previousLineType.colorList.map((color) => normalizeColor(color))
     : [];
@@ -1352,13 +1369,15 @@ function addLine(fromStationId, toStationId, lineTypeId, geometry) {
     return;
   }
 
+  const effectiveColors = getEffectiveColorList(state, type);
+
   const edge = {
     id: getNextId("line"),
     fromStationId,
     toStationId,
     lineTypeId,
     geometry,
-    colorList: getColorListDefault(type),
+    colorList: [...effectiveColors],
     flip: false,
     flipColor: false,
     cornerRadius: 18,

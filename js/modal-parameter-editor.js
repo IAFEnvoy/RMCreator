@@ -1,5 +1,4 @@
 import {
-  clamp,
   escapeHtml,
   formatColorWithAlpha,
   normalizeColor
@@ -8,6 +7,7 @@ import {
   normalizeShapeParameterDefault,
   shapeParameterTypeDefinitions
 } from "./shape/utils.js";
+import { getTemplate } from "./template-store.js";
 
 /**
  * 在安全沙箱中评估 JavaScript 表达式。
@@ -50,12 +50,57 @@ export function createParameterEditorModal({ modal, state, colorPicker, onStateC
     return { open: () => { } };
   }
 
-  const body = modal.querySelector(".param-editor-body");
-  const titleEl = modal.querySelector("#paramEditorTitle");
-  const cancelBtn = modal.querySelector("#paramEditorCancelBtn");
-  const applyBtn = modal.querySelector("#paramEditorApplyBtn");
-  const closeBtn = modal.querySelector("#closeParamEditorBtn");
-  const applyAllBtn = modal.querySelector("#paramEditorApplyAllBtn");
+  let body = null;
+  let titleEl = null;
+  let cancelBtn = null;
+  let applyBtn = null;
+  let closeBtn = null;
+  let applyAllBtn = null;
+  let initialized = false;
+
+  const ensureReady = () => {
+    if (initialized) return;
+    initialized = true;
+
+    // 懒加载注入模板 HTML
+    if (!modal.innerHTML.trim()) {
+      modal.innerHTML = getTemplate("param-editor");
+    }
+
+    body = modal.querySelector(".param-editor-body");
+    titleEl = modal.querySelector("#paramEditorTitle");
+    cancelBtn = modal.querySelector("#paramEditorCancelBtn");
+    applyBtn = modal.querySelector("#paramEditorApplyBtn");
+    closeBtn = modal.querySelector("#closeParamEditorBtn");
+    applyAllBtn = modal.querySelector("#paramEditorApplyAllBtn");
+
+    if (closeBtn) {
+      closeBtn.addEventListener("click", close);
+    }
+    if (cancelBtn) {
+      cancelBtn.addEventListener("click", close);
+    }
+
+    // 点击背板关闭
+    modal.addEventListener("click", (e) => {
+      if (e.target === modal) {
+        close();
+      }
+    });
+
+    if (applyBtn) {
+      applyBtn.addEventListener("click", () => {
+        applyChanges();
+        close();
+      });
+    }
+
+    if (applyAllBtn) {
+      applyAllBtn.addEventListener("click", () => {
+        applyChanges();
+      });
+    }
+  };
 
   let currentContext = null;
   let pendingOnApply = null;
@@ -68,20 +113,6 @@ export function createParameterEditorModal({ modal, state, colorPicker, onStateC
   };
 
   const close = () => closeModal();
-
-  if (closeBtn) {
-    closeBtn.addEventListener("click", close);
-  }
-  if (cancelBtn) {
-    cancelBtn.addEventListener("click", close);
-  }
-
-  // 点击背板关闭
-  modal.addEventListener("click", (e) => {
-    if (e.target === modal) {
-      close();
-    }
-  });
 
   /**
    * 构建表达式环境中可用的参数名 -> 值映射。
@@ -493,19 +524,6 @@ export function createParameterEditorModal({ modal, state, colorPicker, onStateC
     }
   };
 
-  if (applyBtn) {
-    applyBtn.addEventListener("click", () => {
-      applyChanges();
-      close();
-    });
-  }
-
-  if (applyAllBtn) {
-    applyAllBtn.addEventListener("click", () => {
-      applyChanges();
-    });
-  }
-
   /**
    * 打开参数编辑器。
    * @param {object} context
@@ -516,6 +534,7 @@ export function createParameterEditorModal({ modal, state, colorPicker, onStateC
    */
   const open = (context) => {
     if (!context) return;
+    ensureReady();
     currentContext = {
       type: context.type,
       entities: Array.isArray(context.entities) ? context.entities : [],

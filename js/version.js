@@ -1,4 +1,4 @@
-export const version = '1.0-beta.3';
+export const version = '1.0-beta.4';
 // Capability for packed app
 export const isTauri = !!window.__TAURI__ || window.location.protocol === 'tauri:';
 

@@ -2236,8 +2236,8 @@ export function createStationManager({
         param.defaultValue = value;
         persistStationLibrary();
         renderPreview(preset);
-        renderExistingParamList(preset);
-        renderSubmenu?.();
+        // 只刷新锁定的预览值，避免整块重建
+        refreshAllLockPreviews();
         rerenderScene?.();
         onStateChanged?.();
       });
@@ -2245,6 +2245,42 @@ export function createStationManager({
       row.appendChild(defaultBlock);
 
       stationCustomParamList.appendChild(row);
+    });
+  }
+
+  /**
+   * 仅刷新已有参数区中所有锁定模式下表达式的预览值。
+   * 比 renderExistingParamList 轻量，不会重建 DOM/事件。
+   */
+  function refreshAllLockPreviews() {
+    const previewEls = stationExistingParamList.querySelectorAll(".station-lock-preview");
+    if (!previewEls.length) return;
+
+    const preset = getSelectedPreset();
+    if (!preset) return;
+
+    const customParams = normalizeShapeParameters(preset.params);
+    previewEls.forEach((el) => {
+      const expr = String(el.dataset?.lockExpr || "").trim();
+      if (!expr) {
+        el.textContent = "（未设置表达式）";
+        return;
+      }
+      const env = {};
+      customParams.forEach((cp) => env[cp.label] = normalizeShapeParameterDefault(cp.type, cp.defaultValue));
+      try {
+        const safeEnv = {};
+        Object.keys(env).forEach((k) => { safeEnv[k.replace(/["'`\\n\\r\\t\\\\]/g, "_")] = env[k]; });
+        // eslint-disable-next-line no-new-func
+        const fn = new Function("params", "Math", "Number", "String", "Boolean", `"use strict"; return (${expr});`);
+        const computed = fn(safeEnv, Math, Number, String, Boolean);
+        const display = typeof computed === "boolean" ? (computed ? "true" : "false")
+          : typeof computed === "number" ? String(computed)
+            : String(computed || "");
+        el.textContent = display + " (" + expr + ")";
+      } catch {
+        el.textContent = "[错误] (" + expr + ")";
+      }
     });
   }
 
@@ -2356,6 +2392,7 @@ export function createStationManager({
           return;
         }
         const expr = String(preset.paramExpressions?.[param.id] || "").trim();
+        lockPreview.dataset.lockExpr = expr;
         if (!expr) {
           lockPreview.textContent = "（未设置表达式）";
           lockPreview.hidden = false;
@@ -2379,8 +2416,10 @@ export function createStationManager({
             : typeof computed === "number" ? String(computed)
               : String(computed || "");
           lockPreview.textContent = display + " (" + expr + ")";
+          lockPreview.dataset.lockExpr = expr;
         } catch (err) {
           lockPreview.textContent = "[错误] (" + expr + ")";
+          lockPreview.dataset.lockExpr = expr;
         }
         lockPreview.hidden = false;
         lockPreview.style.display = "";

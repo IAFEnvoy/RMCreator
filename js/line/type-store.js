@@ -144,6 +144,23 @@ export function getColorListDefault(lineType) {
   return [...(lineType.colorList || ["#2f5d9dff"])];
 }
 
+/**
+ * 获取线条类型的有效颜色列表（优先临时覆盖）。
+ * @param {object|null} state
+ * @param {object} lineType
+ * @returns {string[]}
+ */
+export function getEffectiveColorList(state, lineType) {
+  const overrides = state?.tempLineColorOverrides && typeof state.tempLineColorOverrides === "object"
+    ? state.tempLineColorOverrides
+    : {};
+  const override = overrides[lineType?.id];
+  if (Array.isArray(override) && override.length) {
+    return override.map((c) => normalizeColor(c));
+  }
+  return getColorListDefault(lineType);
+}
+
 export function resolveSegmentColor(segment, colorList) {
   if (segment.colorMode === "palette") {
     const idx = clamp(Number(segment.paletteIndex) || 0, 0, Math.max(0, colorList.length - 1));

@@ -32,6 +32,7 @@ const templateSources = {
   "station-manager-existing-param-no-shape": "/template/manager/station/existing-param-no-shape.html",
   "shortcuts-modal": "/template/manager/shortcuts/shortcuts-modal.html",
   "import-select-modal": "/template/manager/import-select-modal.html",
+  "param-editor": "/template/manager/param-editor.html",
   "line-manager": "/template/manager/line-manager.html",
   "station-manager": "/template/manager/station-manager.html",
   "shape-manager": "/template/manager/shape-manager.html",

@@ -1283,6 +1283,71 @@ export function createSettingsRenderer({
       onStateChanged?.();
     });
 
+    // 批量颜色编辑：只显示所有线条共有的颜色索引
+    lines.forEach((line) => {
+      const lt = findLineType(line.lineTypeId);
+      if (lt) ensureEdgeColorList(line, lt);
+    });
+    const maxCommonColorIndex = lines.reduce((min, line) => {
+      const len = Array.isArray(line.colorList) ? line.colorList.length : 0;
+      return Math.min(min, len);
+    }, Infinity) - 1;
+
+    const batchColorSection = document.getElementById("batchLineColorSection");
+    const batchColorHint = document.getElementById("batchLineColorHint");
+    if (batchColorSection && batchColorHint) {
+      batchColorSection.innerHTML = "";
+      if (maxCommonColorIndex >= 0) {
+        batchColorHint.textContent = "以上颜色项在所有选中线条中均存在，修改将应用到全部选中线条。";
+        for (let i = 0; i <= maxCommonColorIndex; i++) {
+          // 取第一条线的颜色作为预览
+          const sampleColor = String(
+            (Array.isArray(lines[0]?.colorList) && lines[0].colorList[i])
+            || "#2f5d9dff"
+          );
+          const normalized = normalizeColor(sampleColor);
+          const item = document.createElement("div");
+          item.className = "line-settings-color-item";
+          item.innerHTML = `
+            <label for="batchLineColor${i}">颜色${i + 1}</label>
+            <button id="batchLineColor${i}" class="color-modal-trigger" type="button" data-batch-color-index="${i}" data-color-value="${escapeHtml(normalized)}">
+              <span class="color-modal-swatch" style="--swatch-color:${escapeHtml(normalized)}"></span>
+              <span class="color-modal-text">${escapeHtml(formatColorWithAlpha(normalized))}</span>
+            </button>
+          `;
+          batchColorSection.appendChild(item);
+        }
+      } else {
+        batchColorHint.textContent = "没有所有线条共有的颜色项。";
+      }
+    }
+
+    // 绑定批量颜色按钮事件
+    const btns = settingsBody.querySelectorAll("[data-batch-color-index]");
+    btns.forEach((button) => {
+      if (button._batchBound) return;
+      button._batchBound = true;
+      button.addEventListener("click", () => {
+        if (!colorPicker) return;
+        const index = Number(button.getAttribute("data-batch-color-index"));
+        if (!Number.isInteger(index)) return;
+        colorPicker.open({
+          color: lines[0]?.colorList?.[index] || "#2f5d9dff",
+          title: `颜色${index + 1}`,
+          onConfirm: (nextColor) => {
+            lines.forEach((line) => {
+              if (Array.isArray(line.colorList) && line.colorList.length > index) {
+                line.colorList[index] = nextColor;
+              }
+            });
+            renderLines();
+            onStateChanged?.({ coalesceKey: "line-color-batch" });
+            renderSettings();
+          }
+        });
+      });
+    });
+
     appendSelectionActions();
   }
 

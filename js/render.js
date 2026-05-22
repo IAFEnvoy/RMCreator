@@ -1,3 +1,8 @@
+import {
+  getColorListDefault,
+  getEffectiveColorList,
+  resolveSegmentColor
+} from "./line/type-store.js";
 import { svgNs } from "./dom.js";
 import { geometryLabelMap, lineStyleMap } from "./constants.js";
 import {
@@ -7,7 +12,6 @@ import {
   getOffsetPolyline,
   getParallelOffsets
 } from "./line/geometry.js";
-import { resolveSegmentColor } from "./line/type-store.js";
 import {
   clamp,
   getSvgTextDecoration,
@@ -202,7 +206,7 @@ export function createRenderer({
         const preview = document.createElementNS(svgNs, "svg");
         preview.setAttribute("viewBox", "0 0 86 22");
         preview.setAttribute("class", "menu-item-line-preview");
-        renderLineTypePreviewSvg(preview, item);
+        renderLineTypePreviewSvg(preview, item, getEffectiveColorList(state, item));
 
         row.appendChild(title);
         row.appendChild(preview);
@@ -213,6 +217,12 @@ export function createRenderer({
           state.menuSelection.lineType = state.menuSelection.lineType === item.id ? null : item.id;
           renderSubmenu();
         });
+
+        // 双击打开临时颜色编辑器
+        button.addEventListener("dblclick", () => {
+          openLineTempColorEditor(item);
+        });
+
         lineTypeList.appendChild(button);
       });
       return;
@@ -503,6 +513,23 @@ export function createRenderer({
     if (state.activeTool === "select") {
       submenuTitle.textContent = "选择工具已启用";
       submenuItems.innerHTML = getTemplate("submenu-select-tip");
+
+      // 绑定框选过滤勾选框
+      if (!state.selectionFilter || typeof state.selectionFilter !== "object") {
+        state.selectionFilter = { station: true, line: true, text: true, shape: true };
+      }
+      submenuItems.querySelectorAll(".select-filter-toggle").forEach((cb) => {
+        const filterType = cb.getAttribute("data-filter-type");
+        if (filterType) {
+          cb.checked = Boolean(state.selectionFilter[filterType]);
+          if (!cb._filterBound) {
+            cb._filterBound = true;
+            cb.addEventListener("change", () => {
+              state.selectionFilter[filterType] = cb.checked;
+            });
+          }
+        }
+      });
       return;
     }
 
@@ -1005,7 +1032,7 @@ export function createRenderer({
     return null;
   }
 
-  function renderLineTypePreviewSvg(svgEl, lineType) {
+  function renderLineTypePreviewSvg(svgEl, lineType, effectiveColors) {
     svgEl.innerHTML = "";
 
     const vb = svgEl.viewBox?.baseVal;
@@ -1018,18 +1045,40 @@ export function createRenderer({
     ];
     const segments = Array.isArray(lineType?.segments) ? lineType.segments : [];
     const offsets = getParallelOffsets(segments.map((seg) => seg.width), -0.8);
+    const colors = effectiveColors || lineType.colorList || [];
 
     segments.forEach((seg, index) => {
       const path = document.createElementNS(svgNs, "path");
       const offsetLine = getOffsetPolyline(centerLine, offsets[index] || 0);
       path.setAttribute("d", buildPathD(offsetLine));
-      path.setAttribute("stroke", resolveSegmentColor(seg, lineType.colorList || []));
+      path.setAttribute("stroke", resolveSegmentColor(seg, colors));
       path.setAttribute("stroke-width", String(seg.width));
       path.setAttribute("stroke-linecap", seg.roundCap ? "round" : "butt");
       path.setAttribute("stroke-linejoin", "round");
       path.setAttribute("fill", "none");
       path.setAttribute("stroke-dasharray", getSegmentDasharray(seg));
       svgEl.appendChild(path);
+    });
+  }
+
+  function openLineTempColorEditor(lineType) {
+    if (!colorPicker || !lineType) return;
+
+    const effective = getEffectiveColorList(state, lineType);
+    if (!effective.length) return;
+
+    // 只编辑第一个颜色（palette核心色）
+    const title = `${lineType.name} — 临时颜色`;
+    colorPicker.open({
+      color: effective[0],
+      title,
+      onConfirm: (nextColor) => {
+        if (!state.tempLineColorOverrides || typeof state.tempLineColorOverrides !== "object") {
+          state.tempLineColorOverrides = {};
+        }
+        state.tempLineColorOverrides[lineType.id] = [nextColor];
+        renderSubmenu();
+      }
     });
   }
 

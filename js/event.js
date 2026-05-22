@@ -1951,14 +1951,19 @@ export function createEventBinder({
 
   function collectEntitiesInRect(rect) {
     const matches = [];
+    const filter = state.selectionFilter && typeof state.selectionFilter === "object"
+      ? state.selectionFilter
+      : { station: true, line: true, text: true, shape: true };
 
-    state.nodes.forEach((station) => {
-      if (containsPoint(rect, station.x, station.y)) {
-        matches.push({ type: "station", id: station.id });
-      }
-    });
+    if (filter.station !== false) {
+      state.nodes.forEach((station) => {
+        if (containsPoint(rect, station.x, station.y)) {
+          matches.push({ type: "station", id: station.id });
+        }
+      });
+    }
 
-    if (lineLayer) {
+    if (filter.line !== false && lineLayer) {
       const hitLineIds = new Set();
       lineLayer.querySelectorAll("[data-line-id]").forEach((pathEl) => {
         const id = pathEl.getAttribute("data-line-id");
@@ -1984,7 +1989,7 @@ export function createEventBinder({
       });
     }
 
-    if (textLayer) {
+    if (filter.text !== false && textLayer) {
       textLayer.querySelectorAll("[data-text-id]").forEach((textEl) => {
         const id = textEl.getAttribute("data-text-id");
         if (!id) {
@@ -2004,7 +2009,7 @@ export function createEventBinder({
       });
     }
 
-    if (shapeLayer) {
+    if (filter.shape !== false && shapeLayer) {
       shapeLayer.querySelectorAll("[data-shape-id]").forEach((shapeEl) => {
         const id = shapeEl.getAttribute("data-shape-id");
         if (!id) {
