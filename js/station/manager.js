@@ -33,6 +33,7 @@ import { getTemplate, renderTemplate } from "../template-store.js";
 
 const previewDefaultViewBox = Object.freeze({ x: -120, y: -120, width: 480, height: 480 });
 const previewInitialScale = 0.25;
+const defaultBlockGap = 4;
 
 function getTextStyleToolbarItems() {
   return [
@@ -67,9 +68,6 @@ export function createStationManager({
   let stationTextDistanceUseParam = null;
   let stationTextDistanceValue = null;
   let stationTextDistanceParamSelect = null;
-  let stationTextLineGapUseParam = null;
-  let stationTextLineGap = null;
-  let stationTextLineGapParamSelect = null;
   let stationVirtualToggle = null;
   let stationPreviewResetBtn = null;
   let stationPreviewCanvasWrap = null;
@@ -115,9 +113,6 @@ export function createStationManager({
     stationTextDistanceUseParam = getEl("#stationTextDistanceUseParam");
     stationTextDistanceValue = getEl("#stationTextDistanceValue");
     stationTextDistanceParamSelect = getEl("#stationTextDistanceParamSelect");
-    stationTextLineGapUseParam = getEl("#stationTextLineGapUseParam");
-    stationTextLineGap = getEl("#stationTextLineGap");
-    stationTextLineGapParamSelect = getEl("#stationTextLineGapParamSelect");
     stationVirtualToggle = getEl("#stationVirtualToggle");
     stationPreviewResetBtn = getEl("#stationPreviewResetBtn");
     stationPreviewCanvasWrap = getEl("#stationPreviewCanvasWrap");
@@ -212,9 +207,6 @@ export function createStationManager({
       || !stationTextDistanceUseParam
       || !stationTextDistanceValue
       || !stationTextDistanceParamSelect
-      || !stationTextLineGapUseParam
-      || !stationTextLineGap
-      || !stationTextLineGapParamSelect
       || !stationVirtualToggle
       || !stationPreviewResetBtn
       || !stationPreviewCanvasWrap
@@ -330,9 +322,6 @@ export function createStationManager({
     stationTextDistanceUseParam.addEventListener("change", onTextDistanceChanged);
     stationTextDistanceValue.addEventListener("change", onTextDistanceChanged);
     stationTextDistanceParamSelect.addEventListener("change", onTextDistanceChanged);
-    stationTextLineGapUseParam.addEventListener("change", onTextLineGapChanged);
-    stationTextLineGap.addEventListener("change", onTextLineGapChanged);
-    stationTextLineGapParamSelect.addEventListener("change", onTextLineGapChanged);
     stationVirtualToggle.addEventListener("change", () => {
       const preset = getSelectedPreset();
       if (!preset) {
@@ -1666,6 +1655,28 @@ export function createStationManager({
       syncFontSizeBindingView();
       item.appendChild(fontSizeField);
 
+      // 行间距（per-card gap between this card and the next one）
+      const gapField = document.createElement("div");
+      gapField.className = "station-text-card-field";
+      const gapLabel = document.createElement("span");
+      gapLabel.textContent = "行间距";
+      gapField.appendChild(gapLabel);
+
+      const gapInput = document.createElement("input");
+      gapInput.type = "number";
+      gapInput.step = "0.1";
+      gapInput.value = String(Number(card.lineGap) ?? defaultBlockGap);
+      gapInput.addEventListener("input", () => {
+        const v = Number(gapInput.value) ?? defaultBlockGap;
+        mutateSelectedTextCard(card.id, (liveCard) => {
+          liveCard.lineGap = v;
+        });
+        persistStationLibrary();
+        renderPreview(preset);
+      });
+      gapField.appendChild(gapInput);
+      item.appendChild(gapField);
+
       head.addEventListener("click", () => {
         selectTextCard(preset, card.id);
       });
@@ -1848,17 +1859,7 @@ export function createStationManager({
       stationTextDistanceUseParam.checked = false;
       stationTextDistanceValue.disabled = true;
       stationTextDistanceParamSelect.disabled = true;
-      const lineGapToggleWrap = stationTextLineGapUseParam.closest(".shape-prop-param-toggle");
-      if (lineGapToggleWrap) {
-        lineGapToggleWrap.classList.add("is-disabled");
-        lineGapToggleWrap.title = "暂无数字参数";
-      }
-      stationTextLineGapUseParam.disabled = true;
-      stationTextLineGapUseParam.checked = false;
-      stationTextLineGap.disabled = true;
-      stationTextLineGapParamSelect.disabled = true;
       stationTextDistanceParamSelect.innerHTML = "<option value=\"\">暂无数字参数</option>";
-      stationTextLineGapParamSelect.innerHTML = "<option value=\"\">暂无数字参数</option>";
       return;
     }
 
@@ -1878,23 +1879,12 @@ export function createStationManager({
     stationTextDistanceParamSelect.innerHTML = options.length
       ? options.map((option) => `<option value=\"${option.id}\">${option.label}</option>`).join("")
       : "<option value=\"\">暂无数字参数</option>";
-    stationTextLineGapParamSelect.innerHTML = options.length
-      ? options.map((option) => `<option value=\"${option.id}\">${option.label}</option>`).join("")
-      : "<option value=\"\">暂无数字参数</option>";
 
     const distanceBinding = normalizeTextBinding(preset.textPlacement?.distanceBinding, "number", 18);
-    const lineGapBinding = normalizeTextBinding(
-      preset.textPlacement?.lineGapBinding
-      || (Object.prototype.hasOwnProperty.call(preset.textPlacement || {}, "lineGap")
-        ? { mode: "value", value: preset.textPlacement.lineGap }
-        : null),
-      "number",
-      4
-    );
     preset.textPlacement = {
       slot,
       distanceBinding,
-      lineGapBinding
+      lineGapBinding: { mode: "value", value: 0, paramId: "" }
     };
 
     const hasNumberParams = options.length > 0;
@@ -1913,22 +1903,6 @@ export function createStationManager({
       : (options[0]?.id || "");
     stationTextDistanceValue.disabled = stationTextDistanceUseParam.checked;
     stationTextDistanceParamSelect.disabled = !stationTextDistanceUseParam.checked || !hasNumberParams;
-
-    const lineGapToggleWrap = stationTextLineGapUseParam.closest(".shape-prop-param-toggle");
-    if (lineGapToggleWrap) {
-      lineGapToggleWrap.classList.toggle("is-disabled", !hasNumberParams);
-      lineGapToggleWrap.title = hasNumberParams ? "参数模式" : "暂无数字参数";
-    }
-    stationTextLineGapUseParam.disabled = !hasNumberParams;
-    stationTextLineGapUseParam.checked = hasNumberParams && lineGapBinding.mode === "param";
-    stationTextLineGap.value = Number.isFinite(Number(lineGapBinding.value))
-      ? String(Number(lineGapBinding.value))
-      : "4";
-    stationTextLineGapParamSelect.value = options.some((item) => item.id === lineGapBinding.paramId)
-      ? lineGapBinding.paramId
-      : (options[0]?.id || "");
-    stationTextLineGap.disabled = stationTextLineGapUseParam.checked;
-    stationTextLineGapParamSelect.disabled = !stationTextLineGapUseParam.checked || !hasNumberParams;
   }
 
   function onTextPlacementChanged() {
@@ -1963,31 +1937,6 @@ export function createStationManager({
       value: Number(stationTextDistanceValue.value) || 18,
       paramId: stationTextDistanceParamSelect.value
     }, "number", 18);
-
-    persistStationLibrary();
-    renderTextPlacementPanel(preset);
-    renderPreview(preset);
-  }
-
-  function onTextLineGapChanged() {
-    const preset = getSelectedPreset();
-    if (!preset) {
-      return;
-    }
-
-    const shape = getShapeById(preset.shapeId);
-    const options = buildStationTextParamOptions({ preset, shape }).filter((item) => item.type === "number");
-    const hasNumberParams = options.length > 0;
-    if (!hasNumberParams) {
-      stationTextLineGapUseParam.checked = false;
-    }
-
-    preset.textPlacement = normalizeStationTextPlacement(preset.textPlacement);
-    preset.textPlacement.lineGapBinding = normalizeTextBinding({
-      mode: stationTextLineGapUseParam.checked && hasNumberParams ? "param" : "value",
-      value: Number(stationTextLineGap.value) || 4,
-      paramId: stationTextLineGapParamSelect.value
-    }, "number", 4);
 
     persistStationLibrary();
     renderTextPlacementPanel(preset);

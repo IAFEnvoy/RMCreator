@@ -102,6 +102,7 @@ export function createParameterEditorModal({ modal, state, colorPicker, onStateC
    */
   const renderParamList = (ctx) => {
     if (!body) return;
+    if (!ctx || !Array.isArray(ctx.entities)) return;
 
     const typeLabelMap = {
       station: "车站",

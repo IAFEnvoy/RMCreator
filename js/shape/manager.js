@@ -1844,6 +1844,8 @@ export function createShapeManager({
       addNumber("旋转", "rotation", { defaultValue: 0, min: -360, max: 360, step: 1 });
       addNumber("线宽", "strokeWidth", { defaultValue: 8, min: 0.1, max: 100, step: 0.1 });
       addColor("描边颜色", "stroke", "#2f5d9d");
+      addToggle("虚线边框", "dashed");
+      addNumber("虚线长度", "dashLength", { defaultValue: 8, min: 1, max: 100, step: 1 });
       addToggle("端点圆头", "roundCap");
       return;
     }
@@ -1856,6 +1858,8 @@ export function createShapeManager({
       addNumber("旋转", "rotation", { defaultValue: 0, min: -360, max: 360, step: 1 });
       addNumber("线宽", "strokeWidth", { defaultValue: 8, min: 0.1, max: 100, step: 0.1 });
       addColor("描边颜色", "stroke", "#2f5d9d");
+      addToggle("虚线边框", "dashed");
+      addNumber("虚线长度", "dashLength", { defaultValue: 8, min: 1, max: 100, step: 1 });
       addFill("填充", "fill");
       return;
     }
@@ -1894,6 +1898,8 @@ export function createShapeManager({
       addNumber("旋转", "rotation", { defaultValue: 0, min: -360, max: 360, step: 1 });
       addNumber("线宽", "strokeWidth", { defaultValue: 8, min: 0.1, max: 100, step: 0.1 });
       addColor("描边颜色", "stroke", "#2f5d9d");
+      addToggle("虚线边框", "dashed");
+      addNumber("虚线长度", "dashLength", { defaultValue: 8, min: 1, max: 100, step: 1 });
       addFill("填充", "fill");
       return;
     }
@@ -1906,6 +1912,8 @@ export function createShapeManager({
       addNumber("旋转", "rotation", { defaultValue: 0, min: -360, max: 360, step: 1 });
       addNumber("线宽", "strokeWidth", { defaultValue: 8, min: 0.1, max: 100, step: 0.1 });
       addColor("描边颜色", "stroke", "#2f5d9d");
+      addToggle("虚线边框", "dashed");
+      addNumber("虚线长度", "dashLength", { defaultValue: 8, min: 1, max: 100, step: 1 });
       addFill("填充", "fill");
       return;
     }
@@ -1922,6 +1930,8 @@ export function createShapeManager({
       addNumber("旋转", "rotation", { defaultValue: 0, min: -360, max: 360, step: 1 });
       addNumber("线宽", "strokeWidth", { defaultValue: 8, min: 0.1, max: 100, step: 0.1 });
       addColor("描边颜色", "stroke", "#2f5d9d");
+      addToggle("虚线边框", "dashed");
+      addNumber("虚线长度", "dashLength", { defaultValue: 8, min: 1, max: 100, step: 1 });
       addToggle("端点圆头", "roundCap");
       return;
     }

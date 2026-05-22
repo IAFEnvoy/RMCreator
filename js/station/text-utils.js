@@ -49,7 +49,8 @@ export function createDefaultStationTextCard(index = 0, createId) {
       mode: "value",
       value: defaultTextFontSize,
       paramId: ""
-    }
+    },
+    lineGap: defaultBlockGap
   };
 }
 
@@ -131,7 +132,8 @@ export function normalizeStationTextCard(raw, index = 0, createId) {
       raw.fontSizeBinding || (Object.prototype.hasOwnProperty.call(raw, "fontSize") ? { mode: "value", value: raw.fontSize } : null),
       "number",
       fallback.fontSizeBinding.value
-    )
+    ),
+    lineGap: Number.isFinite(Number(raw.lineGap)) ? Number(raw.lineGap) : fallback.lineGap
   }
 
   return card;
@@ -334,6 +336,8 @@ export function appendStationTexts({
     if (!visible) {
       return null;
     }
+    // 收集行间距
+    const lineGap = Number.isFinite(Number(card.lineGap)) ? Number(card.lineGap) : defaultBlockGap;
 
     const color = resolveTextBindingValue(card.colorBinding, "color", runtimeParamMap, defaultTextColor);
     const fontSize = Math.max(1, Number(resolveTextBindingValue(card.fontSizeBinding, "number", runtimeParamMap, defaultTextFontSize)) || defaultTextFontSize);
@@ -362,7 +366,8 @@ export function appendStationTexts({
       fontFamily: card.fontFamily || defaultTextFontFamily,
       textStyle,
       lines,
-      metrics
+      metrics,
+      lineGap
     };
   }).filter(Boolean);
 
@@ -370,14 +375,9 @@ export function appendStationTexts({
     return;
   }
 
-  const blockGap = Math.max(0, Number(resolveTextBindingValue(
-    placement.lineGapBinding,
-    "number",
-    runtimeParamMap,
-    defaultBlockGap
-  )) || defaultBlockGap);
   const totalHeight = blocks.reduce((sum, block, index) => {
-    return sum + block.metrics.height + (index < blocks.length - 1 ? blockGap : 0);
+    const gap = Math.abs(block.lineGap) || defaultBlockGap;
+    return sum + block.metrics.height + (index < blocks.length - 1 ? gap : 0);
   }, 0);
   const maxWidth = blocks.reduce((max, block) => Math.max(max, block.metrics.width), 0);
 
@@ -419,7 +419,7 @@ export function appendStationTexts({
 
     offsetY += block.metrics.height;
     if (index < blocks.length - 1) {
-      offsetY += blockGap;
+      offsetY += block.lineGap;
     }
   });
 }

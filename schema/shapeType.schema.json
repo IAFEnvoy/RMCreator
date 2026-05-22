@@ -187,6 +187,12 @@
         "roundCap": {
           "type": "boolean"
         },
+        "dashed": {
+          "type": "boolean"
+        },
+        "dashLength": {
+          "type": "number"
+        },
         "rotation": {
           "type": "number"
         },

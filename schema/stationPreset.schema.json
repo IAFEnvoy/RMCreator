@@ -132,6 +132,9 @@
         },
         "fontSizeBinding": {
           "$ref": "#/definitions/binding"
+        },
+        "lineGap": {
+          "type": "number"
         }
       }
     },

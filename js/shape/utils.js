@@ -130,6 +130,8 @@ export function createPrimitiveElement(type, index) {
       fill: "none",
       stroke: "#2f5d9d",
       strokeWidth: 6,
+      dashed: false,
+      dashLength: 8,
       rotation: 0
     };
   }
@@ -145,6 +147,8 @@ export function createPrimitiveElement(type, index) {
       fill: "none",
       stroke: "#2f5d9d",
       strokeWidth: 6,
+      dashed: false,
+      dashLength: 8,
       rotation: 0
     };
   }
@@ -160,6 +164,8 @@ export function createPrimitiveElement(type, index) {
       fill: "none",
       stroke: "#2f5d9d",
       strokeWidth: 6,
+      dashed: false,
+      dashLength: 8,
       rotation: 0
     };
   }
@@ -178,6 +184,8 @@ export function createPrimitiveElement(type, index) {
       stroke: "#2f5d9d",
       strokeWidth: 6,
       roundCap: true,
+      dashed: false,
+      dashLength: 8,
       rotation: 0
     };
   }
@@ -419,6 +427,8 @@ export function normalizePrimitive(raw) {
       stroke: safeColor(raw.stroke),
       strokeWidth: normalizeNumber(raw.strokeWidth, 6, 0.1, 100),
       roundCap: Boolean(raw.roundCap),
+      dashed: Boolean(raw.dashed),
+      dashLength: normalizeNumber(raw.dashLength, 8, 1, 100),
       rotation: toNumber(raw.rotation, 0),
       paramBindings,
       ...(Object.keys(paramBindExpressions).length ? { paramBindExpressions } : {})
@@ -439,6 +449,8 @@ export function normalizePrimitive(raw) {
       fill: safeFill(raw.fill),
       stroke: safeColor(raw.stroke),
       strokeWidth: normalizeNumber(raw.strokeWidth, 6, 0.1, 100),
+      dashed: Boolean(raw.dashed),
+      dashLength: normalizeNumber(raw.dashLength, 8, 1, 100),
       rotation: toNumber(raw.rotation, 0),
       paramBindings,
       ...(Object.keys(paramBindExpressions).length ? { paramBindExpressions } : {})
@@ -460,6 +472,8 @@ export function normalizePrimitive(raw) {
       fill: safeFill(raw.fill),
       stroke: safeColor(raw.stroke),
       strokeWidth: normalizeNumber(raw.strokeWidth, 6, 0.1, 100),
+      dashed: Boolean(raw.dashed),
+      dashLength: normalizeNumber(raw.dashLength, 8, 1, 100),
       rotation: toNumber(raw.rotation, 0),
       paramBindings,
       ...(Object.keys(paramBindExpressions).length ? { paramBindExpressions } : {})
@@ -480,6 +494,8 @@ export function normalizePrimitive(raw) {
       fill: safeFill(raw.fill),
       stroke: safeColor(raw.stroke),
       strokeWidth: normalizeNumber(raw.strokeWidth, 6, 0.1, 100),
+      dashed: Boolean(raw.dashed),
+      dashLength: normalizeNumber(raw.dashLength, 8, 1, 100),
       rotation: toNumber(raw.rotation, 0),
       paramBindings,
       ...(Object.keys(paramBindExpressions).length ? { paramBindExpressions } : {})
@@ -500,6 +516,8 @@ export function normalizePrimitive(raw) {
       stroke: safeColor(raw.stroke),
       strokeWidth: normalizeNumber(raw.strokeWidth, 6, 0.1, 100),
       roundCap: Boolean(raw.roundCap),
+      dashed: Boolean(raw.dashed),
+      dashLength: normalizeNumber(raw.dashLength, 8, 1, 100),
       rotation: toNumber(raw.rotation, 0),
       paramBindings,
       ...(Object.keys(paramBindExpressions).length ? { paramBindExpressions } : {})
@@ -526,6 +544,13 @@ export function normalizePrimitive(raw) {
   return null;
 }
 
+function getDasharray(primitive) {
+  if (!primitive || !primitive.dashed) return null;
+  const d = Math.max(1, Number(primitive.dashLength) || 8);
+  const gap = Math.max(1, Math.round(d * 0.75));
+  return `${d} ${gap}`;
+}
+
 export function createPrimitiveNode(primitive) {
   if (!primitive || typeof primitive !== "object") {
     return null;
@@ -542,12 +567,15 @@ export function createPrimitiveNode(primitive) {
     line.setAttribute("stroke-width", String(primitive.strokeWidth));
     line.setAttribute("fill", "none");
     line.setAttribute("stroke-linecap", primitive.roundCap ? "round" : "butt");
+    const da = getDasharray(primitive);
+    if (da) line.setAttribute("stroke-dasharray", da);
     setRotationTransform(line, primitive.rotation, (primitive.x1 + primitive.x2) / 2, (primitive.y1 + primitive.y2) / 2);
     return line;
   }
 
   if (type === "circle") {
     const { radiusX, radiusY } = getPrimitiveRadii(primitive, 42);
+    const da = getDasharray(primitive);
     if (Math.abs(radiusX - radiusY) < 1e-6) {
       const circle = document.createElementNS(svgNs, "circle");
       circle.setAttribute("cx", String(primitive.cx));
@@ -556,6 +584,7 @@ export function createPrimitiveNode(primitive) {
       circle.setAttribute("fill", safeFill(primitive.fill));
       circle.setAttribute("stroke", safeColor(primitive.stroke));
       circle.setAttribute("stroke-width", String(primitive.strokeWidth));
+      if (da) circle.setAttribute("stroke-dasharray", da);
       setRotationTransform(circle, primitive.rotation, primitive.cx, primitive.cy);
       return circle;
     }
@@ -568,6 +597,7 @@ export function createPrimitiveNode(primitive) {
     ellipse.setAttribute("fill", safeFill(primitive.fill));
     ellipse.setAttribute("stroke", safeColor(primitive.stroke));
     ellipse.setAttribute("stroke-width", String(primitive.strokeWidth));
+    if (da) ellipse.setAttribute("stroke-dasharray", da);
     setRotationTransform(ellipse, primitive.rotation, primitive.cx, primitive.cy);
     return ellipse;
   }
@@ -583,6 +613,8 @@ export function createPrimitiveNode(primitive) {
     rect.setAttribute("fill", safeFill(primitive.fill));
     rect.setAttribute("stroke", safeColor(primitive.stroke));
     rect.setAttribute("stroke-width", String(primitive.strokeWidth));
+    const da = getDasharray(primitive);
+    if (da) rect.setAttribute("stroke-dasharray", da);
     setRotationTransform(rect, primitive.rotation, primitive.x + primitive.width / 2, primitive.y + primitive.height / 2);
     return rect;
   }
@@ -595,6 +627,8 @@ export function createPrimitiveNode(primitive) {
     polygon.setAttribute("fill", safeFill(primitive.fill));
     polygon.setAttribute("stroke", safeColor(primitive.stroke));
     polygon.setAttribute("stroke-width", String(primitive.strokeWidth));
+    const da = getDasharray(primitive);
+    if (da) polygon.setAttribute("stroke-dasharray", da);
     setRotationTransform(polygon, primitive.rotation, primitive.cx, primitive.cy);
     return polygon;
   }
@@ -606,6 +640,8 @@ export function createPrimitiveNode(primitive) {
     path.setAttribute("stroke", safeColor(primitive.stroke));
     path.setAttribute("stroke-width", String(primitive.strokeWidth));
     path.setAttribute("stroke-linecap", primitive.roundCap ? "round" : "butt");
+    const da = getDasharray(primitive);
+    if (da) path.setAttribute("stroke-dasharray", da);
     setRotationTransform(path, primitive.rotation, (primitive.x1 + primitive.x2) / 2, (primitive.y1 + primitive.y2) / 2);
     return path;
   }
@@ -644,32 +680,34 @@ export function buildSvgFromEditableElements(elements) {
 
 export function primitiveToMarkup(primitive) {
   const rotationAttr = buildRotationAttr(primitive);
+  const da = getDasharray(primitive);
+  const dash = da ? ` stroke-dasharray="${da}"` : "";
 
   if (primitive.type === "line") {
-    return `<line x1=\"${num(primitive.x1)}\" y1=\"${num(primitive.y1)}\" x2=\"${num(primitive.x2)}\" y2=\"${num(primitive.y2)}\" stroke=\"${safeColor(primitive.stroke)}\" stroke-width=\"${num(primitive.strokeWidth)}\" stroke-linecap=\"${primitive.roundCap ? "round" : "butt"}\" fill=\"none\"${rotationAttr} />`;
+    return `<line x1=\"${num(primitive.x1)}\" y1=\"${num(primitive.y1)}\" x2=\"${num(primitive.x2)}\" y2=\"${num(primitive.y2)}\" stroke=\"${safeColor(primitive.stroke)}\" stroke-width=\"${num(primitive.strokeWidth)}\" stroke-linecap=\"${primitive.roundCap ? "round" : "butt"}\" fill=\"none\"${dash}${rotationAttr} />`;
   }
 
   if (primitive.type === "circle") {
     const { radiusX, radiusY } = getPrimitiveRadii(primitive, 42);
     if (Math.abs(radiusX - radiusY) < 1e-6) {
-      return `<circle cx=\"${num(primitive.cx)}\" cy=\"${num(primitive.cy)}\" r=\"${num(radiusX)}\" fill=\"${safeFill(primitive.fill)}\" stroke=\"${safeColor(primitive.stroke)}\" stroke-width=\"${num(primitive.strokeWidth)}\"${rotationAttr} />`;
+      return `<circle cx=\"${num(primitive.cx)}\" cy=\"${num(primitive.cy)}\" r=\"${num(radiusX)}\" fill=\"${safeFill(primitive.fill)}\" stroke=\"${safeColor(primitive.stroke)}\" stroke-width=\"${num(primitive.strokeWidth)}\"${dash}${rotationAttr} />`;
     }
-    return `<ellipse cx=\"${num(primitive.cx)}\" cy=\"${num(primitive.cy)}\" rx=\"${num(radiusX)}\" ry=\"${num(radiusY)}\" fill=\"${safeFill(primitive.fill)}\" stroke=\"${safeColor(primitive.stroke)}\" stroke-width=\"${num(primitive.strokeWidth)}\"${rotationAttr} />`;
+    return `<ellipse cx=\"${num(primitive.cx)}\" cy=\"${num(primitive.cy)}\" rx=\"${num(radiusX)}\" ry=\"${num(radiusY)}\" fill=\"${safeFill(primitive.fill)}\" stroke=\"${safeColor(primitive.stroke)}\" stroke-width=\"${num(primitive.strokeWidth)}\"${dash}${rotationAttr} />`;
   }
 
   if (primitive.type === "rect") {
     const rx = primitive.rounded === false ? 0 : normalizeNumber(primitive.rx, 10, 0, 400);
-    return `<rect x=\"${num(primitive.x)}\" y=\"${num(primitive.y)}\" width=\"${num(primitive.width)}\" height=\"${num(primitive.height)}\" rx=\"${num(rx)}\" fill=\"${safeFill(primitive.fill)}\" stroke=\"${safeColor(primitive.stroke)}\" stroke-width=\"${num(primitive.strokeWidth)}\"${rotationAttr} />`;
+    return `<rect x=\"${num(primitive.x)}\" y=\"${num(primitive.y)}\" width=\"${num(primitive.width)}\" height=\"${num(primitive.height)}\" rx=\"${num(rx)}\" fill=\"${safeFill(primitive.fill)}\" stroke=\"${safeColor(primitive.stroke)}\" stroke-width=\"${num(primitive.strokeWidth)}\"${dash}${rotationAttr} />`;
   }
 
   if (primitive.type === "hexagon" || primitive.type === "octagon") {
     const sides = primitive.type === "hexagon" ? 6 : 8;
     const { radiusX, radiusY, r } = getPrimitiveRadii(primitive, 54);
-    return `<polygon points=\"${buildRegularPolygonPoints(primitive.cx, primitive.cy, r, sides, radiusX, radiusY)}\" fill=\"${safeFill(primitive.fill)}\" stroke=\"${safeColor(primitive.stroke)}\" stroke-width=\"${num(primitive.strokeWidth)}\"${rotationAttr} />`;
+    return `<polygon points=\"${buildRegularPolygonPoints(primitive.cx, primitive.cy, r, sides, radiusX, radiusY)}\" fill=\"${safeFill(primitive.fill)}\" stroke=\"${safeColor(primitive.stroke)}\" stroke-width=\"${num(primitive.strokeWidth)}\"${dash}${rotationAttr} />`;
   }
 
   if (primitive.type === "bezier") {
-    return `<path d=\"M ${num(primitive.x1)} ${num(primitive.y1)} C ${num(primitive.cx1)} ${num(primitive.cy1)} ${num(primitive.cx2)} ${num(primitive.cy2)} ${num(primitive.x2)} ${num(primitive.y2)}\" fill=\"none\" stroke=\"${safeColor(primitive.stroke)}\" stroke-width=\"${num(primitive.strokeWidth)}\" stroke-linecap=\"${primitive.roundCap ? "round" : "butt"}\"${rotationAttr} />`;
+    return `<path d=\"M ${num(primitive.x1)} ${num(primitive.y1)} C ${num(primitive.cx1)} ${num(primitive.cy1)} ${num(primitive.cx2)} ${num(primitive.cy2)} ${num(primitive.x2)} ${num(primitive.y2)}\" fill=\"none\" stroke=\"${safeColor(primitive.stroke)}\" stroke-width=\"${num(primitive.strokeWidth)}\" stroke-linecap=\"${primitive.roundCap ? "round" : "butt"}\"${dash}${rotationAttr} />`;
   }
 
   if (primitive.type === "text") {
