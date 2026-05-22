@@ -207,7 +207,29 @@ export function buildStationRuntimeParamMap({ preset, shape, stationParamValues 
 
     let rawValue;
     if (mode === "locked") {
-      rawValue = setting?.value;
+      // 锁定模式：有表达式则动态求值，否则用静态值
+      const expr = String(preset?.paramExpressions?.[param.id] || "").trim();
+      if (expr) {
+        // 构建自定义参数环境（优先取 runtime 中已解析的值，兼顾实例覆盖）
+        const env = {};
+        for (const [runtimeId, runtimeEntry] of runtime) {
+          if (runtimeEntry.source === "custom" && runtimeId !== param.id) {
+            env[runtimeEntry.label] = runtimeEntry.value;
+          }
+        }
+        try {
+          const safeEnv = {};
+          Object.keys(env).forEach((k) => { safeEnv[k.replace(/["'`\n\r\t\\]/g, "_")] = env[k]; });
+          // eslint-disable-next-line no-new-func
+          const fn = new Function("params", "Math", "Number", "String", "Boolean", `"use strict"; return (${expr});`);
+          const result = fn(safeEnv, Math, Number, String, Boolean);
+          rawValue = normalizeShapeParameterDefault(param.type, result);
+        } catch {
+          rawValue = setting?.value;
+        }
+      } else {
+        rawValue = setting?.value;
+      }
     } else if (Object.prototype.hasOwnProperty.call(valueSource, param.id)) {
       rawValue = valueSource[param.id];
     } else if (mode === "default") {

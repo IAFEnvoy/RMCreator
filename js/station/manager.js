@@ -601,6 +601,7 @@ export function createStationManager({
         radius: safePreset.radius,
         oval: safePreset.oval,
         shapeParamSettings: safePreset.shapeParamSettings,
+        paramExpressions: safePreset.paramExpressions,
         params: safePreset.params
       }));
     if (!payloadList.length) {
@@ -2120,16 +2121,34 @@ export function createStationManager({
       : {};
     const existingExpr = expressions[paramId] || "";
 
-    paramEditor.open({
-      type: "single",
-      entities: [preset],
-      params: [{
+    // 收集当前预设的自定义参数，使其在表达式中可通过 params["参数名"] 引用
+    const customParams = normalizeShapeParameters(preset.params);
+    const editorParams = [
+      {
         name: paramLabel,
         id: paramId,
         type: paramType,
         value: currentValue,
         expression: existingExpr || ""
-      }],
+      }
+    ];
+    customParams.forEach((cp) => {
+      // 排除自身（如果自定义参数 id 恰好等于要编辑的参数 id）
+      if (cp.id === paramId) return;
+      editorParams.push({
+        name: cp.label,
+        id: cp.id,
+        type: cp.type,
+        value: normalizeShapeParameterDefault(cp.type, cp.defaultValue),
+        expression: "",
+        _readonly: true  // 标记为只读（仅用于变量引用）
+      });
+    });
+
+    paramEditor.open({
+      type: "single",
+      entities: [preset],
+      params: editorParams,
       onApply: (result) => {
         if (!result || !Array.isArray(result.params) || !result.params.length) return;
         const applied = result.params[0];
@@ -2217,45 +2236,12 @@ export function createStationManager({
         param.defaultValue = value;
         persistStationLibrary();
         renderPreview(preset);
+        renderExistingParamList(preset);
         renderSubmenu?.();
+        rerenderScene?.();
+        onStateChanged?.();
       });
       defaultBlock.appendChild(input);
-
-      // fx 按钮 - 参数表达式编辑器
-      const hasExpr = Boolean(preset.paramExpressions?.[param.id]);
-      const fxBtn = document.createElement("button");
-      fxBtn.type = "button";
-      fxBtn.className = "param-fx-toggle" + (hasExpr ? " is-active" : "");
-      fxBtn.title = "参数表达式编辑器（支持 JS 运算）";
-      fxBtn.textContent = "fx";
-      fxBtn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        const currentVal = normalizeShapeParameterDefault(param.type, param.defaultValue);
-        openPresetParamEditor(preset, param.id, param.type, param.label || "参数", currentVal, (applied) => {
-          // 存储表达式
-          if (applied.expression) {
-            if (!preset.paramExpressions || typeof preset.paramExpressions !== "object") {
-              preset.paramExpressions = {};
-            }
-            preset.paramExpressions[param.id] = applied.expression;
-          } else {
-            if (preset.paramExpressions) {
-              delete preset.paramExpressions[param.id];
-              if (!Object.keys(preset.paramExpressions).length) {
-                preset.paramExpressions = undefined;
-              }
-            }
-          }
-          // 存储最终默认值
-          param.defaultValue = normalizeShapeParameterDefault(param.type, applied.finalValue);
-          persistStationLibrary();
-          renderPreview(preset);
-          renderSubmenu?.();
-          renderCustomParamList(preset);
-          renderExistingParamList(preset);
-        });
-      });
-      defaultBlock.appendChild(fxBtn);
       row.appendChild(defaultBlock);
 
       stationCustomParamList.appendChild(row);
@@ -2331,6 +2317,7 @@ export function createStationManager({
       valueLabel.textContent = mode === "locked" ? "锁定值" : "参数值";
       valueWrap.appendChild(valueLabel);
 
+      // 值输入控件（inherit / default 模式可见，locked 模式隐藏）
       const resolvedValue = mode === "inherit"
         ? param.defaultValue
         : normalizeShapeParameterDefault(param.type, setting?.value);
@@ -2338,7 +2325,6 @@ export function createStationManager({
         if (modeSelect.value === "inherit") {
           return;
         }
-
         preset.shapeParamSettings[param.id] = {
           mode: modeSelect.value,
           value: normalizeShapeParameterDefault(param.type, value)
@@ -2346,19 +2332,62 @@ export function createStationManager({
         persistStationLibrary();
         renderPreview(preset);
       });
-      setParameterInputEnabled(valueInput, mode !== "inherit");
+      setParameterInputEnabled(valueInput, mode === "default");
       valueWrap.appendChild(valueInput);
 
-      // fx 按钮 - 仅 default 模式可用
+      // 锁定模式的预览值（显示表达式计算结果）
+      const lockPreview = document.createElement("span");
+      lockPreview.className = "shape-prop-param-preview station-lock-preview";
+      valueWrap.appendChild(lockPreview);
+
+      // fx 按钮 - default 和 locked 模式均可用
       const hasExpr = mode !== "inherit" && Boolean(preset.paramExpressions?.[param.id]);
       const fxBtn = document.createElement("button");
       fxBtn.type = "button";
       fxBtn.className = "param-fx-toggle" + (hasExpr ? " is-active" : "");
-      fxBtn.title = "参数表达式编辑器（支持 JS 运算）";
+      fxBtn.title = "参数表达式编辑器（支持 JS 运算），可在表达式中通过 params[\"参数名\"] 引用自定义参数";
       fxBtn.textContent = "fx";
+      const refreshLockPreview = () => {
+        const isLocked = modeSelect.value === "locked";
+        if (!isLocked) {
+          lockPreview.textContent = "";
+          lockPreview.hidden = true;
+          lockPreview.style.display = "none";
+          return;
+        }
+        const expr = String(preset.paramExpressions?.[param.id] || "").trim();
+        if (!expr) {
+          lockPreview.textContent = "（未设置表达式）";
+          lockPreview.hidden = false;
+          lockPreview.style.display = "";
+          return;
+        }
+        // 构建参数环境并求值
+        const customParams = normalizeShapeParameters(preset.params);
+        const env = {};
+        customParams.forEach((cp) => {
+          if (cp.id === param.id) return;
+          env[cp.label] = normalizeShapeParameterDefault(cp.type, cp.defaultValue);
+        });
+        try {
+          const safeEnv = {};
+          Object.keys(env).forEach((k) => { safeEnv[k.replace(/["'`\\n\\r\\t\\\\]/g, "_")] = env[k]; });
+          // eslint-disable-next-line no-new-func
+          const fn = new Function("params", "Math", "Number", "String", "Boolean", `"use strict"; return (${expr});`);
+          const computed = fn(safeEnv, Math, Number, String, Boolean);
+          const display = typeof computed === "boolean" ? (computed ? "true" : "false")
+            : typeof computed === "number" ? String(computed)
+              : String(computed || "");
+          lockPreview.textContent = display + " (" + expr + ")";
+        } catch (err) {
+          lockPreview.textContent = "[错误] (" + expr + ")";
+        }
+        lockPreview.hidden = false;
+        lockPreview.style.display = "";
+      };
       if (mode === "inherit") {
         fxBtn.disabled = true;
-        fxBtn.title = "请先切换到「重设默认值」模式";
+        fxBtn.title = "请先切换到「重设默认值」或「锁定参数值」模式";
       }
       fxBtn.addEventListener("click", (e) => {
         e.stopPropagation();
@@ -2389,14 +2418,37 @@ export function createStationManager({
           persistStationLibrary();
           renderPreview(preset);
           renderExistingParamList(preset);
+          rerenderScene?.();
+          onStateChanged?.();
         });
       });
       valueWrap.appendChild(fxBtn);
       row.appendChild(valueWrap);
 
+      // 初始视图同步
+      const syncViewByMode = (nextMode) => {
+        const isLocked = nextMode === "locked";
+        const isDefault = nextMode === "default";
+        valueLabel.textContent = isLocked ? "锁定值" : "参数值";
+        valueInput.hidden = isLocked;
+        valueInput.style.display = isLocked ? "none" : "";
+        setParameterInputEnabled(valueInput, isDefault);
+        fxBtn.disabled = nextMode === "inherit";
+        fxBtn.title = nextMode === "inherit"
+          ? "请先切换到「重设默认值」或「锁定参数值」模式"
+          : "参数表达式编辑器（支持 JS 运算），可在表达式中通过 params[\"参数名\"] 引用自定义参数";
+        if (isLocked) {
+          refreshLockPreview();
+        } else {
+          lockPreview.hidden = true;
+          lockPreview.style.display = "none";
+        }
+      };
+      syncViewByMode(mode);
+
       modeSelect.addEventListener("change", () => {
         const nextMode = modeSelect.value;
-        valueLabel.textContent = nextMode === "locked" ? "锁定值" : "参数值";
+        syncViewByMode(nextMode);
 
         if (nextMode === "inherit") {
           delete preset.shapeParamSettings[param.id];
@@ -2408,11 +2460,13 @@ export function createStationManager({
             mode: nextMode,
             value: normalizeShapeParameterDefault(param.type, current)
           };
-          setParameterInputEnabled(valueInput, true);
+          setParameterInputEnabled(valueInput, nextMode === "default");
         }
 
         persistStationLibrary();
         renderPreview(preset);
+        rerenderScene?.();
+        onStateChanged?.();
       });
 
       stationExistingParamList.appendChild(row);
@@ -2712,6 +2766,9 @@ export function createStationManager({
       radius: Number.isFinite(Number(raw.radius)) ? Number(raw.radius) : 12,
       oval: Boolean(raw.oval),
       shapeParamSettings: normalizeShapeParamSettings(raw.shapeParamSettings),
+      paramExpressions: raw.paramExpressions && typeof raw.paramExpressions === "object"
+        ? { ...raw.paramExpressions }
+        : undefined,
       params: filteredParams
     };
     return preset;

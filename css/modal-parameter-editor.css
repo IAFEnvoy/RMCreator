@@ -117,7 +117,34 @@
   align-items: center;
   justify-content: space-between;
   padding: 10px 14px;
-  gap: 10px;
+  gap: 8px;
+}
+
+/* fx 按钮 */
+.param-fx-btn {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border: 1px solid #c0cddd;
+  border-radius: 5px;
+  background: #fff;
+  color: #6b7d95;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  line-height: 1.3;
+}
+
+.param-fx-btn:hover {
+  background: #e8f2ff;
+  border-color: #4a9eff;
+  color: #4a9eff;
+}
+
+.param-fx-btn.is-active {
+  background: #4a9eff;
+  color: #fff;
+  border-color: #4a9eff;
 }
 
 .param-item-label {
@@ -140,26 +167,47 @@
   flex-shrink: 0;
 }
 
-.param-item-mode-toggle {
-  font-size: 11px;
-  padding: 4px 10px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: #fff;
-  color: #4f617a;
-  cursor: pointer;
+/* 值显示区（header 右侧） */
+.param-value-display {
+  font-size: 12px;
+  color: #2e4a6b;
+  font-weight: 500;
   flex-shrink: 0;
-  transition: background 0.15s, color 0.15s;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: right;
 }
 
-.param-item-mode-toggle:hover {
-  background: #eef2f7;
+.param-value-display .param-expr-text {
+  font-size: 10px;
+  color: #4a9eff;
+  font-weight: 400;
 }
 
-.param-item-mode-toggle.is-expression {
-  background: #4a9eff;
-  color: #fff;
-  border-color: #4a9eff;
+/* 只读参考参数 */
+.param-item-readonly {
+  opacity: 0.7;
+}
+
+.param-item-readonly .param-item-header {
+  padding-bottom: 4px;
+}
+
+.param-readonly-badge {
+  font-size: 10px;
+  color: #4a9eff;
+  padding: 1px 6px;
+  background: #e8f2ff;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.param-readonly-value {
+  font-size: 12px;
+  color: #6b7d95;
+  padding: 0 14px 8px;
 }
 
 .param-item-body {
@@ -168,6 +216,19 @@
 
 .param-item-body .field {
   margin: 0;
+}
+
+/* 值编辑区 / 表达式编辑区 */
+.param-value-area.is-hidden {
+  display: none;
+}
+
+.param-expr-area {
+  margin-top: 8px;
+}
+
+.param-expr-area.is-hidden {
+  display: none;
 }
 
 .param-item-body input[type="text"],

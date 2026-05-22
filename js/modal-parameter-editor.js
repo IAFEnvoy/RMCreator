@@ -117,7 +117,7 @@ export function createParameterEditorModal({ modal, state, colorPicker, onStateC
     let html = `
       <div class="param-editor-info">
         <div class="kv">编辑类型：${escapeHtml(typeLabel)}（已选择 ${count} 个）</div>
-        <div class="kv">点击参数旁的「JS」按钮切换为表达式模式，支持引用其他参数（通过 <code>params.参数名</code>）及 Math 函数</div>
+        <div class="kv">点击 fx 按钮编写 JS 表达式，可引用其他参数（<code>params["参数名"]</code>）及 Math 函数</div>
       </div>
       <div class="param-list">
     `;
@@ -125,22 +125,50 @@ export function createParameterEditorModal({ modal, state, colorPicker, onStateC
     const params = Array.isArray(ctx.params) ? ctx.params : [];
 
     params.forEach((param, idx) => {
+      const readonly = Boolean(param._readonly);
       const expr = String(param.expression || "").trim();
-      const isExpression = expr.length > 0;
+      const hasExpression = !readonly && expr.length > 0;
       const value = param.value;
       const typeDef = shapeParameterTypeDefinitions[param.type];
       const typeLabel = escapeHtml(typeDef?.label || "文本参数");
       const name = escapeHtml(param.name || param.label || `参数 ${idx + 1}`);
 
+      if (readonly) {
+        const preview = formatPreviewValue(value);
+        html += `
+          <div class="param-item param-item-readonly" data-param-index="${idx}">
+            <div class="param-item-header">
+              <span class="param-item-label" title="${name}">${escapeHtml(name)}</span>
+              <span class="param-item-type">${typeLabel}</span>
+              <span class="param-readonly-badge">参考</span>
+            </div>
+            <div class="param-item-body">
+              <div class="param-readonly-value">当前值：${escapeHtml(preview)}</div>
+            </div>
+          </div>
+        `;
+        return;
+      }
+
+      // 计算当前最终值（考虑表达式）
+      const includeSelf = Boolean(ctx?.includeSelf);
+      const env = buildExpressionEnv(params, idx, includeSelf);
+      const evalResult = hasExpression ? evaluateExpression(expr, env) : { ok: false };
+      const computedValue = (hasExpression && evalResult.ok) ? evalResult.value : value;
+      const computedDisplay = formatPreviewValue(computedValue);
+      const exprDisplay = hasExpression ? ` <span class="param-expr-text">(${escapeHtml(expr)})</span>` : "";
+
       html += `
-        <div class="param-item${isExpression ? " has-expression" : ""}" data-param-index="${idx}">
+        <div class="param-item${hasExpression ? " has-expression" : ""}" data-param-index="${idx}">
           <div class="param-item-header">
+            <button type="button" class="param-fx-btn${hasExpression ? " is-active" : ""}" data-fx-toggle="${idx}" title="JS 表达式编辑器">fx</button>
             <span class="param-item-label" title="${name}">${name}</span>
             <span class="param-item-type">${typeLabel}</span>
-            <button type="button" class="param-item-mode-toggle${isExpression ? " is-expression" : ""}" data-mode-toggle="${idx}">${isExpression ? "JS" : "值"}</button>
+            <span class="param-value-display" data-value-display="${idx}">${escapeHtml(computedDisplay)}${exprDisplay}</span>
           </div>
           <div class="param-item-body">
-            ${renderValueEditor(idx, param, isExpression)}
+            <div class="param-value-area${hasExpression ? " is-hidden" : ""}">${renderValueEditor(idx, param)}</div>
+            ${renderExpressionEditor(idx, param, params)}
           </div>
         </div>
       `;
@@ -154,37 +182,12 @@ export function createParameterEditorModal({ modal, state, colorPicker, onStateC
     bindParamEvents(ctx);
   };
 
-  const renderValueEditor = (idx, param, isExpression) => {
-    if (isExpression) {
-      const expr = String(param.expression || "").trim();
-      const includeSelf = Boolean(currentContext?.includeSelf);
-      const env = buildExpressionEnv(ctxParams(), idx, includeSelf);
-      const result = expr ? evaluateExpression(expr, env) : { ok: false, error: "" };
-      const previewHtml = result.ok
-        ? `<div class="param-expr-preview"><span class="preview-label">预览：</span><span class="preview-value">${escapeHtml(formatPreviewValue(result.value))}</span></div>`
-        : "";
-      const errorHtml = (!result.ok && expr)
-        ? `<div class="param-expr-error">${escapeHtml(result.error || "")}</div>`
-        : "";
-
-      // 构建可用变量提示
-      const varHints = Object.keys(env).map((key) =>
-        `<span class="param-var-hint" data-insert-var="${idx}" data-var-name="${escapeHtml(key)}">params.${escapeHtml(key)}</span>`
-      ).join("");
-
-      return `
-        <div class="field">
-          <textarea class="param-expr-input${(!result.ok && expr) ? " expr-error" : ""}" data-expr-input="${idx}" placeholder="输入 JS 表达式，例如：params.宽度 * 2 或 Math.max(params.高度, 100)">${escapeHtml(expr)}</textarea>
-        </div>
-        ${varHints ? `<div class="param-var-hints">${varHints}</div>` : ""}
-        ${previewHtml}
-        ${errorHtml}
-      `;
-    }
-
-    // 直接值编辑
+  /**
+   * 渲染值编辑控件（始终可见）。
+   */
+  const renderValueEditor = (idx, param) => {
     const value = param.value;
-    const paramId = escapeHtml(String(param.id || idx));
+    const isExpression = String(param.expression || "").trim().length > 0;
 
     if (param.type === "color") {
       const normalized = normalizeColor(value || "#2f5d9d");
@@ -235,6 +238,38 @@ export function createParameterEditorModal({ modal, state, colorPicker, onStateC
     `;
   };
 
+  /**
+   * 渲染表达式编辑区域（fx 激活时可见）。
+   */
+  const renderExpressionEditor = (idx, param, allParams) => {
+    const expr = String(param.expression || "").trim();
+    const includeSelf = Boolean(currentContext?.includeSelf);
+    const env = buildExpressionEnv(allParams, idx, includeSelf);
+    const result = expr ? evaluateExpression(expr, env) : { ok: false };
+
+    const varHints = Object.keys(env).map((key) =>
+      `<span class="param-var-hint" data-insert-var="${idx}" data-var-name="${escapeHtml(key)}">params.${escapeHtml(key)}</span>`
+    ).join("");
+
+    const previewHtml = result.ok
+      ? `<div class="param-expr-preview"><span class="preview-label">预览：</span><span class="preview-value">${escapeHtml(formatPreviewValue(result.value))}</span></div>`
+      : "";
+    const errorHtml = (!result.ok && expr)
+      ? `<div class="param-expr-error">${escapeHtml(result.error || "")}</div>`
+      : "";
+
+    return `
+      <div class="param-expr-area${expr ? "" : " is-hidden"}">
+        <div class="field">
+          <textarea class="param-expr-input${(!result.ok && expr) ? " expr-error" : ""}" data-expr-input="${idx}" placeholder="输入 JS 表达式，例如：params[&quot;宽度&quot;] * 2 或 Math.max(params[&quot;高度&quot;], 100)">${escapeHtml(expr)}</textarea>
+        </div>
+        ${varHints ? `<div class="param-var-hints">${varHints}</div>` : ""}
+        ${previewHtml}
+        ${errorHtml}
+      </div>
+    `;
+  };
+
   const formatPreviewValue = (val) => {
     if (typeof val === "number") return String(val);
     if (typeof val === "boolean") return val ? "true" : "false";
@@ -262,18 +297,18 @@ export function createParameterEditorModal({ modal, state, colorPicker, onStateC
   const bindParamEvents = (ctx) => {
     if (!body) return;
 
-    // 模式切换
-    body.querySelectorAll("[data-mode-toggle]").forEach((btn) => {
+    // fx 按钮切换表达式编辑区
+    body.querySelectorAll("[data-fx-toggle]").forEach((btn) => {
       btn.addEventListener("click", () => {
-        const idx = Number(btn.getAttribute("data-mode-toggle"));
+        const idx = Number(btn.getAttribute("data-fx-toggle"));
         const param = getParam(idx);
         if (!param) return;
-        const currentExpr = String(param.expression || "").trim();
-        if (currentExpr) {
-          // 从表达式切换到直接值：清空表达式
+        const expr = String(param.expression || "").trim();
+        if (expr) {
+          // 已有表达式 → 清空
           updateParam(idx, { expression: "" });
         } else {
-          // 从直接值切换到表达式：初始化表达式为当前值的字符串形式
+          // 无表达式 → 初始化为当前值的字符串形式
           const val = param.value;
           let initExpr = "";
           if (typeof val === "string") initExpr = JSON.stringify(val);
@@ -291,12 +326,12 @@ export function createParameterEditorModal({ modal, state, colorPicker, onStateC
       const idx = Number(textarea.getAttribute("data-expr-input"));
       const applyExpr = () => {
         updateParam(idx, { expression: textarea.value });
-        renderParamList(currentContext);
+        // 更新值显示
+        refreshValueDisplay(idx);
       };
       textarea.addEventListener("input", () => {
-        // 实时预览 - 节流更新
         updateParam(idx, { expression: textarea.value });
-        // 简单实时反馈：更新预览区
+        // 实时反馈预览区
         const includeSelf = Boolean(currentContext?.includeSelf);
         const env = buildExpressionEnv(ctxParams(), idx, includeSelf);
         const result = evaluateExpression(textarea.value, env);
@@ -316,10 +351,26 @@ export function createParameterEditorModal({ modal, state, colorPicker, onStateC
           errorEl.style.display = (result.ok || !textarea.value.trim()) ? "none" : "";
         }
         textarea.classList.toggle("expr-error", !result.ok && textarea.value.trim().length > 0);
+        refreshValueDisplay(idx);
       });
       textarea.addEventListener("change", applyExpr);
       textarea.addEventListener("blur", applyExpr);
     });
+
+    /** 更新 header 中的值显示 */
+    const refreshValueDisplay = (idx) => {
+      const param = getParam(idx);
+      if (!param) return;
+      const expr = String(param.expression || "").trim();
+      const includeSelf = Boolean(currentContext?.includeSelf);
+      const env = buildExpressionEnv(ctxParams(), idx, includeSelf);
+      const evalResult = expr ? evaluateExpression(expr, env) : { ok: false };
+      const computedValue = (expr && evalResult.ok) ? evalResult.value : param.value;
+      const display = formatPreviewValue(computedValue);
+      const exprText = expr ? ` <span class="param-expr-text">(${escapeHtml(expr)})</span>` : "";
+      const el = body.querySelector(`[data-value-display="${idx}"]`);
+      if (el) el.innerHTML = escapeHtml(display) + exprText;
+    };
 
     // 变量提示点击插入
     body.querySelectorAll("[data-insert-var]").forEach((hint) => {
@@ -328,18 +379,21 @@ export function createParameterEditorModal({ modal, state, colorPicker, onStateC
         const varName = hint.getAttribute("data-var-name") || "";
         const textarea = body.querySelector(`[data-expr-input="${idx}"]`);
         if (textarea) {
+          // 插入 params["变量名"] 格式
+          const insertion = `params["${varName}"]`;
           const start = textarea.selectionStart;
           const end = textarea.selectionEnd;
           const text = textarea.value;
-          textarea.value = text.slice(0, start) + varName + text.slice(end);
-          textarea.selectionStart = textarea.selectionEnd = start + varName.length;
+          textarea.value = text.slice(0, start) + insertion + text.slice(end);
+          textarea.selectionStart = textarea.selectionEnd = start + insertion.length;
           textarea.focus();
           updateParam(idx, { expression: textarea.value });
+          textarea.dispatchEvent(new Event("input", { bubbles: true }));
         }
       });
     });
 
-    // 直接值：数字/文本/checkbox
+    // 直接值控件
     body.querySelectorAll("[data-param-value-idx]").forEach((input) => {
       const idx = Number(input.getAttribute("data-param-value-idx"));
       const param = getParam(idx);
@@ -357,15 +411,11 @@ export function createParameterEditorModal({ modal, state, colorPicker, onStateC
           nextValue = input.value;
         }
         updateParam(idx, { value: normalizeShapeParameterDefault(param.type, nextValue) });
+        refreshValueDisplay(idx);
       };
 
       if (input.type === "checkbox") {
-        input.addEventListener("change", () => {
-          apply();
-          // 更新 checkbox 的切换状态视觉效果
-          const toggleSpan = input.closest(".field-toggle")?.querySelector("input.toggle-checkbox");
-          if (toggleSpan) toggleSpan.checked = input.checked;
-        });
+        input.addEventListener("change", apply);
       } else {
         input.addEventListener("input", apply);
         input.addEventListener("change", apply);
@@ -386,6 +436,7 @@ export function createParameterEditorModal({ modal, state, colorPicker, onStateC
         if (swatch) swatch.style.setProperty("--swatch-color", normalized);
         const text = button.querySelector(".color-modal-text");
         if (text) text.textContent = formatColorWithAlpha(normalized);
+        refreshValueDisplay(idx);
       };
 
       applyColor(button.dataset.colorValue || "#2f5d9dff");
@@ -475,7 +526,8 @@ export function createParameterEditorModal({ modal, state, colorPicker, onStateC
         type: p.type || "text",
         value: p.value,
         expression: p.expression || "",
-        options: p.options || []
+        options: p.options || [],
+        _readonly: Boolean(p._readonly)
       }))
     };
     pendingOnApply = typeof context.onApply === "function" ? context.onApply : null;
