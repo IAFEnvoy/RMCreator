@@ -48,6 +48,7 @@ export function createStationManager({
   elements,
   createStationPresetId,
   colorPicker,
+  paramEditor,
   renderSubmenu,
   onStateChanged,
   rerenderScene
@@ -621,9 +622,9 @@ export function createStationManager({
       type: exportType,
       data: payloadList
     };
-    const downloadName = `RMC_StationType_${buildExportTimestamp()}.json`;
+    const downloadName = `rmcreator-station-${buildExportTimestamp()}.json`;
 
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const blob = new Blob([JSON.stringify(payload)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -959,6 +960,62 @@ export function createStationManager({
     const numberParamOptions = paramOptions.filter((item) => item.type === "number");
     const checkboxParamOptions = paramOptions.filter((item) => item.type === "checkbox");
 
+    // fx 辅助：为文本卡片绑定打开表达式编辑器
+    const openBindingFxEditor = (card, bindingObj, paramType, paramLabel, onApplied) => {
+      if (!paramEditor || typeof paramEditor.open !== "function") return;
+      const existingExpr = String(bindingObj?.expression || "").trim();
+      const currentVal = normalizeShapeParameterDefault(paramType, bindingObj?.value);
+      const boundOption = paramOptions.find((p) => p.id === bindingObj?.paramId);
+      const displayName = boundOption ? `${boundOption.label}` : paramLabel;
+      paramEditor.open({
+        type: "single",
+        includeSelf: true,
+        entities: [card],
+        params: [{
+          name: displayName,
+          id: paramLabel,
+          type: paramType,
+          value: currentVal,
+          expression: existingExpr || ""
+        }],
+        onApply: (result) => {
+          if (!result || !Array.isArray(result.params) || !result.params.length) return;
+          const applied = result.params[0];
+          const expr = String(applied.expression || "").trim();
+          if (typeof onApplied === "function") {
+            onApplied({
+              expression: expr,
+              finalValue: applied.finalValue !== undefined ? applied.finalValue : applied.value
+            });
+          }
+        }
+      });
+    };
+
+    // 格式化预览值
+    const fmtPreview = (type, val) => {
+      if (type === "color") return formatColorWithAlpha(normalizeColor(val));
+      if (type === "number") return String(Number(val) || 0);
+      if (type === "checkbox") return val ? "显示" : "隐藏";
+      return String(val || "");
+    };
+
+    // 创建通用的 fx + 预览行
+    const createFxPreviewRow = (bindingObj, paramType) => {
+      const row = document.createElement("div");
+      row.className = "station-binding-fx-row";
+      const fxBtn = document.createElement("button");
+      fxBtn.type = "button";
+      fxBtn.className = "param-fx-toggle";
+      fxBtn.title = "参数表达式（支持 JS 运算）";
+      fxBtn.textContent = "fx";
+      const preview = document.createElement("span");
+      preview.className = "shape-prop-param-preview station-binding-preview";
+      row.appendChild(fxBtn);
+      row.appendChild(preview);
+      return { row, fxBtn, preview };
+    };
+
     if (!cards.length) {
       const empty = document.createElement("div");
       empty.className = "kv";
@@ -1114,12 +1171,65 @@ export function createStationManager({
       }
       visibilityToggle.checked = hasCheckboxParams && card.visibilityBinding?.mode === "param";
 
+      const visFx = createFxPreviewRow(card.visibilityBinding, "checkbox");
+      visFx.row.hidden = true;
+      visibilityField.appendChild(visFx.row);
+
       const syncVisibilityBindingView = () => {
         const useParam = visibilityToggle.checked && hasCheckboxParams;
         visibilityValue.hidden = useParam;
         visibilityParam.hidden = !useParam;
         visibilityParam.disabled = !useParam;
+        visFx.row.hidden = !useParam;
+        visFx.row.style.display = useParam ? "" : "none";
+        if (useParam) {
+          const boundOption = checkboxParamOptions.find((p) => p.id === visibilityParam.value);
+          if (boundOption) {
+            const rawVal = normalizeShapeParameterDefault("checkbox", boundOption.value);
+            const expr = String(card.visibilityBinding?.expression || "").trim();
+            const hasExpr = Boolean(expr);
+            visFx.fxBtn.classList.toggle("is-active", hasExpr);
+            let displayVal = fmtPreview("checkbox", rawVal);
+            if (expr) {
+              try {
+                const safeName = String(boundOption.label).replace(/["'`\n\r\t\\]/g, "_");
+                // eslint-disable-next-line no-new-func
+                const fn = new Function("params", "Math", "Number", "String", "Boolean", `"use strict"; return (${expr});`);
+                const resolved = fn({ [safeName]: rawVal }, Math, Number, String, Boolean);
+                displayVal = fmtPreview("checkbox", resolved) + `  (${expr})`;
+              } catch {
+                displayVal = fmtPreview("checkbox", rawVal) + `  [错误]`;
+              }
+            }
+            visFx.preview.textContent = displayVal;
+          }
+        }
       };
+
+      visFx.fxBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        openBindingFxEditor(card, card.visibilityBinding, "checkbox", "显示隐藏", (applied) => {
+          const useParam = visibilityToggle.checked && hasCheckboxParams;
+          const mode = useParam ? "param" : "value";
+          const paramId = useParam ? visibilityParam.value : "";
+          mutateSelectedTextCard(card.id, (liveCard) => {
+            liveCard.visibilityBinding = normalizeTextBinding({
+              mode,
+              value: true,
+              paramId,
+              expression: applied.expression || undefined
+            }, "checkbox", true);
+            if (liveCard.visibilityBinding.mode !== "param") {
+              liveCard.visibilityBinding.value = true;
+              liveCard.visibilityBinding.paramId = "";
+            }
+          });
+          persistStationLibrary();
+          renderPreview(preset);
+          renderSubmenu?.();
+          renderTextCards(preset);
+        });
+      });
 
       const applyVisibilityBinding = () => {
         const useParam = visibilityToggle.checked && hasCheckboxParams;
@@ -1128,10 +1238,12 @@ export function createStationManager({
         }
 
         mutateSelectedTextCard(card.id, (liveCard) => {
+          const existingExpr = String(liveCard.visibilityBinding?.expression || "").trim() || undefined;
           liveCard.visibilityBinding = normalizeTextBinding({
             mode: useParam ? "param" : "value",
             value: true,
-            paramId: visibilityParam.value
+            paramId: visibilityParam.value,
+            expression: existingExpr
           }, "checkbox", true);
           if (liveCard.visibilityBinding.mode !== "param") {
             liveCard.visibilityBinding.value = true;
@@ -1303,13 +1415,61 @@ export function createStationManager({
       }
       colorToggle.checked = hasColorParams && card.colorBinding?.mode === "param";
 
+      const colorFx = createFxPreviewRow(card.colorBinding, "color");
+      colorFx.row.hidden = true;
+      colorBindingField.appendChild(colorFx.row);
+
       const syncColorBindingView = () => {
         const useParam = colorToggle.checked && hasColorParams;
         colorValue.hidden = useParam;
         colorValue.disabled = useParam;
         colorParam.hidden = !useParam;
         colorParam.disabled = !useParam;
+        colorFx.row.hidden = !useParam;
+        colorFx.row.style.display = useParam ? "" : "none";
+        if (useParam) {
+          const boundOption = colorParamOptions.find((p) => p.id === colorParam.value);
+          if (boundOption) {
+            const rawVal = normalizeShapeParameterDefault("color", boundOption.value);
+            const expr = String(card.colorBinding?.expression || "").trim();
+            const hasExpr = Boolean(expr);
+            colorFx.fxBtn.classList.toggle("is-active", hasExpr);
+            let displayVal = fmtPreview("color", rawVal);
+            if (expr) {
+              try {
+                const safeName = String(boundOption.label).replace(/["'`\n\r\t\\]/g, "_");
+                // eslint-disable-next-line no-new-func
+                const fn = new Function("params", "Math", "Number", "String", "Boolean", `"use strict"; return (${expr});`);
+                const resolved = fn({ [safeName]: rawVal }, Math, Number, String, Boolean);
+                displayVal = fmtPreview("color", resolved) + `  (${expr})`;
+              } catch {
+                displayVal = fmtPreview("color", rawVal) + `  [错误]`;
+              }
+            }
+            colorFx.preview.textContent = displayVal;
+          }
+        }
       };
+
+      colorFx.fxBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        openBindingFxEditor(card, card.colorBinding, "color", "颜色", (applied) => {
+          const useParam = colorToggle.checked && hasColorParams;
+          const mode = useParam ? "param" : "value";
+          const paramId = useParam ? colorParam.value : "";
+          mutateSelectedTextCard(card.id, (liveCard) => {
+            liveCard.colorBinding = normalizeTextBinding({
+              mode,
+              value: colorValue.dataset.colorValue || "#000000ff",
+              paramId,
+              expression: applied.expression || undefined
+            }, "color", "#000000");
+          });
+          persistStationLibrary();
+          renderPreview(preset);
+          renderTextCards(preset);
+        });
+      });
 
       const applyColorBinding = () => {
         const useParam = colorToggle.checked && hasColorParams;
@@ -1317,10 +1477,12 @@ export function createStationManager({
           colorParam.value = colorParamOptions[0]?.id || "";
         }
         mutateSelectedTextCard(card.id, (liveCard) => {
+          const existingExpr = String(liveCard.colorBinding?.expression || "").trim() || undefined;
           liveCard.colorBinding = normalizeTextBinding({
             mode: useParam ? "param" : "value",
             value: colorValue.dataset.colorValue || "#000000ff",
-            paramId: colorParam.value
+            paramId: colorParam.value,
+            expression: existingExpr
           }, "color", "#000000");
         });
         syncColorBindingView();
@@ -1423,13 +1585,61 @@ export function createStationManager({
       }
       sizeToggle.checked = hasNumberParams && card.fontSizeBinding?.mode === "param";
 
+      const sizeFx = createFxPreviewRow(card.fontSizeBinding, "number");
+      sizeFx.row.hidden = true;
+      fontSizeField.appendChild(sizeFx.row);
+
       const syncFontSizeBindingView = () => {
         const useParam = sizeToggle.checked && hasNumberParams;
         sizeValue.hidden = useParam;
         sizeValue.disabled = useParam;
         sizeParam.hidden = !useParam;
         sizeParam.disabled = !useParam;
+        sizeFx.row.hidden = !useParam;
+        sizeFx.row.style.display = useParam ? "" : "none";
+        if (useParam) {
+          const boundOption = numberParamOptions.find((p) => p.id === sizeParam.value);
+          if (boundOption) {
+            const rawVal = normalizeShapeParameterDefault("number", boundOption.value);
+            const expr = String(card.fontSizeBinding?.expression || "").trim();
+            const hasExpr = Boolean(expr);
+            sizeFx.fxBtn.classList.toggle("is-active", hasExpr);
+            let displayVal = fmtPreview("number", rawVal);
+            if (expr) {
+              try {
+                const safeName = String(boundOption.label).replace(/["'`\n\r\t\\]/g, "_");
+                // eslint-disable-next-line no-new-func
+                const fn = new Function("params", "Math", "Number", "String", "Boolean", `"use strict"; return (${expr});`);
+                const resolved = fn({ [safeName]: rawVal }, Math, Number, String, Boolean);
+                displayVal = fmtPreview("number", resolved) + `  (${expr})`;
+              } catch {
+                displayVal = fmtPreview("number", rawVal) + `  [错误]`;
+              }
+            }
+            sizeFx.preview.textContent = displayVal;
+          }
+        }
       };
+
+      sizeFx.fxBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        openBindingFxEditor(card, card.fontSizeBinding, "number", "文字大小", (applied) => {
+          const useParam = sizeToggle.checked && hasNumberParams;
+          const mode = useParam ? "param" : "value";
+          const paramId = useParam ? sizeParam.value : "";
+          mutateSelectedTextCard(card.id, (liveCard) => {
+            liveCard.fontSizeBinding = normalizeTextBinding({
+              mode,
+              value: Number(sizeValue.value) || 18,
+              paramId,
+              expression: applied.expression || undefined
+            }, "number", 18);
+          });
+          persistStationLibrary();
+          renderPreview(preset);
+          renderTextCards(preset);
+        });
+      });
 
       const applyFontSizeBinding = () => {
         const useParam = sizeToggle.checked && hasNumberParams;
@@ -1437,10 +1647,12 @@ export function createStationManager({
           sizeParam.value = numberParamOptions[0]?.id || "";
         }
         mutateSelectedTextCard(card.id, (liveCard) => {
+          const existingExpr = String(liveCard.fontSizeBinding?.expression || "").trim() || undefined;
           liveCard.fontSizeBinding = normalizeTextBinding({
             mode: useParam ? "param" : "value",
             value: Number(sizeValue.value) || 18,
-            paramId: sizeParam.value
+            paramId: sizeParam.value,
+            expression: existingExpr
           }, "number", 18);
         });
         syncFontSizeBindingView();
@@ -1947,6 +2159,42 @@ export function createStationManager({
     return referenced;
   }
 
+  /**
+   * 为预置参数的默认值打开表达式编辑器。
+   */
+  const openPresetParamEditor = (preset, paramId, paramType, paramLabel, currentValue, onApplied) => {
+    if (!paramEditor || typeof paramEditor.open !== "function") return;
+    if (!preset || !paramId) return;
+
+    const expressions = preset.paramExpressions && typeof preset.paramExpressions === "object"
+      ? preset.paramExpressions
+      : {};
+    const existingExpr = expressions[paramId] || "";
+
+    paramEditor.open({
+      type: "single",
+      entities: [preset],
+      params: [{
+        name: paramLabel,
+        id: paramId,
+        type: paramType,
+        value: currentValue,
+        expression: existingExpr || ""
+      }],
+      onApply: (result) => {
+        if (!result || !Array.isArray(result.params) || !result.params.length) return;
+        const applied = result.params[0];
+        const expr = applied.expression || "";
+        if (typeof onApplied === "function") {
+          onApplied({
+            expression: expr,
+            finalValue: applied.finalValue !== undefined ? applied.finalValue : applied.value
+          });
+        }
+      }
+    });
+  };
+
   function renderCustomParamList(preset) {
     stationCustomParamList.innerHTML = "";
     if (!preset) {
@@ -2023,6 +2271,42 @@ export function createStationManager({
         renderSubmenu?.();
       });
       defaultBlock.appendChild(input);
+
+      // fx 按钮 - 参数表达式编辑器
+      const hasExpr = Boolean(preset.paramExpressions?.[param.id]);
+      const fxBtn = document.createElement("button");
+      fxBtn.type = "button";
+      fxBtn.className = "param-fx-toggle" + (hasExpr ? " is-active" : "");
+      fxBtn.title = "参数表达式编辑器（支持 JS 运算）";
+      fxBtn.textContent = "fx";
+      fxBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const currentVal = normalizeShapeParameterDefault(param.type, param.defaultValue);
+        openPresetParamEditor(preset, param.id, param.type, param.label || "参数", currentVal, (applied) => {
+          // 存储表达式
+          if (applied.expression) {
+            if (!preset.paramExpressions || typeof preset.paramExpressions !== "object") {
+              preset.paramExpressions = {};
+            }
+            preset.paramExpressions[param.id] = applied.expression;
+          } else {
+            if (preset.paramExpressions) {
+              delete preset.paramExpressions[param.id];
+              if (!Object.keys(preset.paramExpressions).length) {
+                preset.paramExpressions = undefined;
+              }
+            }
+          }
+          // 存储最终默认值
+          param.defaultValue = normalizeShapeParameterDefault(param.type, applied.finalValue);
+          persistStationLibrary();
+          renderPreview(preset);
+          renderSubmenu?.();
+          renderCustomParamList(preset);
+          renderExistingParamList(preset);
+        });
+      });
+      defaultBlock.appendChild(fxBtn);
       row.appendChild(defaultBlock);
 
       stationCustomParamList.appendChild(row);
@@ -2115,6 +2399,50 @@ export function createStationManager({
       });
       setParameterInputEnabled(valueInput, mode !== "inherit");
       valueWrap.appendChild(valueInput);
+
+      // fx 按钮 - 仅 default 模式可用
+      const hasExpr = mode !== "inherit" && Boolean(preset.paramExpressions?.[param.id]);
+      const fxBtn = document.createElement("button");
+      fxBtn.type = "button";
+      fxBtn.className = "param-fx-toggle" + (hasExpr ? " is-active" : "");
+      fxBtn.title = "参数表达式编辑器（支持 JS 运算）";
+      fxBtn.textContent = "fx";
+      if (mode === "inherit") {
+        fxBtn.disabled = true;
+        fxBtn.title = "请先切换到「重设默认值」模式";
+      }
+      fxBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (modeSelect.value === "inherit") return;
+        const currentVal = normalizeShapeParameterDefault(param.type,
+          preset.shapeParamSettings[param.id]?.value ?? param.defaultValue);
+        openPresetParamEditor(preset, param.id, param.type, param.label, currentVal, (applied) => {
+          if (applied.expression) {
+            if (!preset.paramExpressions || typeof preset.paramExpressions !== "object") {
+              preset.paramExpressions = {};
+            }
+            preset.paramExpressions[param.id] = applied.expression;
+          } else {
+            if (preset.paramExpressions) {
+              delete preset.paramExpressions[param.id];
+              if (!Object.keys(preset.paramExpressions).length) {
+                preset.paramExpressions = undefined;
+              }
+            }
+          }
+          // 更新 shapeParamSettings 的值
+          if (modeSelect.value !== "inherit") {
+            preset.shapeParamSettings[param.id] = {
+              mode: modeSelect.value,
+              value: normalizeShapeParameterDefault(param.type, applied.finalValue)
+            };
+          }
+          persistStationLibrary();
+          renderPreview(preset);
+          renderExistingParamList(preset);
+        });
+      });
+      valueWrap.appendChild(fxBtn);
       row.appendChild(valueWrap);
 
       modeSelect.addEventListener("change", () => {

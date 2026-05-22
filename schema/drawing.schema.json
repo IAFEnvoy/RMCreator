@@ -120,6 +120,12 @@
                   ]
                 }
               },
+              "paramExpressions": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
               "textValues": {
                 "type": "object",
                 "additionalProperties": {
@@ -206,6 +212,12 @@
               },
               "endOffset": {
                 "type": "number"
+              },
+              "paramExpressions": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
               }
             }
           }
@@ -251,6 +263,12 @@
               },
               "strikethrough": {
                 "type": "boolean"
+              },
+              "paramExpressions": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
               }
             }
           }
@@ -294,6 +312,12 @@
                       "type": "boolean"
                     }
                   ]
+                }
+              },
+              "paramExpressions": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
                 }
               }
             }

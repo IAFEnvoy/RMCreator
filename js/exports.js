@@ -25,7 +25,7 @@ export function createExportManager({ elements }) {
 
     downloadTextFile(
       built.svgMarkup,
-      `rmcreator-export-${createFileTimestamp()}.svg`,
+      `rmcreator-drawing-${createFileTimestamp()}.svg`,
       "image/svg+xml"
     );
   }
@@ -125,7 +125,7 @@ export function createExportManager({ elements }) {
 
     ctx.drawImage(image, 0, 0, width, height);
     const pngBlob = await canvasToBlob(canvas, "image/png");
-    downloadBlob(pngBlob, `rmcreator-export-${createFileTimestamp()}.png`);
+    downloadBlob(pngBlob, `rmcreator-drawing-${createFileTimestamp()}.png`);
   }
 
   function buildExportSvg({ transparentBackground = true, showGrid = false } = {}) {

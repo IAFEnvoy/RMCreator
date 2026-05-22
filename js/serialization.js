@@ -80,13 +80,16 @@ function sanitizePlacedShapes(rawShapes) {
         });
       }
 
+      const paramExpressions = sanitizeParamExpressions(shape?.paramExpressions);
+
       return {
         id: String(shape?.id || "").trim(),
         shapeId: String(shape?.shapeId || "").trim(),
         x: Number(shape?.x) || 0,
         y: Number(shape?.y) || 0,
         scale: clamp(Number(shape?.scale) || 0.25, 0.1, 10),
-        paramValues
+        paramValues,
+        paramExpressions
       };
     })
     .filter((shape) => shape.id.length > 0 && shape.shapeId.length > 0);
@@ -155,6 +158,8 @@ function sanitizeNodes(rawNodes) {
         slot: stationTextSlotSet.has(slot) ? slot : "s"
       };
 
+      const paramExpressions = sanitizeParamExpressions(node?.paramExpressions);
+
       return {
         id: String(node?.id || "").trim(),
         x: Number(node?.x) || 0,
@@ -164,6 +169,7 @@ function sanitizeNodes(rawNodes) {
         oval: Boolean(node?.oval),
         stationTypeIndex: Number.isInteger(node?.stationTypeIndex) ? node.stationTypeIndex : 0,
         paramValues,
+        paramExpressions,
         textValues,
         textStyleValues,
         textPlacement
@@ -191,7 +197,8 @@ function sanitizeEdges(rawEdges) {
       flipColor: Boolean(edge?.flipColor),
       cornerRadius: clamp(Number(edge?.cornerRadius) || 0, 0, 120),
       startOffset: clamp(Number(edge?.startOffset) || 0, -120, 120),
-      endOffset: clamp(Number(edge?.endOffset) || 0, -120, 120)
+      endOffset: clamp(Number(edge?.endOffset) || 0, -120, 120),
+      paramExpressions: sanitizeParamExpressions(edge?.paramExpressions)
     }))
     .filter((edge) => edge.id && edge.fromStationId && edge.toStationId && edge.lineTypeId);
 }
@@ -210,7 +217,8 @@ function sanitizeLabels(rawLabels) {
       fontSize: clamp(Number(label?.fontSize) || 20, 8, 200),
       color: String(label?.color || "#23344d"),
       fontFamily: String(label?.fontFamily || "Segoe UI"),
-      ...normalizeTextStyleFlags(label)
+      ...normalizeTextStyleFlags(label),
+      paramExpressions: sanitizeParamExpressions(label?.paramExpressions)
     }))
     .filter((label) => label.id.length > 0);
 }
@@ -245,4 +253,24 @@ function normalizeCustomLineTypes(rawCustomLineTypes) {
     .map((lineType) => normalizeLineType({ ...lineType, source: "custom" }))
     .filter(Boolean)
     .map((lineType) => ({ ...lineType, source: "custom" }));
+}
+
+/**
+ * 清理 paramExpressions 对象，仅保留有效的字符串表达式。
+ * @param {object} raw - 原始 paramExpressions
+ * @returns {object}
+ */
+function sanitizeParamExpressions(raw) {
+  if (!raw || typeof raw !== "object") {
+    return {};
+  }
+  const result = {};
+  Object.entries(raw).forEach(([key, value]) => {
+    const paramKey = String(key || "").trim();
+    if (!paramKey) return;
+    if (typeof value === "string" && value.trim()) {
+      result[paramKey] = value.trim();
+    }
+  });
+  return result;
 }

@@ -87,16 +87,18 @@ export function createSettingsRenderer({
   const buildParamMap = (params) => {
     const map = new Map();
     (Array.isArray(params) ? params : []).forEach((param) => {
-      if (!param || !param.name || !param.type) {
-        return;
-      }
-      map.set(buildParamKey(param.name, param.type), param.value);
+      const key = param.id || buildParamKey(param.name, param.type);
+      if (!key) return;
+      map.set(key, { value: param.value, expression: param.expression || "" });
     });
     return map;
   };
 
   const collectStationParams = (station) => {
     const params = [];
+    const exprSource = station?.paramExpressions && typeof station.paramExpressions === "object"
+      ? station.paramExpressions
+      : {};
     const descriptors = buildStationParameterDescriptors(station);
     descriptors.forEach((descriptor) => {
       if (descriptor.locked) {
@@ -106,25 +108,45 @@ export function createSettingsRenderer({
         descriptor.type,
         station.paramValues?.[descriptor.id]
       );
-      params.push({ name: descriptor.label || "参数", type: descriptor.type, value });
+      params.push({
+        name: descriptor.label || "参数",
+        id: descriptor.id,
+        type: descriptor.type,
+        value,
+        expression: exprSource[descriptor.id] || ""
+      });
     });
 
     return params;
   };
 
   const collectLineParams = (edge) => {
+    const exprSource = edge?.paramExpressions && typeof edge.paramExpressions === "object"
+      ? edge.paramExpressions
+      : {};
+
+    const lineTypeOptions = state.lineTypes.map((type) => ({
+      label: type.name,
+      value: type.id
+    }));
+    const geometryOptions = Object.entries(geometryLabelMap).map(([value, label]) => ({
+      label,
+      value
+    }));
+
     const params = [
-      { name: "线条类型", type: "select", value: edge.lineTypeId },
-      { name: "几何类型", type: "select", value: edge.geometry },
-      { name: "翻转形状", type: "checkbox", value: Boolean(edge.flip) },
-      { name: "翻转颜色", type: "checkbox", value: Boolean(edge.flipColor) },
-      { name: "转弯圆弧半径", type: "number", value: Number(edge.cornerRadius) || 0 },
-      { name: "起点偏移量", type: "number", value: Number(edge.startOffset) || 0 },
-      { name: "终点偏移量", type: "number", value: Number(edge.endOffset) || 0 }
+      { name: "线条类型", id: "lineTypeId", type: "select", value: edge.lineTypeId, options: lineTypeOptions, expression: exprSource["lineTypeId"] || "" },
+      { name: "几何类型", id: "geometry", type: "select", value: edge.geometry, options: geometryOptions, expression: exprSource["geometry"] || "" },
+      { name: "翻转形状", id: "flip", type: "checkbox", value: Boolean(edge.flip), expression: exprSource["flip"] || "" },
+      { name: "翻转颜色", id: "flipColor", type: "checkbox", value: Boolean(edge.flipColor), expression: exprSource["flipColor"] || "" },
+      { name: "转弯圆弧半径", id: "cornerRadius", type: "number", value: Number(edge.cornerRadius) || 0, expression: exprSource["cornerRadius"] || "" },
+      { name: "起点偏移量", id: "startOffset", type: "number", value: Number(edge.startOffset) || 0, expression: exprSource["startOffset"] || "" },
+      { name: "终点偏移量", id: "endOffset", type: "number", value: Number(edge.endOffset) || 0, expression: exprSource["endOffset"] || "" }
     ];
 
     (Array.isArray(edge.colorList) ? edge.colorList : []).forEach((color, index) => {
-      params.push({ name: `颜色${index + 1}`, type: "color", value: color });
+      const colorKey = `color${index}`;
+      params.push({ name: `颜色${index + 1}`, id: colorKey, type: "color", value: color, expression: exprSource[colorKey] || "" });
     });
 
     return params;
@@ -132,23 +154,40 @@ export function createSettingsRenderer({
 
   const collectTextParams = (label) => {
     const textStyle = normalizeTextStyleFlags(label);
+    const exprSource = label?.paramExpressions && typeof label.paramExpressions === "object"
+      ? label.paramExpressions
+      : {};
+
+    const fontOptions = [
+      { label: "Segoe UI", value: "Segoe UI" },
+      { label: "Microsoft YaHei", value: "Microsoft YaHei" },
+      { label: "SimHei", value: "SimHei" },
+      { label: "Arial", value: "Arial" },
+      { label: "Times New Roman", value: "Times New Roman" },
+      { label: "Courier New", value: "Courier New" }
+    ];
+
     const params = [
-      { name: "内容", type: "text", value: label.value || "" },
-      { name: "字体", type: "select", value: label.fontFamily },
-      { name: "颜色", type: "color", value: normalizeColor(label.color) },
-      { name: "字号", type: "number", value: Number(label.fontSize) || 20 }
+      { name: "内容", id: "value", type: "text", value: label.value || "", expression: exprSource["value"] || "" },
+      { name: "字体", id: "fontFamily", type: "select", value: label.fontFamily, options: fontOptions, expression: exprSource["fontFamily"] || "" },
+      { name: "颜色", id: "color", type: "color", value: normalizeColor(label.color), expression: exprSource["color"] || "" },
+      { name: "字号", id: "fontSize", type: "number", value: Number(label.fontSize) || 20, expression: exprSource["fontSize"] || "" }
     ];
 
     getTextStyleToolbarItems().forEach((item) => {
-      params.push({ name: item.label, type: "checkbox", value: Boolean(textStyle[item.flag]) });
+      params.push({ name: item.label, id: item.flag, type: "checkbox", value: Boolean(textStyle[item.flag]), expression: exprSource[item.flag] || "" });
     });
 
     return params;
   };
 
   const collectShapeParams = (shapeInstance) => {
+    const exprSource = shapeInstance?.paramExpressions && typeof shapeInstance.paramExpressions === "object"
+      ? shapeInstance.paramExpressions
+      : {};
+
     const params = [
-      { name: "缩放比例", type: "number", value: clamp(Number(shapeInstance.scale) || 1, 0.1, 10) }
+      { name: "缩放比例", id: "scale", type: "number", value: clamp(Number(shapeInstance.scale) || 1, 0.1, 10), expression: exprSource["scale"] || "" }
     ];
     const preset = state.shapeLibrary.find((item) => item.id === shapeInstance.shapeId);
     if (!preset) {
@@ -157,7 +196,13 @@ export function createSettingsRenderer({
     const resolvedParams = resolveShapeParametersWithValues(preset, shapeInstance.paramValues || {});
     resolvedParams.forEach((param) => {
       const value = normalizeShapeParameterDefault(param.type, param.defaultValue);
-      params.push({ name: param.label || "参数", type: param.type, value });
+      params.push({
+        name: param.label || "参数",
+        id: param.id,
+        type: param.type,
+        value,
+        expression: exprSource[param.id] || ""
+      });
     });
     return params;
   };
@@ -222,15 +267,20 @@ export function createSettingsRenderer({
         const descriptors = buildStationParameterDescriptors(station);
         descriptors.forEach((descriptor) => {
           if (descriptor.locked) return;
-          const key = buildParamKey(descriptor.label || "参数", descriptor.type);
-          if (!map.has(key)) return;
+          const entry = map.get(descriptor.id);
+          if (!entry) return;
           if (!station.paramValues || typeof station.paramValues !== "object") {
             station.paramValues = {};
           }
-          station.paramValues[descriptor.id] = normalizeShapeParameterDefault(descriptor.type, map.get(key));
+          station.paramValues[descriptor.id] = normalizeShapeParameterDefault(descriptor.type, entry.value);
+          if (entry.expression) {
+            if (!station.paramExpressions || typeof station.paramExpressions !== "object") {
+              station.paramExpressions = {};
+            }
+            station.paramExpressions[descriptor.id] = entry.expression;
+          }
         });
       });
-
       renderStations();
       renderLines();
       onStateChanged?.({ coalesceKey: "station-params-paste" });
@@ -243,9 +293,9 @@ export function createSettingsRenderer({
         const line = state.edges.find((item) => item.id === entity.id);
         if (!line) return;
 
-        const lineTypeKey = buildParamKey("线条类型", "select");
-        if (map.has(lineTypeKey)) {
-          const nextType = String(map.get(lineTypeKey) || "");
+        const lineTypeEntry = map.get("lineTypeId");
+        if (lineTypeEntry) {
+          const nextType = String(lineTypeEntry.value || "");
           const nextLineType = findLineType(nextType);
           if (nextLineType) {
             line.lineTypeId = nextLineType.id;
@@ -253,44 +303,49 @@ export function createSettingsRenderer({
           }
         }
 
-        const geometryKey = buildParamKey("几何类型", "select");
-        if (map.has(geometryKey)) {
-          const geom = String(map.get(geometryKey) || "");
-          if (geometryLabelMap[geom]) {
-            line.geometry = geom;
-          }
+        const geomEntry = map.get("geometry");
+        if (geomEntry && geometryLabelMap[geomEntry.value]) {
+          line.geometry = geomEntry.value;
         }
 
-        const flipKey = buildParamKey("翻转形状", "checkbox");
-        if (map.has(flipKey)) {
-          line.flip = Boolean(map.get(flipKey));
-        }
-        const flipColorKey = buildParamKey("翻转颜色", "checkbox");
-        if (map.has(flipColorKey)) {
-          line.flipColor = Boolean(map.get(flipColorKey));
-        }
-        const cornerKey = buildParamKey("转弯圆弧半径", "number");
-        if (map.has(cornerKey)) {
-          line.cornerRadius = clamp(Number(map.get(cornerKey)) || 0, 0, 120);
-        }
-        const startKey = buildParamKey("起点偏移量", "number");
-        if (map.has(startKey)) {
-          line.startOffset = clamp(Number(map.get(startKey)) || 0, -120, 120);
-        }
-        const endKey = buildParamKey("终点偏移量", "number");
-        if (map.has(endKey)) {
-          line.endOffset = clamp(Number(map.get(endKey)) || 0, -120, 120);
-        }
+        const flipEntry = map.get("flip");
+        if (flipEntry) line.flip = Boolean(flipEntry.value);
+        const flipColorEntry = map.get("flipColor");
+        if (flipColorEntry) line.flipColor = Boolean(flipColorEntry.value);
+        const cornerEntry = map.get("cornerRadius");
+        if (cornerEntry) line.cornerRadius = clamp(Number(cornerEntry.value) || 0, 0, 120);
+        const startEntry = map.get("startOffset");
+        if (startEntry) line.startOffset = clamp(Number(startEntry.value) || 0, -120, 120);
+        const endEntry = map.get("endOffset");
+        if (endEntry) line.endOffset = clamp(Number(endEntry.value) || 0, -120, 120);
 
         const lineType = findLineType(line.lineTypeId);
-        if (lineType) {
-          ensureEdgeColorList(line, lineType);
-        }
+        if (lineType) ensureEdgeColorList(line, lineType);
 
         (Array.isArray(line.colorList) ? line.colorList : []).forEach((color, index) => {
-          const colorKey = buildParamKey(`颜色${index + 1}`, "color");
-          if (!map.has(colorKey)) return;
-          line.colorList[index] = String(map.get(colorKey));
+          const entry = map.get(`color${index}`);
+          if (!entry) return;
+          line.colorList[index] = String(entry.value);
+        });
+
+        // 处理表达式
+        ["lineTypeId", "geometry", "flip", "flipColor", "cornerRadius", "startOffset", "endOffset"].forEach((key) => {
+          const entry = map.get(key);
+          if (entry && entry.expression) {
+            if (!line.paramExpressions || typeof line.paramExpressions !== "object") {
+              line.paramExpressions = {};
+            }
+            line.paramExpressions[key] = entry.expression;
+          }
+        });
+        (Array.isArray(line.colorList) ? line.colorList : []).forEach((_, index) => {
+          const entry = map.get(`color${index}`);
+          if (entry && entry.expression) {
+            if (!line.paramExpressions || typeof line.paramExpressions !== "object") {
+              line.paramExpressions = {};
+            }
+            line.paramExpressions[`color${index}`] = entry.expression;
+          }
         });
       });
 
@@ -305,27 +360,30 @@ export function createSettingsRenderer({
         const text = state.labels.find((item) => item.id === entity.id);
         if (!text) return;
 
-        const valueKey = buildParamKey("内容", "text");
-        if (map.has(valueKey)) {
-          text.value = String(map.get(valueKey) || "");
-        }
-        const fontKey = buildParamKey("字体", "select");
-        if (map.has(fontKey)) {
-          text.fontFamily = String(map.get(fontKey) || text.fontFamily);
-        }
-        const colorKey = buildParamKey("颜色", "color");
-        if (map.has(colorKey)) {
-          text.color = normalizeColor(map.get(colorKey));
-        }
-        const sizeKey = buildParamKey("字号", "number");
-        if (map.has(sizeKey)) {
-          text.fontSize = clamp(Number(map.get(sizeKey)) || 20, 1, 300);
-        }
+        const valueEntry = map.get("value");
+        if (valueEntry) text.value = String(valueEntry.value || "");
+        const fontEntry = map.get("fontFamily");
+        if (fontEntry) text.fontFamily = String(fontEntry.value || text.fontFamily);
+        const colorEntry = map.get("color");
+        if (colorEntry) text.color = normalizeColor(colorEntry.value);
+        const sizeEntry = map.get("fontSize");
+        if (sizeEntry) text.fontSize = clamp(Number(sizeEntry.value) || 20, 1, 300);
 
         getTextStyleToolbarItems().forEach((item) => {
-          const key = buildParamKey(item.label, "checkbox");
-          if (!map.has(key)) return;
-          text[item.flag] = Boolean(map.get(key));
+          const entry = map.get(item.flag);
+          if (!entry) return;
+          text[item.flag] = Boolean(entry.value);
+        });
+
+        // 处理表达式
+        ["value", "fontFamily", "color", "fontSize", ...getTextStyleToolbarItems().map((i) => i.flag)].forEach((key) => {
+          const entry = map.get(key);
+          if (entry && entry.expression) {
+            if (!text.paramExpressions || typeof text.paramExpressions !== "object") {
+              text.paramExpressions = {};
+            }
+            text.paramExpressions[key] = entry.expression;
+          }
         });
       });
 
@@ -340,22 +398,36 @@ export function createSettingsRenderer({
         const shape = state.shapes.find((item) => item.id === entity.id);
         if (!shape) return;
 
-        const scaleKey = buildParamKey("缩放比例", "number");
-        if (map.has(scaleKey)) {
-          shape.scale = clamp(Number(map.get(scaleKey)) || 1, 0.1, 10);
+        const scaleEntry = map.get("scale");
+        if (scaleEntry) {
+          shape.scale = clamp(Number(scaleEntry.value) || 1, 0.1, 10);
         }
 
         const preset = state.shapeLibrary.find((item) => item.id === shape.shapeId);
         if (!preset) return;
         const resolvedParams = resolveShapeParametersWithValues(preset, shape.paramValues || {});
         resolvedParams.forEach((param) => {
-          const key = buildParamKey(param.label || "参数", param.type);
-          if (!map.has(key)) return;
+          const entry = map.get(param.id);
+          if (!entry) return;
           if (!shape.paramValues || typeof shape.paramValues !== "object") {
             shape.paramValues = {};
           }
-          shape.paramValues[param.id] = normalizeShapeParameterDefault(param.type, map.get(key));
+          shape.paramValues[param.id] = normalizeShapeParameterDefault(param.type, entry.value);
+          if (entry.expression) {
+            if (!shape.paramExpressions || typeof shape.paramExpressions !== "object") {
+              shape.paramExpressions = {};
+            }
+            shape.paramExpressions[param.id] = entry.expression;
+          }
         });
+
+        const scaleExprEntry = map.get("scale");
+        if (scaleExprEntry && scaleExprEntry.expression) {
+          if (!shape.paramExpressions || typeof shape.paramExpressions !== "object") {
+            shape.paramExpressions = {};
+          }
+          shape.paramExpressions["scale"] = scaleExprEntry.expression;
+        }
       });
 
       renderShapes();
@@ -1391,7 +1463,7 @@ export function createSettingsRenderer({
       summaryHtml,
       presetName: escapeHtml(preset.name || "图形"),
       safeScale: String(safeScale),
-      shapePreviewSrc: escapeHtml(toSvgDataUrl(buildRenderableShapeSvg(preset, shapeInstance.paramValues || {}))),
+      shapePreviewSrc: escapeHtml(toSvgDataUrl(buildRenderableShapeSvg(preset, shapeInstance.paramValues || {}, shapeInstance.paramExpressions))),
       paramFieldsHtml: paramFieldsHtml || "<div class=\"kv\">该图形没有可配置参数。</div>"
     });
 

@@ -140,10 +140,12 @@ export function normalizeStationTextCard(raw, index = 0, createId) {
 export function normalizeTextBinding(raw, type, fallbackValue) {
   const mode = raw?.mode === "param" ? "param" : "value";
   const value = normalizeShapeParameterDefault(type, raw?.value ?? fallbackValue);
+  const expression = typeof raw?.expression === "string" ? raw.expression.trim() || undefined : undefined;
   return {
     mode,
     value,
-    paramId: String(raw?.paramId || "")
+    paramId: String(raw?.paramId || ""),
+    ...(expression ? { expression } : {})
   };
 }
 
@@ -265,7 +267,21 @@ export function resolveTextBindingValue(binding, type, runtimeParamMap, fallback
     const runtime = runtimeParamMap instanceof Map ? runtimeParamMap : new Map();
     const entry = runtime.get(normalized.paramId);
     if (entry && entry.type === type) {
-      return normalizeShapeParameterDefault(type, entry.value);
+      const rawVal = normalizeShapeParameterDefault(type, entry.value);
+      // 评估绑定表达式
+      const expr = normalized.expression;
+      if (expr) {
+        try {
+          const safeName = String(entry.label || entry.id).replace(/["'`\n\r\t\\]/g, "_");
+          // eslint-disable-next-line no-new-func
+          const fn = new Function("params", "Math", "Number", "String", "Boolean", `"use strict"; return (${expr});`);
+          const resolved = fn({ [safeName]: rawVal }, Math, Number, String, Boolean);
+          return normalizeShapeParameterDefault(type, resolved);
+        } catch {
+          // 表达式无效，回退
+        }
+      }
+      return rawVal;
     }
   }
 

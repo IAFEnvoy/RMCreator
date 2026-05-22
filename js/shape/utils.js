@@ -16,6 +16,50 @@ export function getShapeParameterDefaults(shape) {
   return defaults;
 }
 
+/**
+ * 解析带表达式的参数值为最终值。
+ * @param {object} shape - 图形定义
+ * @param {object} paramValues - 原始参数值
+ * @param {object} paramExpressions - 参数表达式 { paramId: "expression" }
+ * @returns {object} 解析后的最终值
+ */
+export function resolveShapeParameterValuesWithExpressions(shape, paramValues, paramExpressions) {
+  const rawValues = paramValues && typeof paramValues === "object" ? { ...paramValues } : {};
+  const expressions = paramExpressions && typeof paramExpressions === "object" ? paramExpressions : {};
+  const parameters = normalizeShapeParameters(shape?.parameters);
+  const result = { ...rawValues };
+
+  // 先构建基础参数名到值的映射（用于表达式交叉引用）
+  const nameToValue = {};
+  parameters.forEach((param) => {
+    const rawVal = rawValues[param.id] !== undefined ? rawValues[param.id] : param.defaultValue;
+    const cleanName = String(param.label || param.id).replace(/["'`\n\r\t\\]/g, "_");
+    nameToValue[cleanName] = normalizeShapeParameterDefault(param.type, rawVal);
+  });
+
+  // 评估每个参数的表达式
+  parameters.forEach((param) => {
+    const expr = expressions[param.id];
+    if (!expr || typeof expr !== "string" || !expr.trim()) return;
+
+    // 构建不包含当前参数的环境
+    const evalEnv = { ...nameToValue };
+    const cleanName = String(param.label || param.id).replace(/["'`\n\r\t\\]/g, "_");
+    delete evalEnv[cleanName];
+
+    try {
+      // eslint-disable-next-line no-new-func
+      const fn = new Function("params", "Math", "Number", "String", "Boolean", `"use strict"; return (${expr.trim()});`);
+      const val = fn(evalEnv, Math, Number, String, Boolean);
+      result[param.id] = normalizeShapeParameterDefault(param.type, val);
+    } catch {
+      // 表达式无效，保留原始值
+    }
+  });
+
+  return result;
+}
+
 export function resolveShapeParametersWithValues(shape, paramValues) {
   const values = paramValues && typeof paramValues === "object" ? paramValues : {};
   return normalizeShapeParameters(shape?.parameters).map((param) => {
@@ -30,12 +74,13 @@ export function resolveShapeParametersWithValues(shape, paramValues) {
   });
 }
 
-export function buildRenderableShapeSvg(shape, paramValues) {
+export function buildRenderableShapeSvg(shape, paramValues, paramExpressions) {
   if (!shape || typeof shape !== "object") {
     return "";
   }
 
-  const resolvedParams = resolveShapeParametersWithValues(shape, paramValues);
+  const resolvedValues = resolveShapeParameterValuesWithExpressions(shape, paramValues, paramExpressions);
+  const resolvedParams = resolveShapeParametersWithValues(shape, resolvedValues);
   if (Array.isArray(shape.editableElements)) {
     return buildSvgFromEditableElements(resolveEditableElementsWithParameters(shape.editableElements, resolvedParams));
   }
@@ -236,6 +281,19 @@ export function normalizePrimitiveParamBindings(rawBindings) {
   return normalized;
 }
 
+export function normalizePrimitiveBindExpressions(rawExprs) {
+  if (!rawExprs || typeof rawExprs !== "object") {
+    return {};
+  }
+  const result = {};
+  Object.entries(rawExprs).forEach(([key, value]) => {
+    if (typeof value === "string" && value.trim()) {
+      result[key] = value.trim();
+    }
+  });
+  return result;
+}
+
 export function getPrimitiveParamBindings(primitive) {
   if (!primitive || typeof primitive !== "object") {
     return {};
@@ -246,6 +304,18 @@ export function getPrimitiveParamBindings(primitive) {
   }
 
   return primitive.paramBindings;
+}
+
+export function getPrimitiveParamBindExpressions(primitive) {
+  if (!primitive || typeof primitive !== "object") {
+    return {};
+  }
+
+  if (!primitive.paramBindExpressions || typeof primitive.paramBindExpressions !== "object") {
+    primitive.paramBindExpressions = {};
+  }
+
+  return primitive.paramBindExpressions;
 }
 
 export function getPrimitiveParamBinding(primitive, key, expectedType) {
@@ -287,7 +357,25 @@ export function resolvePrimitiveFieldValue(primitive, parameters, key, paramType
     return primitive?.[key] ?? fallback;
   }
 
-  return normalizeShapeParameterDefault(paramType, param.defaultValue);
+  const rawValue = normalizeShapeParameterDefault(paramType, param.defaultValue);
+
+  // 检查绑定表达式
+  const bindExprs = primitive?.paramBindExpressions;
+  const expr = bindExprs && typeof bindExprs === "object" ? String(bindExprs[key] || "").trim() : "";
+  if (expr) {
+    try {
+      const safeName = String(param.label || param.id || key).replace(/["'`\n\r\t\\]/g, "_");
+      // eslint-disable-next-line no-new-func
+      const fn = new Function("params", "Math", "Number", "String", "Boolean", `"use strict"; return (${expr});`);
+      const env = { [safeName]: rawValue };
+      const result = fn(env, Math, Number, String, Boolean);
+      return normalizeShapeParameterDefault(paramType, result);
+    } catch {
+      // 表达式无效，回退到原始值
+    }
+  }
+
+  return rawValue;
 }
 
 export function resolvePrimitiveWithParameters(primitive, parameters) {
@@ -319,6 +407,7 @@ export function normalizePrimitive(raw) {
 
   const type = String(raw.type || "line").toLowerCase();
   const paramBindings = normalizePrimitiveParamBindings(raw.paramBindings);
+  const paramBindExpressions = normalizePrimitiveBindExpressions(raw.paramBindExpressions);
 
   if (type === "line") {
     return {
@@ -331,7 +420,8 @@ export function normalizePrimitive(raw) {
       strokeWidth: normalizeNumber(raw.strokeWidth, 6, 0.1, 100),
       roundCap: Boolean(raw.roundCap),
       rotation: toNumber(raw.rotation, 0),
-      paramBindings
+      paramBindings,
+      ...(Object.keys(paramBindExpressions).length ? { paramBindExpressions } : {})
     };
   }
 
@@ -350,7 +440,8 @@ export function normalizePrimitive(raw) {
       stroke: safeColor(raw.stroke),
       strokeWidth: normalizeNumber(raw.strokeWidth, 6, 0.1, 100),
       rotation: toNumber(raw.rotation, 0),
-      paramBindings
+      paramBindings,
+      ...(Object.keys(paramBindExpressions).length ? { paramBindExpressions } : {})
     };
   }
 
@@ -370,7 +461,8 @@ export function normalizePrimitive(raw) {
       stroke: safeColor(raw.stroke),
       strokeWidth: normalizeNumber(raw.strokeWidth, 6, 0.1, 100),
       rotation: toNumber(raw.rotation, 0),
-      paramBindings
+      paramBindings,
+      ...(Object.keys(paramBindExpressions).length ? { paramBindExpressions } : {})
     };
   }
 
@@ -389,7 +481,8 @@ export function normalizePrimitive(raw) {
       stroke: safeColor(raw.stroke),
       strokeWidth: normalizeNumber(raw.strokeWidth, 6, 0.1, 100),
       rotation: toNumber(raw.rotation, 0),
-      paramBindings
+      paramBindings,
+      ...(Object.keys(paramBindExpressions).length ? { paramBindExpressions } : {})
     };
   }
 
@@ -408,7 +501,8 @@ export function normalizePrimitive(raw) {
       strokeWidth: normalizeNumber(raw.strokeWidth, 6, 0.1, 100),
       roundCap: Boolean(raw.roundCap),
       rotation: toNumber(raw.rotation, 0),
-      paramBindings
+      paramBindings,
+      ...(Object.keys(paramBindExpressions).length ? { paramBindExpressions } : {})
     };
   }
 
@@ -424,7 +518,8 @@ export function normalizePrimitive(raw) {
       ...textStyle,
       fill: safeColor(raw.fill),
       rotation: toNumber(raw.rotation, 0),
-      paramBindings
+      paramBindings,
+      ...(Object.keys(paramBindExpressions).length ? { paramBindExpressions } : {})
     };
   }
 

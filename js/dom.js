@@ -142,5 +142,11 @@ export const elements = {
   shapeDetailCopyBtn: document.getElementById("shapeDetailCopyBtn"),
   shapeDetailDeleteBtn: document.getElementById("shapeDetailDeleteBtn"),
   stationDetailCopyBtn: document.getElementById("stationDetailCopyBtn"),
-  stationDetailDeleteBtn: document.getElementById("stationDetailDeleteBtn")
+  stationDetailDeleteBtn: document.getElementById("stationDetailDeleteBtn"),
+  paramEditorModal: document.getElementById("paramEditorModal"),
+  closeParamEditorBtn: document.getElementById("closeParamEditorBtn"),
+  paramEditorTitle: document.getElementById("paramEditorTitle"),
+  paramEditorCancelBtn: document.getElementById("paramEditorCancelBtn"),
+  paramEditorApplyBtn: document.getElementById("paramEditorApplyBtn"),
+  paramEditorApplyAllBtn: document.getElementById("paramEditorApplyAllBtn")
 };

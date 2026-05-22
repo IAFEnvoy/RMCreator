@@ -82,6 +82,12 @@
           "items": {
             "$ref": "#/definitions/parameter"
           }
+        },
+        "paramExpressions": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
         }
       }
     },
@@ -146,6 +152,9 @@
         },
         "value": {},
         "paramId": {
+          "type": "string"
+        },
+        "expression": {
           "type": "string"
         }
       }

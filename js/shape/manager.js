@@ -14,6 +14,7 @@ import {
   getFirstPrimitiveIndex,
   getPrimitiveParamBinding,
   getPrimitiveParamBindings,
+  getPrimitiveParamBindExpressions,
   getPrimitiveRadii,
   normalizeEditableElements,
   normalizeImportedSvg,
@@ -61,6 +62,7 @@ export function createShapeManager({
   elements,
   createShapeId,
   colorPicker,
+  paramEditor,
   renderSubmenu,
   onPlacedShapeDefaultsUpdated,
   onStateChanged,
@@ -1130,6 +1132,13 @@ export function createShapeManager({
     shapeEditorCanvas.appendChild(importedLayer);
   }
 
+  const formatParamPreviewValue = (type, val) => {
+    if (type === "color") return formatColorWithAlpha(normalizeColor(val));
+    if (type === "number") return String(Number(val) || 0);
+    if (type === "checkbox") return val ? "✓" : "✗";
+    return String(val || "");
+  };
+
   function renderPropertiesPanel(shape) {
     shapePropsList.innerHTML = "";
 
@@ -1381,6 +1390,65 @@ export function createShapeManager({
       }
       field.appendChild(paramSelect);
 
+      // fx 按钮 - 绑定表达式编辑器
+      const fxBtn = document.createElement("button");
+      fxBtn.type = "button";
+      fxBtn.className = "param-fx-toggle";
+      fxBtn.title = "参数表达式（支持 JS 运算，如 params.参数名 / 2）";
+      fxBtn.textContent = "fx";
+      fxBtn.hidden = true;
+      fxBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (!selectedParamId) return;
+        const boundParam = shapeParameters.find((p) => p.id === selectedParamId);
+        if (!boundParam) return;
+        const exprObj = primitives[0]?.paramBindExpressions;
+        const existingExpr = (exprObj && typeof exprObj === "object") ? String(exprObj[key] || "").trim() : "";
+        const currentVal = normalizeShapeParameterDefault(paramType, boundParam.defaultValue);
+
+        if (!paramEditor || typeof paramEditor.open !== "function") return;
+        paramEditor.open({
+          type: "single",
+          includeSelf: true,
+          entities: primitives,
+          params: [{
+            name: boundParam.label,
+            id: key,
+            type: paramType,
+            value: currentVal,
+            expression: existingExpr || ""
+          }],
+          onApply: (result) => {
+            if (!result || !Array.isArray(result.params) || !result.params.length) return;
+            const applied = result.params[0];
+            const expr = String(applied.expression || "").trim();
+            primitives.forEach((item) => {
+              let obj = getPrimitiveParamBindExpressions(item);
+              if (!obj || typeof obj !== "object") {
+                obj = {};
+                item.paramBindExpressions = obj;
+              }
+              if (expr) {
+                obj[key] = expr;
+              } else {
+                delete obj[key];
+                if (!Object.keys(obj).length) {
+                  item.paramBindExpressions = undefined;
+                }
+              }
+            });
+            commit({ rerenderProps: true, refreshLibrary: false });
+          }
+        });
+      });
+      field.appendChild(fxBtn);
+
+      // 预览值显示（参数模式激活时可见）
+      const previewSpan = document.createElement("span");
+      previewSpan.className = "shape-prop-param-preview";
+      previewSpan.hidden = true;
+      field.appendChild(previewSpan);
+
       const bindings = primitives.map((item) => getPrimitiveParamBinding(item, key, paramType));
       const firstBinding = bindings[0] || null;
       const allSame = bindings.every((binding) => (
@@ -1422,6 +1490,38 @@ export function createShapeManager({
           });
         }
 
+        // 更新 fx 按钮和预览可见性
+        fxBtn.hidden = !useParam;
+        fxBtn.style.display = useParam ? "" : "none";
+        previewSpan.hidden = !useParam;
+        previewSpan.style.display = useParam ? "" : "none";
+        if (useParam) {
+          const exprObj = primitives[0]?.paramBindExpressions;
+          const hasExpr = exprObj && typeof exprObj === "object" && Boolean(exprObj[key]);
+          fxBtn.classList.toggle("is-active", hasExpr);
+        }
+        if (useParam && selectedParamId) {
+          const boundParam = shapeParameters.find((p) => p.id === selectedParamId);
+          if (boundParam) {
+            const rawVal = normalizeShapeParameterDefault(paramType, boundParam.defaultValue);
+            const exprObj = primitives[0]?.paramBindExpressions;
+            const expr = exprObj && typeof exprObj === "object" ? String(exprObj[key] || "").trim() : "";
+            let displayVal = String(formatParamPreviewValue(paramType, rawVal));
+            if (expr) {
+              try {
+                const safeName = String(boundParam.label || boundParam.id).replace(/["'`\n\r\t\\]/g, "_");
+                // eslint-disable-next-line no-new-func
+                const fn = new Function("params", "Math", "Number", "String", "Boolean", `"use strict"; return (${expr});`);
+                const resolved = fn({ [safeName]: rawVal }, Math, Number, String, Boolean);
+                displayVal = String(formatParamPreviewValue(paramType, resolved)) + `  (${expr})`;
+              } catch (e) {
+                displayVal = String(formatParamPreviewValue(paramType, rawVal)) + `  [错误]`;
+              }
+            }
+            previewSpan.textContent = displayVal;
+          }
+        }
+
         onModeChange(useParam);
       };
 
@@ -1459,6 +1559,8 @@ export function createShapeManager({
       });
       attachParameterBinding(field, key, "number", (useParam) => {
         input.disabled = useParam;
+        input.hidden = useParam;
+        input.style.display = useParam ? "none" : "";
         if (useParam) {
           input.value = String(toNumber(resolveFieldValue(key, "number", defaultValue), defaultValue));
         }
@@ -1481,6 +1583,8 @@ export function createShapeManager({
       });
       attachParameterBinding(field, key, "color", (useParam) => {
         button.disabled = useParam;
+        button.hidden = useParam;
+        button.style.display = useParam ? "none" : "";
         const nextValue = useParam
           ? resolveFieldValue(key, "color", fallback)
           : (primary[key] || fallback);
@@ -1520,10 +1624,18 @@ export function createShapeManager({
         if (useParam) {
           select.value = "custom";
           select.disabled = true;
+          select.hidden = true;
+          select.style.display = "none";
           button.disabled = true;
+          button.hidden = true;
+          button.style.display = "none";
           applyColorButton(button, resolveFieldValue(key, "color", "#2f5d9d") || "#2f5d9d");
           return;
         }
+        select.hidden = false;
+        select.style.display = "";
+        button.hidden = false;
+        button.style.display = "";
 
         const isNone = String(primary[key] || "none") === "none";
         select.disabled = false;
@@ -1566,6 +1678,8 @@ export function createShapeManager({
       });
       attachParameterBinding(field, key, "text", (useParam) => {
         input.disabled = useParam;
+        input.hidden = useParam;
+        input.style.display = useParam ? "none" : "";
         if (useParam) {
           input.value = String(resolveFieldValue(key, "text", fallback) ?? fallback);
         }
@@ -1610,6 +1724,8 @@ export function createShapeManager({
 
       attachParameterBinding(field, key, "text", (useParam) => {
         select.disabled = useParam;
+        select.hidden = useParam;
+        select.style.display = useParam ? "none" : "";
         if (useParam) {
           const resolved = String(resolveFieldValue(key, "text", fallback) ?? fallback);
           ensureOption(resolved);
@@ -1831,6 +1947,39 @@ export function createShapeManager({
     appendInfo(container, "该图元类型暂不支持编辑。", "shape-prop-empty");
   }
 
+  const openShapeParamEditor = (shape, paramId, paramType, paramLabel, currentValue, onApplied) => {
+    if (!paramEditor || typeof paramEditor.open !== "function") return;
+    if (!shape || !paramId) return;
+
+    const expressions = shape.paramExpressions && typeof shape.paramExpressions === "object"
+      ? shape.paramExpressions
+      : {};
+    const existingExpr = expressions[paramId] || "";
+
+    paramEditor.open({
+      type: "single",
+      entities: [shape],
+      params: [{
+        name: paramLabel,
+        id: paramId,
+        type: paramType,
+        value: currentValue,
+        expression: existingExpr || ""
+      }],
+      onApply: (result) => {
+        if (!result || !Array.isArray(result.params) || !result.params.length) return;
+        const applied = result.params[0];
+        const expr = applied.expression || "";
+        if (typeof onApplied === "function") {
+          onApplied({
+            expression: expr,
+            finalValue: applied.finalValue !== undefined ? applied.finalValue : applied.value
+          });
+        }
+      }
+    });
+  };
+
   function renderParameterList(shape) {
     shapeParamList.innerHTML = "";
 
@@ -1935,6 +2084,44 @@ export function createShapeManager({
         }
       });
       defaultBlock.appendChild(defaultInput);
+
+      // fx 按钮 - 参数表达式编辑器
+      const hasExpr = Boolean(shape.paramExpressions?.[param.id]);
+      const fxBtn = document.createElement("button");
+      fxBtn.type = "button";
+      fxBtn.className = "param-fx-toggle" + (hasExpr ? " is-active" : "");
+      fxBtn.title = "参数表达式编辑器（支持 JS 运算）";
+      fxBtn.textContent = "fx";
+      fxBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const currentVal = normalizeShapeParameterDefault(param.type, param.defaultValue);
+        openShapeParamEditor(shape, param.id, param.type, param.label, currentVal, (applied) => {
+          // 存储表达式
+          if (applied.expression) {
+            if (!shape.paramExpressions || typeof shape.paramExpressions !== "object") {
+              shape.paramExpressions = {};
+            }
+            shape.paramExpressions[param.id] = applied.expression;
+          } else {
+            if (shape.paramExpressions) {
+              delete shape.paramExpressions[param.id];
+              if (!Object.keys(shape.paramExpressions).length) {
+                shape.paramExpressions = undefined;
+              }
+            }
+          }
+          // 存储最终默认值
+          param.defaultValue = normalizeShapeParameterDefault(param.type, applied.finalValue);
+          persistShapeLibrary();
+          syncShapeSvg(shape, { preserveParameters: true });
+          renderEditorCanvas(shape);
+          renderParameterList(shape);
+          renderPropertiesPanel(shape);
+          renderShapeLibraryList();
+          renderSubmenu();
+        });
+      });
+      defaultBlock.appendChild(fxBtn);
       row.appendChild(defaultBlock);
 
       // drag/drop handlers

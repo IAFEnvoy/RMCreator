@@ -57,6 +57,12 @@
         },
         "imported": {
           "type": "boolean"
+        },
+        "paramExpressions": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
         }
       }
     },
@@ -220,6 +226,12 @@
                 "type": "string"
               }
             }
+          }
+        },
+        "paramBindExpressions": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
           }
         }
       }

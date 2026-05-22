@@ -1,0 +1,350 @@
+/* ===== 参数编辑器模态框 ===== */
+.shape-prop-param-preview {
+  font-size: 12px;
+  color: #2c3f5b;
+  font-family: "Cascadia Code", "SF Mono", "Menlo", monospace;
+  padding: 4px 8px;
+  background: #eef5ff;
+  border: 1px solid #c5d9f5;
+  border-radius: 6px;
+  display: block;
+  word-break: break-all;
+  line-height: 1.5;
+}
+
+.shape-prop-param-preview[hidden] {
+  display: none !important;
+}
+
+.param-fx-toggle[hidden] {
+  display: none !important;
+}
+
+/* ===== 车站文本卡片绑定 fx 行 ===== */
+.station-binding-fx-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.station-binding-fx-row[hidden] {
+  display: none !important;
+}
+
+.station-binding-preview {
+  flex: 1;
+  font-size: 11px;
+  padding: 3px 7px;
+}
+
+.btn-param-editor {
+  background: var(--theme-accent, #4a9eff) !important;
+  color: #fff !important;
+  border-color: var(--theme-accent, #4a9eff) !important;
+  font-weight: 600;
+  transition: background 0.2s, opacity 0.2s;
+}
+
+.btn-param-editor:hover {
+  opacity: 0.88;
+}
+
+.param-editor-modal {
+  width: min(620px, calc(100% - 32px));
+  height: auto;
+  max-height: 86vh;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.param-editor-body {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.param-editor-body::-webkit-scrollbar {
+  width: 6px;
+}
+
+.param-editor-body::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border-radius: 3px;
+}
+
+.param-editor-info {
+  font-size: 12px;
+  color: #6b7d95;
+  padding: 10px 12px;
+  background: #f6f8fc;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.param-editor-info .kv {
+  font-size: 12px;
+  color: #5f728f;
+}
+
+.param-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.param-item {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #f9fbff;
+  overflow: hidden;
+}
+
+.param-item.has-expression {
+  border-color: #4a9eff;
+  background: #f0f6ff;
+}
+
+.param-item-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  gap: 10px;
+}
+
+.param-item-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e3a5f;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.param-item-type {
+  font-size: 11px;
+  color: #8a9bb5;
+  padding: 2px 8px;
+  background: #eef2f7;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+
+.param-item-mode-toggle {
+  font-size: 11px;
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  color: #4f617a;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s;
+}
+
+.param-item-mode-toggle:hover {
+  background: #eef2f7;
+}
+
+.param-item-mode-toggle.is-expression {
+  background: #4a9eff;
+  color: #fff;
+  border-color: #4a9eff;
+}
+
+.param-item-body {
+  padding: 0 14px 12px;
+}
+
+.param-item-body .field {
+  margin: 0;
+}
+
+.param-item-body input[type="text"],
+.param-item-body input[type="number"],
+.param-item-body textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 7px 10px;
+  font-size: 13px;
+  background: #fff;
+  font-family: inherit;
+}
+
+.param-item-body textarea {
+  font-family: "Cascadia Code", "SF Mono", "Menlo", monospace;
+  font-size: 12px;
+  min-height: 60px;
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.param-item-body textarea.expr-error {
+  border-color: #d9473e;
+  background: #fff5f5;
+}
+
+.param-expr-preview {
+  font-size: 11px;
+  color: #4f617a;
+  padding: 6px 10px;
+  margin-top: 6px;
+  background: #fff;
+  border: 1px solid #e0e6f0;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: "Cascadia Code", "SF Mono", "Menlo", monospace;
+}
+
+.param-expr-preview .preview-label {
+  color: #8a9bb5;
+  font-size: 10px;
+  flex-shrink: 0;
+}
+
+.param-expr-preview .preview-value {
+  color: #1e3a5f;
+  font-weight: 600;
+}
+
+.param-expr-error {
+  font-size: 11px;
+  color: #d9473e;
+  padding: 4px 10px;
+  margin-top: 4px;
+  background: #fff5f5;
+  border-radius: 6px;
+}
+
+.param-var-hints {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.param-var-hint {
+  font-size: 10px;
+  font-family: "Cascadia Code", "SF Mono", "Menlo", monospace;
+  padding: 2px 7px;
+  background: #eef2f7;
+  border-radius: 5px;
+  color: #4f617a;
+  cursor: pointer;
+  border: 1px solid #dde4f0;
+  transition: background 0.15s;
+}
+
+.param-var-hint:hover {
+  background: #dde4f0;
+}
+
+.param-editor-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  gap: 10px;
+  border-top: 1px solid var(--line);
+  flex-shrink: 0;
+}
+
+.param-editor-actions .left-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.param-editor-actions .right-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* ===== 单个参数fx按钮 ===== */
+.param-fx-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1.5px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  color: #4f617a;
+  font-size: 12px;
+  font-weight: 700;
+  font-family: "Cascadia Code", "SF Mono", "Menlo", monospace;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.15s;
+  padding: 0;
+  line-height: 1;
+}
+
+.param-fx-toggle:hover {
+  background: #eef2f7;
+  border-color: #4a9eff;
+  color: #4a9eff;
+}
+
+.param-fx-toggle.is-active {
+  background: #4a9eff;
+  color: #fff;
+  border-color: #4a9eff;
+}
+
+.param-fx-toggle.is-active:hover {
+  opacity: 0.88;
+}
+
+/* ===== field-with-fx 内联布局 ===== */
+.field-with-fx {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+
+.field-with-fx>input,
+.field-with-fx>button:not(.param-fx-toggle) {
+  flex: 1;
+  min-width: 0;
+}
+
+.color-modal-swatch {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  background: var(--swatch-color, #000);
+  border: 1px solid #cdd7e6;
+  flex-shrink: 0;
+  vertical-align: middle;
+}
+
+@media (max-width: 540px) {
+  .param-editor-modal {
+    width: calc(100% - 24px);
+  }
+
+  .param-item-header {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .param-item-label {
+    width: 100%;
+  }
+}

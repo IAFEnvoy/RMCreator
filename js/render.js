@@ -729,7 +729,7 @@ export function createRenderer({
         return;
       }
 
-      const resolvedSvg = buildRenderableShapeSvg(definition, shapeInstance.paramValues);
+      const resolvedSvg = buildRenderableShapeSvg(definition, shapeInstance.paramValues, shapeInstance.paramExpressions);
       const parsed = parseShapeSvgContent(resolvedSvg);
       if (!parsed || !parsed.nodes.length) {
         return;

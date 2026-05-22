@@ -10,6 +10,7 @@ import {
 } from "./line/type-store.js";
 import { createLineManager } from "./line/manager.js";
 import { createColorPickerModal } from "./color-picker-modal.js";
+import { createParameterEditorModal } from "./modal-parameter-editor.js";
 import { createShapeManager } from "./shape/manager.js";
 import { createStationManager } from "./station/manager.js";
 import { createDrawingManager } from "./drawing-manager.js";
@@ -208,6 +209,12 @@ let stationManager = null;
 let drawingManager = null;
 const exportManager = createExportManager({ elements });
 const colorPicker = createColorPickerModal({ elements });
+const paramEditor = createParameterEditorModal({
+  modal: elements.paramEditorModal,
+  state,
+  colorPicker,
+  onStateChanged: commitStateChange
+});
 
 const renderer = createRenderer({
   state,
@@ -244,6 +251,7 @@ shapeManager = createShapeManager({
   elements,
   createShapeId,
   colorPicker,
+  paramEditor,
   renderSubmenu: renderer.renderSubmenu,
   onPlacedShapeDefaultsUpdated: commitStateChange,
   onStateChanged: commitStateChange,
@@ -255,6 +263,7 @@ stationManager = createStationManager({
   elements,
   createStationPresetId,
   colorPicker,
+  paramEditor,
   renderSubmenu: renderer.renderSubmenu,
   onStateChanged: commitStateChange,
   rerenderScene
@@ -567,11 +576,9 @@ function toRgba(hexColor, alpha = 1) {
 }
 
 async function loadMenus() {
-  const [stationRaw, lineRaw, shapeRaw] = await Promise.all([
-    loadPresetJson("preset/stations.json"),
-    loadPresetJson("preset/lines.json"),
-    loadPresetJson("preset/shapes.json")
-  ]);
+  const lineRaw = await loadPresetJson("preset/lines.json")
+  const shapeRaw = await loadPresetJson("preset/shapes.json")
+  const stationRaw = await loadPresetJson("preset/stations.json")
 
   state.stationPresetSource = normalizePresetEntries(stationRaw);
   state.shapePresetSource = normalizePresetEntries(shapeRaw);
