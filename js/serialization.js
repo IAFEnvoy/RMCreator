@@ -127,6 +127,7 @@ function sanitizePlacedShapes(rawShapes) {
         x: Number(shape?.x) || 0,
         y: Number(shape?.y) || 0,
         scale: clamp(Number(shape?.scale) || 0.25, 0.1, 10),
+        rotation: Number.isFinite(Number(shape?.rotation)) ? Number(shape.rotation) : 0,
         paramValues,
         paramExpressions
       };
@@ -207,6 +208,7 @@ function sanitizeNodes(rawNodes) {
         radius: clamp(Number(node?.radius) || 10, 2, 80),
         oval: Boolean(node?.oval),
         stationTypeIndex: Number.isInteger(node?.stationTypeIndex) ? node.stationTypeIndex : 0,
+        rotation: Number.isFinite(Number(node?.rotation)) ? Number(node.rotation) : 0,
         paramValues,
         paramExpressions,
         textValues,

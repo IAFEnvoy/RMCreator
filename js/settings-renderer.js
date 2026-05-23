@@ -742,6 +742,14 @@ export function createSettingsRenderer({
       </div>
     `;
 
+    const safeRotation = Number.isFinite(Number(station.rotation)) ? Number(station.rotation) : 0;
+    const rotationHtml = `
+      <div class="field">
+        <label for="stationRotationInput">旋转角度</label>
+        <input id="stationRotationInput" type="number" min="-360" max="360" step="1" value="${safeRotation}" />
+      </div>
+    `;
+
     const paramFieldsHtml = stationParams
       .filter((param) => !param.locked)
       .map((param) => {
@@ -798,6 +806,7 @@ export function createSettingsRenderer({
       stationTypeOptions,
       textFieldsHtml,
       anchorGridHtml,
+      rotationHtml,
       paramFieldsHtml: paramFieldsHtml || "<div class=\"kv\">当前车站类型没有可调整参数（已锁定参数不会显示）。</div>"
     });
 
@@ -807,6 +816,14 @@ export function createSettingsRenderer({
       applyStationType(station, nextIndex);
       renderStations();
       renderSettings();
+      onStateChanged?.();
+    });
+
+    const stationRotationInput = document.getElementById("stationRotationInput");
+    stationRotationInput?.addEventListener("change", () => {
+      station.rotation = Number(stationRotationInput.value) || 0;
+      stationRotationInput.value = String(station.rotation);
+      renderStations();
       onStateChanged?.();
     });
 
@@ -1473,6 +1490,7 @@ export function createSettingsRenderer({
     }
 
     const safeScale = clamp(Number(shapeInstance.scale) || 1, 0.1, 10);
+    const safeRotation = Number.isFinite(Number(shapeInstance.rotation)) ? Number(shapeInstance.rotation) : 0;
     const resolvedParams = resolveShapeParametersWithValues(preset, shapeInstance.paramValues || {});
 
     const paramFieldsHtml = resolvedParams
@@ -1528,6 +1546,7 @@ export function createSettingsRenderer({
       summaryHtml,
       presetName: escapeHtml(preset.name || "图形"),
       safeScale: String(safeScale),
+      safeRotation: String(safeRotation),
       shapePreviewSrc: escapeHtml(toSvgDataUrl(buildRenderableShapeSvg(preset, shapeInstance.paramValues || {}, shapeInstance.paramExpressions))),
       paramFieldsHtml: paramFieldsHtml || "<div class=\"kv\">该图形没有可配置参数。</div>"
     });
@@ -1536,6 +1555,15 @@ export function createSettingsRenderer({
     scaleInput?.addEventListener("change", () => {
       shapeInstance.scale = clamp(Number(scaleInput.value) || 1, 0.1, 10);
       scaleInput.value = String(shapeInstance.scale);
+      renderShapes();
+      onStateChanged?.();
+      renderSettings();
+    });
+
+    const rotationInput = document.getElementById("shapeRotationInput");
+    rotationInput?.addEventListener("change", () => {
+      shapeInstance.rotation = Number(rotationInput.value) || 0;
+      rotationInput.value = String(shapeInstance.rotation);
       renderShapes();
       onStateChanged?.();
       renderSettings();

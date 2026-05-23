@@ -609,8 +609,9 @@ export function createRenderer({
     const shapeRenderScale = 0.25;
     const cx = parsed.minX + parsed.width / 2;
     const cy = parsed.minY + parsed.height / 2;
+    const rotation = Number.isFinite(Number(station.rotation)) ? Number(station.rotation) : 0;
 
-    group.setAttribute("transform", `translate(${Number(station.x) || 0} ${Number(station.y) || 0})`);
+    group.setAttribute("transform", `translate(${Number(station.x) || 0} ${Number(station.y) || 0}) rotate(${rotation})`);
 
     if (isSelected("station", station.id)) {
       group.classList.add("selected-shape");
@@ -763,6 +764,7 @@ export function createRenderer({
       }
 
       const scale = clamp(Number(shapeInstance.scale) || 1, 0.1, 10);
+      const rotation = Number.isFinite(Number(shapeInstance.rotation)) ? Number(shapeInstance.rotation) : 0;
       const cx = parsed.minX + parsed.width / 2;
       const cy = parsed.minY + parsed.height / 2;
 
@@ -771,7 +773,7 @@ export function createRenderer({
       group.setAttribute("class", "placed-shape-instance");
       group.setAttribute(
         "transform",
-        `translate(${Number(shapeInstance.x) || 0} ${Number(shapeInstance.y) || 0}) scale(${scale}) translate(${-cx} ${-cy})`
+        `translate(${Number(shapeInstance.x) || 0} ${Number(shapeInstance.y) || 0}) rotate(${rotation}) scale(${scale}) translate(${-cx} ${-cy})`
       );
 
       if (isSelected("shape", shapeInstance.id)) {

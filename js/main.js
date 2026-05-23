@@ -1571,6 +1571,7 @@ function addShape(x, y, shapeId) {
     x,
     y,
     scale: 0.25,
+    rotation: 0,
     paramValues: getShapeParameterDefaults(preset)
   };
 
