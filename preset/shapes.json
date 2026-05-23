@@ -1,7 +1,156 @@
-[
-  {
-    "id": "preset-shape-circle",
-    "name": "默认圆形",
-    "svg": "<svg viewBox=\"0 0 240 240\" xmlns=\"http://www.w3.org/2000/svg\"><circle cx=\"120\" cy=\"120\" r=\"40\" stroke=\"#2f5d9d\" stroke-width=\"8\" fill=\"#ffffff\"/></svg>"
-  }
-]
+{
+  "type": "shapeType",
+  "data": [
+    {
+      "name": "车站",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 240 240\">\n  <circle cx=\"120\" cy=\"120\" r=\"42\" fill=\"#ffffffff\" stroke=\"#000000ff\" stroke-width=\"6\" stroke-dasharray=\"16 12\" />\n</svg>",
+      "editableElements": [
+        {
+          "type": "circle",
+          "cx": 120,
+          "cy": 120,
+          "r": 42,
+          "radiusX": 42,
+          "radiusY": 42,
+          "fill": "#ffffffff",
+          "stroke": "#000000ff",
+          "strokeWidth": 6,
+          "dashed": true,
+          "dashLength": 16,
+          "rotation": 0,
+          "paramBindings": {
+            "dashed": {
+              "type": "checkbox",
+              "paramId": "shape-6ba4e733891a46f699"
+            }
+          }
+        }
+      ],
+      "parameters": [
+        {
+          "id": "shape-6ba4e733891a46f699",
+          "type": "checkbox",
+          "label": "虚线",
+          "defaultValue": false,
+          "conditions": [],
+          "extensions": {}
+        }
+      ],
+      "imported": false
+    },
+    {
+      "name": "线路标识",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 240 240\">\n  <rect x=\"54.02\" y=\"90.17\" width=\"136.22\" height=\"61.14\" rx=\"10\" fill=\"none\" stroke=\"#2f5d9d\" stroke-width=\"6\" />\n  <text x=\"121.76\" y=\"112.27\" fill=\"#2f5d9d\" font-size=\"31.65\" font-family=\"Segoe UI\" font-weight=\"700\" font-style=\"normal\" text-decoration=\"none\" text-anchor=\"middle\" dominant-baseline=\"middle\">文本</text>\n  <text x=\"122.16\" y=\"139.93\" fill=\"#2f5d9d\" font-size=\"17.63\" font-family=\"Segoe UI\" font-weight=\"400\" font-style=\"normal\" text-decoration=\"none\" text-anchor=\"middle\" dominant-baseline=\"middle\">文本</text>\n</svg>",
+      "editableElements": [
+        {
+          "type": "rect",
+          "x": 54.02,
+          "y": 90.17,
+          "width": 136.22,
+          "height": 61.14,
+          "rounded": true,
+          "rx": 10,
+          "fill": "none",
+          "stroke": "#2f5d9d",
+          "strokeWidth": 6,
+          "dashed": false,
+          "dashLength": 8,
+          "rotation": 0,
+          "paramBindings": {
+            "fill": {
+              "type": "color",
+              "paramId": "shape-d838aed8f0434c39b3"
+            },
+            "stroke": {
+              "type": "color",
+              "paramId": "shape-d838aed8f0434c39b3"
+            }
+          }
+        },
+        {
+          "type": "text",
+          "x": 121.76,
+          "y": 112.27,
+          "value": "文本",
+          "fontSize": 31.65,
+          "fontFamily": "Segoe UI",
+          "bold": true,
+          "italic": false,
+          "underline": false,
+          "strikethrough": false,
+          "fill": "#2f5d9d",
+          "rotation": 0,
+          "paramBindings": {
+            "value": {
+              "type": "text",
+              "paramId": "shape-76c8a39ba1ef4a6689"
+            },
+            "fill": {
+              "type": "color",
+              "paramId": "shape-f775494212b14c4eb0"
+            }
+          }
+        },
+        {
+          "type": "text",
+          "x": 122.16,
+          "y": 139.93,
+          "value": "文本",
+          "fontSize": 17.63,
+          "fontFamily": "Segoe UI",
+          "bold": false,
+          "italic": false,
+          "underline": false,
+          "strikethrough": false,
+          "fill": "#2f5d9d",
+          "rotation": 0,
+          "paramBindings": {
+            "fill": {
+              "type": "color",
+              "paramId": "shape-f775494212b14c4eb0"
+            },
+            "value": {
+              "type": "text",
+              "paramId": "shape-68fbeefd9a5740569b"
+            }
+          }
+        }
+      ],
+      "parameters": [
+        {
+          "id": "shape-76c8a39ba1ef4a6689",
+          "type": "text",
+          "label": "线路编号",
+          "defaultValue": "1号线",
+          "conditions": [],
+          "extensions": {}
+        },
+        {
+          "id": "shape-68fbeefd9a5740569b",
+          "type": "text",
+          "label": "线路类型",
+          "defaultValue": "xx轨道交通",
+          "conditions": [],
+          "extensions": {}
+        },
+        {
+          "id": "shape-d838aed8f0434c39b3",
+          "type": "color",
+          "label": "颜色",
+          "defaultValue": "#ff0000ff",
+          "conditions": [],
+          "extensions": {}
+        },
+        {
+          "id": "shape-f775494212b14c4eb0",
+          "type": "color",
+          "label": "文本颜色",
+          "defaultValue": "#ffffffff",
+          "conditions": [],
+          "extensions": {}
+        }
+      ],
+      "imported": false
+    }
+  ]
+}
