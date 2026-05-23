@@ -608,11 +608,22 @@ export function createStationManager({
       return;
     }
 
+    // 收集所引用的图形类型
+    const presetIds = targets.map((t) => String(t.id));
+    const usedShapeIds = new Set();
+    targets.forEach((preset) => {
+      if (preset?.shapeId) usedShapeIds.add(String(preset.shapeId));
+    });
+    const shapeTypes = (Array.isArray(state.shapeLibrary) ? state.shapeLibrary : [])
+      .filter((shape) => shape && usedShapeIds.has(String(shape.id)))
+      .map((shape) => structuredClone(shape));
+
     const payload = {
       type: exportType,
-      data: payloadList
+      data: payloadList,
+      shapeTypes: shapeTypes.length ? shapeTypes : undefined
     };
-    const downloadName = `rmcreator-station-${buildExportTimestamp()}.json`;
+    const downloadName = `RMC_StationType_${buildExportTimestamp()}.json`;
 
     const blob = new Blob([JSON.stringify(payload)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -644,6 +655,15 @@ export function createStationManager({
       if (!entries.length) {
         window.alert("导入失败：文件中没有可导入的车站预设。");
         return;
+      }
+      // 导入附带图形类型
+      if (Array.isArray(payload.shapeTypes)) {
+        payload.shapeTypes.forEach((shape) => {
+          if (!shape || !shape.id) return;
+          // 不覆盖已有同名图形
+          const exists = state.shapeLibrary.some((s) => s.id === shape.id);
+          if (!exists) state.shapeLibrary.push(shape);
+        });
       }
       showStationImportSelectionModal(entries, file.name);
     } catch {

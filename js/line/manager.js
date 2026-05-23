@@ -867,7 +867,7 @@ export function createLineManager({
       type: exportType,
       data: payloadList
     };
-    const downloadName = `rmcreator-linetype-${buildExportTimestamp()}.json`;
+    const downloadName = `RMC_LineType_${buildExportTimestamp()}.json`;
 
     const blob = new Blob([JSON.stringify(payload)], { type: "application/json" });
     const url = URL.createObjectURL(blob);

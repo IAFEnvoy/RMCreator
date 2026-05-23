@@ -699,9 +699,11 @@ function saveDrawing() {
   const blob = new Blob([json], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
-  const timestamp = new Date().toISOString().slice(0, 19).replace(/[T:]/g, "-");
+  const now = new Date();
+  const pad = (v) => String(v).padStart(2, "0");
+  const ts = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
   a.href = url;
-  a.download = `rmcreator-drawing-${timestamp}.json`;
+  a.download = `RMC_Drawing_${ts}.json`;
   a.click();
   URL.revokeObjectURL(url);
 }
@@ -717,7 +719,21 @@ async function loadDrawingFromFile(file) {
 
   try {
     const text = await file.text();
-    const drawing = parseDrawingJson(text);
+    let drawingData = text;
+
+    // 兼容两种格式：{type:"drawing", data:[{snapshot:...}]} 与原始绘图 JSON
+    try {
+      const parsed = JSON.parse(text.replace(/^\uFEFF/, ""));
+      if (parsed && parsed.type === "drawing" && Array.isArray(parsed.data)) {
+        // 新包装格式：取第一个 snapshot
+        const first = parsed.data[0];
+        if (first && first.snapshot) {
+          drawingData = typeof first.snapshot === "string" ? first.snapshot : JSON.stringify(first.snapshot);
+        }
+      }
+    } catch { /* fall through to raw parse */ }
+
+    const drawing = parseDrawingJson(drawingData);
     applyDrawingData(drawing, {
       persistSnapshot: true,
       markTemporaryImported: true,
@@ -862,6 +878,24 @@ function applyDrawingData(drawing, {
     ...shape,
     paramValues: shape.paramValues && typeof shape.paramValues === "object" ? { ...shape.paramValues } : {}
   }));
+
+  // 恢复导出的车站预设和图形类型
+  if (Array.isArray(drawing.stationPresets) && drawing.stationPresets.length) {
+    state.stationLibrary = drawing.stationPresets;
+  }
+  if (Array.isArray(drawing.shapeTypes) && drawing.shapeTypes.length) {
+    state.shapeLibrary = drawing.shapeTypes;
+  }
+
+  // 同步车站类型索引
+  state.stationTypes = (Array.isArray(state.stationLibrary) ? state.stationLibrary : []).map((preset, index) => ({
+    name: preset.name,
+    radius: Number.isFinite(Number(preset.radius)) ? Number(preset.radius) : 12,
+    oval: Boolean(preset.oval),
+    stationPresetId: preset.id,
+    stationTypeIndex: index
+  }));
+
   state.selectedEntities = [];
   state.drag = {
     mode: null,

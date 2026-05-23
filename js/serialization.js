@@ -8,6 +8,19 @@ const drawingVersion = 1;
 const stationTextSlotSet = new Set(["nw", "n", "ne", "w", "e", "sw", "s", "se"]);
 
 export function serializeDrawing(state) {
+  // 收集所有使用的图形类型：直接放置的图形 + 车站预设引用的图形
+  const usedShapeIds = new Set();
+  (Array.isArray(state.shapes) ? state.shapes : []).forEach((shape) => {
+    if (shape?.shapeId) usedShapeIds.add(String(shape.shapeId));
+  });
+  (Array.isArray(state.stationLibrary) ? state.stationLibrary : []).forEach((preset) => {
+    if (preset?.shapeId) usedShapeIds.add(String(preset.shapeId));
+  });
+
+  const usedShapeTypes = (Array.isArray(state.shapeLibrary) ? state.shapeLibrary : [])
+    .filter((shape) => shape && usedShapeIds.has(String(shape.id)))
+    .map((shape) => structuredClone(shape));
+
   return {
     version: drawingVersion,
     exportedAt: new Date().toISOString(),
@@ -23,8 +36,32 @@ export function serializeDrawing(state) {
     edges: sanitizeEdges(state.edges),
     labels: sanitizeLabels(state.labels),
     shapes: sanitizePlacedShapes(state.shapes),
-    customLineTypes: sanitizeCustomLineTypes(state.lineTypes, state.edges)
+    customLineTypes: sanitizeCustomLineTypes(state.lineTypes, state.edges),
+    stationPresets: sanitizeStationPresets(state.stationLibrary),
+    shapeTypes: usedShapeTypes
   };
+}
+
+function sanitizeStationPresets(library) {
+  if (!Array.isArray(library)) return [];
+  return library.map((preset) => {
+    if (!preset || typeof preset !== "object") return null;
+    return {
+      id: String(preset.id || ""),
+      name: String(preset.name || "车站预设"),
+      shapeId: preset.shapeId ? String(preset.shapeId) : null,
+      textCards: structuredClone(preset.textCards || []),
+      textPlacement: structuredClone(preset.textPlacement || {}),
+      virtualNode: Boolean(preset.virtualNode),
+      radius: Number.isFinite(Number(preset.radius)) ? Number(preset.radius) : 12,
+      oval: Boolean(preset.oval),
+      shapeParamSettings: structuredClone(preset.shapeParamSettings || {}),
+      paramExpressions: preset.paramExpressions && typeof preset.paramExpressions === "object"
+        ? { ...preset.paramExpressions }
+        : undefined,
+      params: Array.isArray(preset.params) ? structuredClone(preset.params) : []
+    };
+  }).filter(Boolean);
 }
 
 export function serializeDrawingToJson(state) {
@@ -55,7 +92,9 @@ export function normalizeDrawingData(raw) {
     edges: sanitizeEdges(raw.edges),
     labels: sanitizeLabels(raw.labels),
     shapes: sanitizePlacedShapes(raw.shapes),
-    customLineTypes: normalizeCustomLineTypes(raw.customLineTypes)
+    customLineTypes: normalizeCustomLineTypes(raw.customLineTypes),
+    stationPresets: Array.isArray(raw.stationPresets) ? structuredClone(raw.stationPresets) : [],
+    shapeTypes: Array.isArray(raw.shapeTypes) ? structuredClone(raw.shapeTypes) : []
   };
 }
 

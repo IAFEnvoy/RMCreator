@@ -390,7 +390,7 @@ export function createDrawingManager({ state, elements, parseDrawingJson: parseF
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `rmcreator-drawing-${buildExportTimestamp()}.json`;
+      a.download = `RMC_Drawing_${buildExportTimestamp()}.json`;
       a.click();
       URL.revokeObjectURL(url);
     } catch {
