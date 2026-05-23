@@ -24,7 +24,7 @@ import { createRenderer } from "./render.js";
 import { createEventBinder } from "./event.js";
 import { createExportManager } from "./exports.js";
 import { createContextMenu } from "./context-menu.js";
-import { parseDrawingJson, serializeDrawingToJson } from "./serialization.js";
+import { parseDrawingJson, serializeDrawing, serializeDrawingToJson } from "./serialization.js";
 import { createMainClipboard } from "./clipboards.js";
 import {
   clamp,
@@ -686,7 +686,16 @@ function createNewDrawing() {
 }
 
 function saveDrawing() {
-  const json = serializeDrawingToJson(state);
+  const drawing = serializeDrawing(state);
+  const payload = {
+    type: "drawing",
+    data: [{
+      name: `绘图 ${new Date().toLocaleString()}`,
+      author: "",
+      snapshot: drawing
+    }]
+  };
+  const json = JSON.stringify(payload);
   const blob = new Blob([json], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -736,6 +745,25 @@ async function importDataFromFile(file) {
 
     const type = String(payload.type || "").trim();
     const data = Array.isArray(payload.data) ? payload.data : [];
+
+    // 如果没有 type 字段，但看起来像绘图数据（有 nodes/edges），当作原始绘图 JSON 导入
+    if (!type && (Array.isArray(payload.nodes) || Array.isArray(payload.edges) || Array.isArray(payload.labels))) {
+      try {
+        if (!confirmOverwrite("加载绘图会覆盖当前内容，是否继续？")) return;
+        const drawing = parseDrawingJson(text);
+        applyDrawingData(drawing, {
+          persistSnapshot: true,
+          markTemporaryImported: true,
+          includePersistedPermanentCustoms: true
+        });
+        initHistoryBaseline();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "未知错误";
+        window.alert(`导入失败：${message}`);
+      }
+      return;
+    }
+
     if (!type) {
       window.alert("导入失败：缺少类型标识 type。");
       return;

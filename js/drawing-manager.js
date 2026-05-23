@@ -374,22 +374,14 @@ export function createDrawingManager({ state, elements, parseDrawingJson: parseF
     const targets = list.filter((i) => ids.includes(String(i.id)));
     if (!targets.length) return;
     try {
-      const exportArray = targets.map((t) => {
-        let snapshotObj;
-        try {
-          snapshotObj = parseFn ? parseFn(t.snapshot) : JSON.parse(t.snapshot);
-        } catch {
-          snapshotObj = t.snapshot;
-        }
-        return {
-          name: t.name || "",
-          author: t.author || "",
-          snapshot: snapshotObj,
-          counts: t.counts || {},
-          createdAt: t.createdAt,
-          modifiedAt: t.modifiedAt
-        };
-      });
+      const exportArray = targets.map((t) => ({
+        name: t.name || "",
+        author: t.author || "",
+        snapshot: t.snapshot,
+        counts: t.counts || {},
+        createdAt: t.createdAt,
+        modifiedAt: t.modifiedAt
+      }));
       const payload = {
         type: exportType,
         data: exportArray
