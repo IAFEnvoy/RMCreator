@@ -17,7 +17,7 @@ export function createExportManager({ elements }) {
   } = elements;
 
   function exportDrawingAsSvg() {
-    const built = buildExportSvg({ transparentBackground: true });
+    const built = buildExportSvg({ transparentBackground: true, scale: 1 });
     if (!built) {
       window.alert("当前没有可导出的内容。");
       return;
@@ -25,7 +25,7 @@ export function createExportManager({ elements }) {
 
     downloadTextFile(
       built.svgMarkup,
-      `rmcreator-drawing-${createFileTimestamp()}.svg`,
+      `RMC_Drawing_${createFileTimestamp()}.svg`,
       "image/svg+xml"
     );
   }
@@ -98,7 +98,7 @@ export function createExportManager({ elements }) {
   }
 
   async function exportDrawingAsPng({ scale = 1, transparentBackground = false, showGrid = false } = {}) {
-    const built = buildExportSvg({ transparentBackground, showGrid });
+    const built = buildExportSvg({ transparentBackground, showGrid, scale });
     if (!built) {
       window.alert("当前没有可导出的内容。");
       return;
@@ -107,8 +107,8 @@ export function createExportManager({ elements }) {
     const url = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(built.svgMarkup)}`;
     const image = await loadImageFromUrl(url);
 
-    const width = Math.max(1, Math.round(built.width * scale));
-    const height = Math.max(1, Math.round(built.height * scale));
+    const width = Math.max(1, Math.ceil(built.width));
+    const height = Math.max(1, Math.ceil(built.height));
     const canvas = document.createElement("canvas");
     canvas.width = width;
     canvas.height = height;
@@ -123,12 +123,14 @@ export function createExportManager({ elements }) {
       ctx.fillRect(0, 0, width, height);
     }
 
+    // 1:1 绘制，无缩放，避免撕裂/模糊
+    ctx.imageSmoothingEnabled = false;
     ctx.drawImage(image, 0, 0, width, height);
     const pngBlob = await canvasToBlob(canvas, "image/png");
-    downloadBlob(pngBlob, `rmcreator-drawing-${createFileTimestamp()}.png`);
+    downloadBlob(pngBlob, `RMC_Drawing_${createFileTimestamp()}.png`);
   }
 
-  function buildExportSvg({ transparentBackground = true, showGrid = false } = {}) {
+  function buildExportSvg({ transparentBackground = true, showGrid = false, scale = 1 } = {}) {
     const layers = [lineLayer, shapeLayer, stationLayer, textLayer].filter((layer) => layer instanceof SVGGElement);
     if (!layers.length) {
       return null;
@@ -139,11 +141,15 @@ export function createExportManager({ elements }) {
       return null;
     }
 
+    const scaledWidth = Math.ceil(bounds.width * scale);
+    const scaledHeight = Math.ceil(bounds.height * scale);
+
     const svgExport = document.createElementNS("http://www.w3.org/2000/svg", "svg");
     svgExport.setAttribute("xmlns", "http://www.w3.org/2000/svg");
     svgExport.setAttribute("viewBox", `${bounds.minX} ${bounds.minY} ${bounds.width} ${bounds.height}`);
-    svgExport.setAttribute("width", String(Math.ceil(bounds.width)));
-    svgExport.setAttribute("height", String(Math.ceil(bounds.height)));
+    svgExport.setAttribute("width", String(scaledWidth));
+    svgExport.setAttribute("height", String(scaledHeight));
+    svgExport.setAttribute("shape-rendering", "geometricPrecision");
 
     if (showGrid) {
       const defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
@@ -205,8 +211,8 @@ export function createExportManager({ elements }) {
     const svgMarkup = new XMLSerializer().serializeToString(svgExport);
     return {
       svgMarkup,
-      width: bounds.width,
-      height: bounds.height
+      width: scaledWidth,
+      height: scaledHeight
     };
   }
 
@@ -325,7 +331,9 @@ export function createExportManager({ elements }) {
   }
 
   function createFileTimestamp() {
-    return new Date().toISOString().slice(0, 19).replace(/[T:]/g, "-");
+    const now = new Date();
+    const pad = (v) => String(v).padStart(2, "0");
+    return `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
   }
 
   function loadImageFromUrl(url) {
