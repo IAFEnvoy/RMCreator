@@ -1,6 +1,7 @@
 import { stationStorageKey } from "../constants.js";
 import { svgNs } from "../dom.js";
 import {
+  autoCropSvg,
   buildRenderableShapeSvg,
   normalizeNumber,
   normalizeShapeParameterDefault,
@@ -903,7 +904,9 @@ export function createStationManager({
       return "";
     }
 
-    return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(String(svgText))}`;
+    // 自动检测边界并居中裁剪
+    const previewSvg = autoCropSvg(svgText);
+    return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(String(previewSvg))}`;
   }
 
   function renderShapeSelect() {

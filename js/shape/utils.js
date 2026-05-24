@@ -81,7 +81,7 @@ export function buildRenderableShapeSvg(shape, paramValues, paramExpressions) {
 
   const resolvedValues = resolveShapeParameterValuesWithExpressions(shape, paramValues, paramExpressions);
   const resolvedParams = resolveShapeParametersWithValues(shape, resolvedValues);
-  if (Array.isArray(shape.editableElements)) {
+  if (Array.isArray(shape.editableElements) && shape.editableElements.length) {
     return buildSvgFromEditableElements(resolveEditableElementsWithParameters(shape.editableElements, resolvedParams));
   }
 
@@ -541,6 +541,20 @@ export function normalizePrimitive(raw) {
     };
   }
 
+  if (type === "svg") {
+    return {
+      type,
+      svg: String(raw.svg || ""),
+      x: toNumber(raw.x, 0),
+      y: toNumber(raw.y, 0),
+      width: normalizeNumber(raw.width, 240, 1, 2000),
+      height: normalizeNumber(raw.height, 240, 1, 2000),
+      rotation: toNumber(raw.rotation, 0),
+      paramBindings,
+      ...(Object.keys(paramBindExpressions).length ? { paramBindExpressions } : {})
+    };
+  }
+
   return null;
 }
 
@@ -664,6 +678,20 @@ export function createPrimitiveNode(primitive) {
     return text;
   }
 
+  if (type === "svg") {
+    const svgText = String(primitive.svg || "");
+    if (!svgText) return null;
+    const img = document.createElementNS(svgNs, "image");
+    img.setAttribute("x", String(toNumber(primitive.x, 0)));
+    img.setAttribute("y", String(toNumber(primitive.y, 0)));
+    img.setAttribute("width", String(normalizeNumber(primitive.width, 240, 1, 2000)));
+    img.setAttribute("height", String(normalizeNumber(primitive.height, 240, 1, 2000)));
+    img.setAttribute("href", toSvgDataUrl(svgText));
+    img.setAttribute("preserveAspectRatio", "xMidYMid meet");
+    setRotationTransform(img, primitive.rotation, toNumber(primitive.x, 0) + normalizeNumber(primitive.width, 240, 1, 2000) / 2, toNumber(primitive.y, 0) + normalizeNumber(primitive.height, 240, 1, 2000) / 2);
+    return img;
+  }
+
   return null;
 }
 
@@ -718,6 +746,14 @@ export function primitiveToMarkup(primitive) {
     return `<text x=\"${num(primitive.x)}\" y=\"${num(primitive.y)}\" fill=\"${safeColor(primitive.fill)}\" font-size=\"${num(primitive.fontSize)}\" font-family=\"${escapeXml(String(primitive.fontFamily || "Segoe UI"))}\" font-weight=\"${weight}\" font-style=\"${style}\" text-decoration=\"${decoration}\" text-anchor=\"middle\" dominant-baseline=\"middle\"${rotationAttr}>${escapeXml(String(primitive.value || "文本"))}</text>`;
   }
 
+  if (primitive.type === "svg") {
+    const svgText = String(primitive.svg || "");
+    if (!svgText) return "";
+    const w = normalizeNumber(primitive.width, 240, 1, 2000);
+    const h = normalizeNumber(primitive.height, 240, 1, 2000);
+    return `<image x=\"${num(primitive.x)}\" y=\"${num(primitive.y)}\" width=\"${num(w)}\" height=\"${num(h)}\" href=\"${escapeXml(toSvgDataUrl(svgText))}\" preserveAspectRatio=\"xMidYMid meet\"${rotationAttr} />`;
+  }
+
   return "";
 }
 
@@ -763,6 +799,10 @@ export function getPrimitiveCenter(primitive) {
 
   if (primitive.type === "text") {
     return { x: primitive.x, y: primitive.y };
+  }
+
+  if (primitive.type === "svg") {
+    return { x: toNumber(primitive.x, 0) + normalizeNumber(primitive.width, 240, 1, 2000) / 2, y: toNumber(primitive.y, 0) + normalizeNumber(primitive.height, 240, 1, 2000) / 2 };
   }
 
   return { x: 120, y: 120 };
@@ -856,6 +896,16 @@ export function computeEditableBounds(elements) {
       const height = Math.max(primitive.fontSize, 12);
       pushPoint(primitive.x - width / 2, primitive.y - height / 2);
       pushPoint(primitive.x + width / 2, primitive.y + height / 2);
+      return;
+    }
+
+    if (primitive.type === "svg") {
+      const x = toNumber(primitive.x, 0);
+      const y = toNumber(primitive.y, 0);
+      const w = normalizeNumber(primitive.width, 240, 1, 2000);
+      const h = normalizeNumber(primitive.height, 240, 1, 2000);
+      pushPoint(x, y);
+      pushPoint(x + w, y + h);
     }
   });
 
@@ -948,6 +998,35 @@ export function normalizeImportedSvg(rawSvg) {
   return serializer.serializeToString(root);
 }
 
+/**
+ * 自动检测 SVG 内容边界并调整 viewBox 使缩略图居中。
+ */
+export function autoCropSvg(svgText) {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(String(svgText), "image/svg+xml");
+  const root = doc.documentElement;
+  if (!root || root.tagName.toLowerCase() !== "svg") return svgText;
+
+  const temp = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  temp.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+  temp.style.position = "absolute";
+  temp.style.visibility = "hidden";
+  temp.style.pointerEvents = "none";
+  const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+  Array.from(root.children).forEach((child) => g.appendChild(child.cloneNode(true)));
+  temp.appendChild(g);
+  document.body.appendChild(temp);
+  let bbox;
+  try { bbox = temp.getBBox(); } catch { bbox = null; }
+  document.body.removeChild(temp);
+
+  if (!bbox || bbox.width <= 0 || bbox.height <= 0) return svgText;
+  const pad = Math.max(bbox.width, bbox.height) * 0.1;
+  root.setAttribute("viewBox", `${bbox.x - pad} ${bbox.y - pad} ${bbox.width + pad * 2} ${bbox.height + pad * 2}`);
+  const serializer = new XMLSerializer();
+  return serializer.serializeToString(root);
+}
+
 export function toSvgDataUrl(svgText) {
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(String(svgText || ""))}`;
 }
@@ -960,7 +1039,8 @@ export function primitiveTypeLabel(type) {
     hexagon: "六边形",
     octagon: "八边形",
     bezier: "贝塞尔曲线",
-    text: "文本"
+    text: "文本",
+    svg: "SVG图形"
   };
   return map[type] || "图元";
 }

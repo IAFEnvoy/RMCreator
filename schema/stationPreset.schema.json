@@ -17,6 +17,12 @@
       "items": {
         "$ref": "#/definitions/stationPreset"
       }
+    },
+    "shapeTypes": {
+      "type": "array",
+      "items": {
+        "$ref": "shapeType.schema.json#/definitions/shapeType"
+      }
     }
   },
   "definitions": {
@@ -128,6 +134,9 @@
           "type": "string"
         },
         "colorBinding": {
+          "$ref": "#/definitions/binding"
+        },
+        "visibilityBinding": {
           "$ref": "#/definitions/binding"
         },
         "fontSizeBinding": {

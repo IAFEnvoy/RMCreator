@@ -126,7 +126,7 @@ function sanitizePlacedShapes(rawShapes) {
         shapeId: String(shape?.shapeId || "").trim(),
         x: Number(shape?.x) || 0,
         y: Number(shape?.y) || 0,
-        scale: clamp(Number(shape?.scale) || 0.25, 0.1, 10),
+        scale: clamp(Number(shape?.scale) || 0.25, 0.001, 10),
         rotation: Number.isFinite(Number(shape?.rotation)) ? Number(shape.rotation) : 0,
         paramValues,
         paramExpressions

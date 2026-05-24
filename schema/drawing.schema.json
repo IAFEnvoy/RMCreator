@@ -31,7 +31,9 @@
         "edges",
         "labels",
         "shapes",
-        "customLineTypes"
+        "customLineTypes",
+        "stationPresets",
+        "shapeTypes"
       ],
       "properties": {
         "version": {
@@ -103,6 +105,9 @@
               },
               "stationTypeIndex": {
                 "type": "integer"
+              },
+              "rotation": {
+                "type": "number"
               },
               "paramValues": {
                 "type": "object",
@@ -298,6 +303,9 @@
               "scale": {
                 "type": "number"
               },
+              "rotation": {
+                "type": "number"
+              },
               "paramValues": {
                 "type": "object",
                 "additionalProperties": {
@@ -327,6 +335,18 @@
           "type": "array",
           "items": {
             "$ref": "lineType.schema.json"
+          }
+        },
+        "stationPresets": {
+          "type": "array",
+          "items": {
+            "$ref": "stationPreset.schema.json#/definitions/stationPreset"
+          }
+        },
+        "shapeTypes": {
+          "type": "array",
+          "items": {
+            "$ref": "shapeType.schema.json#/definitions/shapeType"
           }
         }
       }

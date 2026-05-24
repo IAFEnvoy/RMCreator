@@ -21,7 +21,7 @@ import {
 } from "./utils.js";
 import { createSettingsRenderer } from "./settings-renderer.js";
 import { getTemplate } from "./template-store.js";
-import { buildRenderableShapeSvg } from "./shape/utils.js";
+import { autoCropSvg, buildRenderableShapeSvg } from "./shape/utils.js";
 import {
   appendStationTexts,
   buildShapeParamValuesFromRuntime,
@@ -267,7 +267,7 @@ export function createRenderer({
         const preview = document.createElement("img");
         preview.className = "menu-item-shape-preview";
         preview.alt = `${shape.name}预览`;
-        preview.src = toSvgDataUrl(shape.svg);
+        preview.src = toSvgDataUrl(autoCropSvg(shape.svg));
 
         row.appendChild(title);
         row.appendChild(preview);
@@ -763,7 +763,7 @@ export function createRenderer({
         return;
       }
 
-      const scale = clamp(Number(shapeInstance.scale) || 1, 0.1, 10);
+      const scale = clamp(Number(shapeInstance.scale) || 1, 0.001, 10);
       const rotation = Number.isFinite(Number(shapeInstance.rotation)) ? Number(shapeInstance.rotation) : 0;
       const cx = parsed.minX + parsed.width / 2;
       const cy = parsed.minY + parsed.height / 2;

@@ -8,6 +8,7 @@ import {
   normalizeTextStyleFlags
 } from "./utils.js";
 import {
+  autoCropSvg,
   buildRenderableShapeSvg,
   normalizeShapeParameterDefault,
   normalizeShapeParameters,
@@ -187,7 +188,7 @@ export function createSettingsRenderer({
       : {};
 
     const params = [
-      { name: "缩放比例", id: "scale", type: "number", value: clamp(Number(shapeInstance.scale) || 1, 0.1, 10), expression: exprSource["scale"] || "" }
+      { name: "缩放比例", id: "scale", type: "number", value: clamp(Number(shapeInstance.scale) || 1, 0.001, 10), expression: exprSource["scale"] || "" }
     ];
     const preset = state.shapeLibrary.find((item) => item.id === shapeInstance.shapeId);
     if (!preset) {
@@ -400,7 +401,7 @@ export function createSettingsRenderer({
 
         const scaleEntry = map.get("scale");
         if (scaleEntry) {
-          shape.scale = clamp(Number(scaleEntry.value) || 1, 0.1, 10);
+          shape.scale = clamp(Number(scaleEntry.value) || 1, 0.001, 10);
         }
 
         const preset = state.shapeLibrary.find((item) => item.id === shape.shapeId);
@@ -1489,7 +1490,7 @@ export function createSettingsRenderer({
       return;
     }
 
-    const safeScale = clamp(Number(shapeInstance.scale) || 1, 0.1, 10);
+    const safeScale = clamp(Number(shapeInstance.scale) || 1, 0.001, 10);
     const safeRotation = Number.isFinite(Number(shapeInstance.rotation)) ? Number(shapeInstance.rotation) : 0;
     const resolvedParams = resolveShapeParametersWithValues(preset, shapeInstance.paramValues || {});
 
@@ -1547,13 +1548,13 @@ export function createSettingsRenderer({
       presetName: escapeHtml(preset.name || "图形"),
       safeScale: String(safeScale),
       safeRotation: String(safeRotation),
-      shapePreviewSrc: escapeHtml(toSvgDataUrl(buildRenderableShapeSvg(preset, shapeInstance.paramValues || {}, shapeInstance.paramExpressions))),
+      shapePreviewSrc: escapeHtml(toSvgDataUrl(autoCropSvg(buildRenderableShapeSvg(preset, shapeInstance.paramValues || {}, shapeInstance.paramExpressions)))),
       paramFieldsHtml: paramFieldsHtml || "<div class=\"kv\">该图形没有可配置参数。</div>"
     });
 
     const scaleInput = document.getElementById("shapeScaleInput");
     scaleInput?.addEventListener("change", () => {
-      shapeInstance.scale = clamp(Number(scaleInput.value) || 1, 0.1, 10);
+      shapeInstance.scale = clamp(Number(scaleInput.value) || 1, 0.001, 10);
       scaleInput.value = String(shapeInstance.scale);
       renderShapes();
       onStateChanged?.();

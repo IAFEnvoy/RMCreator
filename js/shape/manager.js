@@ -16,6 +16,7 @@ import {
   getPrimitiveParamBindings,
   getPrimitiveParamBindExpressions,
   getPrimitiveRadii,
+  autoCropSvg,
   normalizeEditableElements,
   normalizeImportedSvg,
   normalizeNumber,
@@ -425,7 +426,7 @@ export function createShapeManager({
     });
 
     shapeImportSvgBtn.addEventListener("click", () => shapeImportSvgInput.click());
-    shapeImportSvgInput.addEventListener("change", importExternalSvgShape);
+    shapeImportSvgInput.addEventListener("change", importSvgIntoCurrentShape);
     deleteShapeBtn.addEventListener("click", deleteSelectedShapeDefinition);
     downloadShapeBtn.addEventListener("click", downloadSelectedShape);
     importShapeBtn.addEventListener("click", () => shapeImportInput.click());
@@ -715,36 +716,6 @@ export function createShapeManager({
     URL.revokeObjectURL(url);
   }
 
-  async function importShapesFromFile(event) {
-    const file = event.target.files?.[0];
-    if (!file) {
-      return;
-    }
-
-    try {
-      const text = await file.text();
-      const payload = JSON.parse(text.replace(/^\uFEFF/, ""));
-      if (!payload || typeof payload !== "object") {
-        window.alert("导入失败：文件格式无效。");
-        return;
-      }
-      if (payload.type !== exportType) {
-        window.alert("导入失败：文件类型不匹配。");
-        return;
-      }
-      const entries = Array.isArray(payload.data) ? payload.data : [];
-      if (!entries.length) {
-        window.alert("导入失败：文件中没有可导入的图形。");
-        return;
-      }
-      showShapeImportSelectionModal(entries, file.name);
-    } catch {
-      window.alert("导入失败：JSON 文件格式无效。\n需要 {type:\"shapeType\", data:[...]} 格式。");
-    } finally {
-      shapeImportInput.value = "";
-    }
-  }
-
   function openImportSelection(items, fileName) {
     if (!Array.isArray(items) || !items.length) {
       window.alert("导入失败：文件中没有可导入的图形。");
@@ -1000,7 +971,7 @@ export function createShapeManager({
       const preview = document.createElement("img");
       preview.className = "shape-library-preview-inline";
       preview.alt = `${shape.name}预览`;
-      preview.src = toSvgDataUrl(shape.svg);
+      preview.src = toSvgDataUrl(autoCropSvg(shape.svg));
 
       lead.appendChild(checkbox);
       lead.appendChild(title);
@@ -1010,7 +981,7 @@ export function createShapeManager({
 
       const tag = document.createElement("span");
       tag.className = "line-library-item-tag";
-      tag.textContent = shape.imported ? "外部SVG" : "编辑图形";
+      tag.textContent = "编辑图形";
       item.appendChild(tag);
 
       item.addEventListener("click", () => {
@@ -1147,7 +1118,9 @@ export function createShapeManager({
       return;
     }
 
-    if (!Array.isArray(shape.editableElements)) {
+    const hasEditable = Array.isArray(shape.editableElements);
+
+    if (!hasEditable) {
       appendInfo(shapePropsList, "外部导入 SVG 暂不支持逐图元编辑属性。", "shape-prop-empty");
       return;
     }
@@ -1954,6 +1927,15 @@ export function createShapeManager({
       return;
     }
 
+    if (primary.type === "svg") {
+      addNumber("左上 X", "x", { defaultValue: 0 });
+      addNumber("左上 Y", "y", { defaultValue: 0 });
+      addNumber("宽度", "width", { defaultValue: 240, min: 1, max: 2000 });
+      addNumber("高度", "height", { defaultValue: 240, min: 1, max: 2000 });
+      addNumber("旋转", "rotation", { defaultValue: 0, min: -360, max: 360, step: 1 });
+      return;
+    }
+
     appendInfo(container, "该图元类型暂不支持编辑。", "shape-prop-empty");
   }
 
@@ -2211,36 +2193,133 @@ export function createShapeManager({
 
   function ensureEditableShape() {
     let shape = getSelectedShape();
-    if (!shape || !Array.isArray(shape.editableElements)) {
+    if (!shape) {
       createEmptyShape();
       shape = getSelectedShape();
+    }
+    if (shape && !Array.isArray(shape.editableElements)) {
+      shape.editableElements = [];
     }
     return shape || null;
   }
 
-  function addPrimitiveToCurrentShape() {
-    let shape = getSelectedShape();
-    if (!shape || !Array.isArray(shape.editableElements)) {
-      createEmptyShape();
-      shape = getSelectedShape();
-      if (!shape) {
-        return;
-      }
+  /** 将 SVG 解析为单个 SVG 图元（保留原始尺寸信息） */
+  function svgToPrimitive(svgText) {
+    if (!svgText) return null;
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(String(svgText), "image/svg+xml");
+    if (doc.querySelector("parsererror")) return null;
+    const root = doc.documentElement;
+    if (!root || root.tagName.toLowerCase() !== "svg") return null;
+
+    // 从 viewBox 或宽高推断尺寸
+    let w = 240, h = 240;
+    const vb = root.getAttribute("viewBox");
+    if (vb) {
+      const parts = vb.split(/[\s,]+/).map(Number).filter((v) => Number.isFinite(v));
+      if (parts.length >= 4) { w = parts[2]; h = parts[3]; }
     }
+    if (root.hasAttribute("width")) w = parseFloat(root.getAttribute("width")) || w;
+    if (root.hasAttribute("height")) h = parseFloat(root.getAttribute("height")) || h;
+
+    return {
+      type: "svg",
+      svg: svgText,
+      x: 0,
+      y: 0,
+      width: Math.max(1, Math.min(w, 2000)),
+      height: Math.max(1, Math.min(h, 2000)),
+      rotation: 0
+    };
+  }
+
+  function addPrimitiveToCurrentShape() {
+    const shape = ensureEditableShape();
+    if (!shape) return;
 
     const nextIndex = shape.editableElements.length;
     shape.editableElements.push(createPrimitiveElement(state.shapeManager.primitiveType, nextIndex));
     setSingleSelectedPrimitive(shape, nextIndex);
     syncShapeSvg(shape);
+    shape.imported = false;
 
     persistShapeLibrary();
     renderShapeManager();
     renderSubmenu();
   }
 
-  async function importExternalSvgShape(event) {
+  /** 左栏导入：支持 JSON 和 SVG */
+  async function importShapesFromFile(event) {
     const file = event.target.files?.[0];
-    if (!file) {
+    if (!file) return;
+
+    try {
+      const text = await file.text();
+
+      // SVG 文件：解析为图元
+      if (file.name.toLowerCase().endsWith(".svg")) {
+        const normalized = normalizeImportedSvg(text);
+        if (!normalized) {
+          window.alert("导入失败：SVG 文件格式无效。");
+          return;
+        }
+        const primitive = svgToPrimitive(normalized);
+        if (!primitive) {
+          window.alert("导入失败：SVG 中没有可识别的图元。");
+          return;
+        }
+        const shape = {
+          id: createShapeId(),
+          name: file.name.replace(/\.svg$/i, "") || `图形 ${state.shapeLibrary.length + 1}`,
+          svg: "",
+          editableElements: [primitive],
+          parameters: [],
+          imported: true
+        };
+        syncShapeSvg(shape);
+        state.shapeLibrary.push(shape);
+        state.shapeManager.selectedId = shape.id;
+        state.shapeManager.selectedPrimitiveIndices = [0];
+        state.shapeManager.selectedPrimitiveIndex = 0;
+        resetViewToSelectedShape();
+        persistShapeLibrary();
+        renderShapeManager();
+        renderSubmenu();
+        return;
+      }
+
+      // JSON 文件
+      const payload = JSON.parse(text.replace(/^\uFEFF/, ""));
+      if (!payload || typeof payload !== "object") {
+        window.alert("导入失败：文件格式无效。");
+        return;
+      }
+      if (payload.type !== exportType) {
+        window.alert("导入失败：文件类型不匹配。");
+        return;
+      }
+      const entries = Array.isArray(payload.data) ? payload.data : [];
+      if (!entries.length) {
+        window.alert("导入失败：文件中没有可导入的图形。");
+        return;
+      }
+      showShapeImportSelectionModal(entries, file.name);
+    } catch {
+      window.alert("导入失败：文件格式无效。");
+    } finally {
+      shapeImportInput.value = "";
+    }
+  }
+
+  /** 右栏导入SVG：将 SVG 图元合并到当前图形 */
+  async function importSvgIntoCurrentShape(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const shape = getSelectedShape();
+    if (!shape) {
+      window.alert("请先选择左侧图形库中的一个图形。");
+      shapeImportSvgInput.value = "";
       return;
     }
 
@@ -2248,20 +2327,19 @@ export function createShapeManager({
       const text = await file.text();
       const normalized = normalizeImportedSvg(text);
       if (!normalized) {
+        window.alert("导入失败：SVG 文件格式无效。");
         return;
       }
-
-      const shape = {
-        id: createShapeId(),
-        name: (file.name || "导入图形").replace(/\.svg$/i, "") || `图形 ${state.shapeLibrary.length + 1}`,
-        svg: normalized,
-        editableElements: null,
-        parameters: [],
-        imported: true
-      };
-
-      state.shapeLibrary.push(shape);
-      state.shapeManager.selectedId = shape.id;
+      const primitive = svgToPrimitive(normalized);
+      if (!primitive) {
+        window.alert("导入失败：SVG 中没有可识别的图元。");
+        return;
+      }
+      if (!Array.isArray(shape.editableElements)) {
+        shape.editableElements = [];
+      }
+      shape.editableElements.push(primitive);
+      syncShapeSvg(shape);
       state.shapeManager.selectedPrimitiveIndices = [];
       state.shapeManager.selectedPrimitiveIndex = null;
       resetViewToSelectedShape();
@@ -2273,6 +2351,148 @@ export function createShapeManager({
     } finally {
       shapeImportSvgInput.value = "";
     }
+  }
+
+  /** 将单个 SVG DOM 元素转换为可编辑图元对象 */
+  function svgElementToPrimitive(tag, attrs, el) {
+    const num = (v, fallback) => {
+      const n = Number(v);
+      return Number.isFinite(n) ? n : fallback;
+    };
+
+    const toColor = (v, fallback) => {
+      if (!v) return fallback;
+      // 支持 named colors, rgb(), etc — normalizeColor handles them
+      return String(v);
+    };
+
+    if (tag === "line") {
+      return {
+        type: "line",
+        x1: num(attrs.x1, 40), y1: num(attrs.y1, 60),
+        x2: num(attrs.x2, 200), y2: num(attrs.y2, 180),
+        stroke: toColor(attrs.stroke, "#2f5d9dff"),
+        strokeWidth: num(attrs["stroke-width"], 6),
+        roundCap: attrs["stroke-linecap"] === "round",
+        dashed: typeof attrs["stroke-dasharray"] !== "undefined",
+        dashLength: attrs["stroke-dasharray"] ? num(attrs["stroke-dasharray"].split(/[ ,]+/)[0], 8) : 8,
+        rotation: 0
+      };
+    }
+
+    if (tag === "circle") {
+      return {
+        type: "circle",
+        cx: num(attrs.cx, 120), cy: num(attrs.cy, 120),
+        r: num(attrs.r, 42),
+        fill: toColor(attrs.fill, "none"),
+        stroke: toColor(attrs.stroke, "#2f5d9dff"),
+        strokeWidth: num(attrs["stroke-width"], 6),
+        dashed: typeof attrs["stroke-dasharray"] !== "undefined",
+        dashLength: attrs["stroke-dasharray"] ? num(attrs["stroke-dasharray"].split(/[ ,]+/)[0], 8) : 8,
+        rotation: 0
+      };
+    }
+
+    if (tag === "ellipse") {
+      return {
+        type: "circle",
+        cx: num(attrs.cx, 120), cy: num(attrs.cy, 120),
+        r: Math.max(num(attrs.rx, 42), num(attrs.ry, 42)),
+        radiusX: num(attrs.rx, 42),
+        radiusY: num(attrs.ry, 42),
+        fill: toColor(attrs.fill, "none"),
+        stroke: toColor(attrs.stroke, "#2f5d9dff"),
+        strokeWidth: num(attrs["stroke-width"], 6),
+        dashed: typeof attrs["stroke-dasharray"] !== "undefined",
+        dashLength: attrs["stroke-dasharray"] ? num(attrs["stroke-dasharray"].split(/[ ,]+/)[0], 8) : 8,
+        rotation: 0
+      };
+    }
+
+    if (tag === "rect") {
+      return {
+        type: "rect",
+        x: num(attrs.x, 56), y: num(attrs.y, 56),
+        width: num(attrs.width, 128), height: num(attrs.height, 128),
+        rounded: num(attrs.rx, 0) > 0,
+        rx: num(attrs.rx, 0),
+        fill: toColor(attrs.fill, "none"),
+        stroke: toColor(attrs.stroke, "#2f5d9dff"),
+        strokeWidth: num(attrs["stroke-width"], 6),
+        dashed: typeof attrs["stroke-dasharray"] !== "undefined",
+        dashLength: attrs["stroke-dasharray"] ? num(attrs["stroke-dasharray"].split(/[ ,]+/)[0], 8) : 8,
+        rotation: 0
+      };
+    }
+
+    if (tag === "polygon") {
+      const points = (attrs.points || "").trim().split(/[ ,]+/).map(Number).filter(v => Number.isFinite(v));
+      if (!points.length || points.length % 2 !== 0) return null;
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      for (let i = 0; i < points.length; i += 2) {
+        minX = Math.min(minX, points[i]);
+        maxX = Math.max(maxX, points[i]);
+        minY = Math.min(minY, points[i + 1]);
+        maxY = Math.max(maxY, points[i + 1]);
+      }
+      const w = maxX - minX;
+      const h = maxY - minY;
+      const r = Math.max(w, h) / 2;
+      const sides = points.length / 2;
+      const type = sides === 6 ? "hexagon" : sides === 8 ? "octagon" : null;
+      if (!type) return null;
+      return {
+        type,
+        cx: (minX + maxX) / 2, cy: (minY + maxY) / 2,
+        r,
+        fill: toColor(attrs.fill, "none"),
+        stroke: toColor(attrs.stroke, "#2f5d9dff"),
+        strokeWidth: num(attrs["stroke-width"], 6),
+        dashed: typeof attrs["stroke-dasharray"] !== "undefined",
+        dashLength: attrs["stroke-dasharray"] ? num(attrs["stroke-dasharray"].split(/[ ,]+/)[0], 8) : 8,
+        rotation: 0
+      };
+    }
+
+    if (tag === "path") {
+      const d = (attrs.d || "").trim();
+      // 只支持贝塞尔曲线 C/c 路径的简单导入
+      const match = d.match(/^M\s*([\d.]+)\s+([\d.]+)\s+C\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s*$/i);
+      if (match) {
+        return {
+          type: "bezier",
+          x1: num(match[1], 40), y1: num(match[2], 170),
+          cx1: num(match[3], 90), cy1: num(match[4], 60),
+          cx2: num(match[5], 150), cy2: num(match[6], 180),
+          x2: num(match[7], 200), y2: num(match[8], 70),
+          stroke: toColor(attrs.stroke, "#2f5d9dff"),
+          strokeWidth: num(attrs["stroke-width"], 6),
+          roundCap: attrs["stroke-linecap"] === "round",
+          dashed: typeof attrs["stroke-dasharray"] !== "undefined",
+          dashLength: attrs["stroke-dasharray"] ? num(attrs["stroke-dasharray"].split(/[ ,]+/)[0], 8) : 8,
+          rotation: 0
+        };
+      }
+      // 非贝塞尔 path 跳过
+      return null;
+    }
+
+    if (tag === "text") {
+      return {
+        type: "text",
+        x: num(attrs.x, 120), y: num(attrs.y, 120),
+        value: el?.textContent || "文本",
+        fontSize: num(attrs["font-size"], 26),
+        fontFamily: attrs["font-family"] || "Segoe UI",
+        bold: attrs["font-weight"] === "700" || attrs["font-weight"] === "bold",
+        italic: attrs["font-style"] === "italic",
+        fill: toColor(attrs.fill, "#000000ff"),
+        rotation: 0
+      };
+    }
+
+    return null;
   }
 
   function addParameter(type) {
@@ -3075,6 +3295,12 @@ export function createShapeManager({
       return true;
     }
 
+    if (primitive.type === "svg") {
+      setPrimitiveNumberField(shape, primitive, "x", Number((startPrimitive.x + dx).toFixed(2)));
+      setPrimitiveNumberField(shape, primitive, "y", Number((startPrimitive.y + dy).toFixed(2)));
+      return true;
+    }
+
     return false;
   }
 
@@ -3133,6 +3359,14 @@ export function createShapeManager({
         "fontSize",
         Number(clampNumber((startPrimitive.fontSize || 26) * scale, 1, 240).toFixed(2))
       );
+      return true;
+    }
+
+    if (primitive.type === "svg") {
+      setPrimitiveNumberField(shape, primitive, "x", Number(minX.toFixed(2)));
+      setPrimitiveNumberField(shape, primitive, "y", Number(minY.toFixed(2)));
+      setPrimitiveNumberField(shape, primitive, "width", Number(width.toFixed(2)));
+      setPrimitiveNumberField(shape, primitive, "height", Number(height.toFixed(2)));
       return true;
     }
 
@@ -3216,6 +3450,15 @@ export function createShapeManager({
         minY: primitive.y - height / 2,
         maxX: primitive.x + width / 2,
         maxY: primitive.y + height / 2
+      };
+    }
+
+    if (primitive.type === "svg") {
+      return {
+        minX: primitive.x,
+        minY: primitive.y,
+        maxX: primitive.x + primitive.width,
+        maxY: primitive.y + primitive.height
       };
     }
 
@@ -3400,6 +3643,14 @@ export function createShapeManager({
 
     if (primitive.type === "text") {
       return [{ x: primitive.x, y: primitive.y }];
+    }
+
+    if (primitive.type === "svg") {
+      return [
+        { x: primitive.x, y: primitive.y },
+        { x: toNumber(primitive.x, 0) + normalizeNumber(primitive.width, 240, 1, 2000), y: toNumber(primitive.y, 0) + normalizeNumber(primitive.height, 240, 1, 2000) },
+        { x: toNumber(primitive.x, 0) + normalizeNumber(primitive.width, 240, 1, 2000) / 2, y: toNumber(primitive.y, 0) + normalizeNumber(primitive.height, 240, 1, 2000) / 2 }
+      ];
     }
 
     return [];
@@ -3838,13 +4089,14 @@ export function createShapeManager({
       : null;
 
     let svg = "";
-    if (editableElements) {
+    if (editableElements && editableElements.length) {
       svg = buildSvgFromEditableElements(editableElements);
-    } else {
+    }
+    if (!svg) {
       svg = normalizeImportedSvg(raw.svg || "");
-      if (!svg) {
-        return null;
-      }
+    }
+    if (!svg) {
+      return null;
     }
 
     return {
@@ -3862,12 +4114,10 @@ export function createShapeManager({
       return;
     }
 
-    // Keep object references stable for active property panel listeners (e.g. color picker drag).
     if (!options.preserveParameters) {
       shape.parameters = normalizeShapeParameters(shape.parameters);
     }
     shape.svg = buildSvgFromEditableElements(resolveEditableElementsWithParameters(shape.editableElements, shape.parameters));
-    shape.imported = false;
   }
 
   return {
