@@ -529,7 +529,7 @@ export function createSettingsRenderer({
         const message = count > 1
           ? `确认删除所选 ${count} 个元素？`
           : "确认删除所选元素？";
-        if (!window.confirm(message)) {
+        if (state.appSettings?.confirmBeforeDelete !== false && !window.confirm(message)) {
           return;
         }
         deleteSelectedEntity?.();

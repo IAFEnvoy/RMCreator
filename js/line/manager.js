@@ -765,10 +765,7 @@ export function createLineManager({
     }
     warningLines.push("此操作不可撤销，是否继续？");
 
-    if (!window.confirm(warningLines.join("\n"))) {
-      return;
-    }
-    if (!window.confirm("请再次确认删除：该操作执行后无法恢复。")) {
+    if (state.appSettings?.confirmBeforeDelete !== false && !window.confirm(warningLines.join("\n"))) {
       return;
     }
 

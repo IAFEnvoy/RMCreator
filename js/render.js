@@ -352,6 +352,14 @@ export function createRenderer({
         });
       }
 
+      const confirmBeforeDeleteInput = submenuItems.querySelector("#confirmBeforeDeleteToggle");
+      if (confirmBeforeDeleteInput) {
+        confirmBeforeDeleteInput.checked = state.appSettings?.confirmBeforeDelete !== false;
+        confirmBeforeDeleteInput.addEventListener("change", () => {
+          onAppSettingsChanged?.({ confirmBeforeDelete: confirmBeforeDeleteInput.checked });
+        });
+      }
+
       const arrowPanInput = submenuItems.querySelector("#arrowKeyPanToggle");
       if (arrowPanInput) {
         arrowPanInput.checked = state.appSettings?.arrowKeyPan !== false;

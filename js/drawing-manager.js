@@ -650,7 +650,7 @@ export function createDrawingManager({ state, elements, parseDrawingJson: parseF
         window.alert('当前打开的绘图不可删除。');
         return;
       }
-      if (!window.confirm(`将删除 ${ids.length} 个绘图。此操作不可撤销，是否继续？`)) return;
+      if (state.appSettings?.confirmBeforeDelete !== false && !window.confirm(`将删除 ${ids.length} 个绘图。此操作不可撤销，是否继续？`)) return;
       removeSaved(ids);
     });
 

@@ -59,7 +59,8 @@ const defaultAppSettings = Object.freeze({
   snapGrid: true,
   snapEqualSpacingOffset: 25,
   feedbackDuration: 0.63,
-  enableContextMenu: true
+  enableContextMenu: true,
+  confirmBeforeDelete: true
 });
 
 const state = {
@@ -520,7 +521,8 @@ function sanitizeAppSettings(rawSettings) {
       0,
       5
     ),
-    enableContextMenu: next.enableContextMenu !== false
+    enableContextMenu: next.enableContextMenu !== false,
+    confirmBeforeDelete: next.confirmBeforeDelete !== false
   };
 }
 
