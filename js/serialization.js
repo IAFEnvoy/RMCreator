@@ -36,6 +36,7 @@ export function serializeDrawing(state) {
     edges: sanitizeEdges(state.edges),
     labels: sanitizeLabels(state.labels),
     shapes: sanitizePlacedShapes(state.shapes),
+    subDrawings: sanitizeSubDrawings(state.subDrawings),
     customLineTypes: sanitizeCustomLineTypes(state.lineTypes, state.edges),
     stationPresets: sanitizeStationPresets(state.stationLibrary),
     shapeTypes: usedShapeTypes
@@ -92,6 +93,7 @@ export function normalizeDrawingData(raw) {
     edges: sanitizeEdges(raw.edges),
     labels: sanitizeLabels(raw.labels),
     shapes: sanitizePlacedShapes(raw.shapes),
+    subDrawings: sanitizeSubDrawings(raw.subDrawings),
     customLineTypes: normalizeCustomLineTypes(raw.customLineTypes),
     stationPresets: Array.isArray(raw.stationPresets) ? structuredClone(raw.stationPresets) : [],
     shapeTypes: Array.isArray(raw.shapeTypes) ? structuredClone(raw.shapeTypes) : []
@@ -314,4 +316,25 @@ function sanitizeParamExpressions(raw) {
     }
   });
   return result;
+}
+
+function sanitizeSubDrawings(rawSubDrawings) {
+  if (!Array.isArray(rawSubDrawings)) {
+    return [];
+  }
+
+  return rawSubDrawings
+    .map((sd) => {
+      if (!sd || typeof sd !== "object") return null;
+      return {
+        id: String(sd.id || "").trim(),
+        drawingId: String(sd.drawingId || "").trim(),
+        x: Number(sd.x) || 0,
+        y: Number(sd.y) || 0,
+        scale: clamp(Number(sd.scale) || 0.5, 0.001, 10),
+        rotation: Number.isFinite(Number(sd.rotation)) ? Number(sd.rotation) : 0,
+        name: String(sd.name || "").trim() || "子绘图"
+      };
+    })
+    .filter((sd) => sd.id.length > 0 && sd.drawingId.length > 0);
 }

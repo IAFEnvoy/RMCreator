@@ -300,6 +300,22 @@
   padding: 2px;
 }
 
+.menu-item-subdrawing {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.menu-item-subdrawing.disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.menu-item-subdrawing-meta {
+  font-size: 11px;
+  color: #7b8da8;
+}
+
 .menu-item-line-tag {
   font-size: 11px;
   color: var(--muted);

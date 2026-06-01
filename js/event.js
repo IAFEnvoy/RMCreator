@@ -12,6 +12,9 @@ export function createEventBinder({
   addLine,
   addText,
   addShape,
+  addSubDrawing,
+  getSavedDrawings,
+  findDrawingById,
   selectEntity,
   selectEntities,
   toggleEntitySelection,
@@ -530,6 +533,13 @@ export function createEventBinder({
       return;
     }
 
+    const subEl = target.closest("[data-subdrawing-id]");
+    if (subEl) {
+      const entity = { type: "subDrawing", id: subEl.dataset.subdrawingId };
+      handleEntityClick(entity);
+      return;
+    }
+
     if (state.activeTool === "station" && state.menuSelection.station !== null) {
       const snapped = getPlacementSnapPoint(point, event);
       addStation(snapped.x, snapped.y, state.menuSelection.station);
@@ -558,6 +568,19 @@ export function createEventBinder({
       if (state.appSettings?.continuousShapeMode === false) {
         state.menuSelection.shape = null;
         renderer.hideShapeGhost?.();
+        renderer.renderSubmenu();
+      }
+      return;
+    }
+
+    if (state.activeTool === "subDrawing" && state.menuSelection.subDrawing) {
+      const snapped = getPlacementSnapPoint(point, event);
+      const drawingId = state.menuSelection.subDrawing;
+      const list = getSavedDrawings();
+      const info = list.find((d) => String(d.id) === String(drawingId));
+      addSubDrawing(snapped.x, snapped.y, drawingId, info?.name || "子绘图");
+      if (state.appSettings?.continuousShapeMode === false) {
+        state.menuSelection.subDrawing = null;
         renderer.renderSubmenu();
       }
       return;
@@ -604,7 +627,10 @@ export function createEventBinder({
         ? { type: "shape", id: shapeEl.dataset.shapeId }
         : textEl
           ? { type: "text", id: textEl.dataset.textId }
-          : null;
+          : (() => {
+            const subEl = target.closest("[data-subdrawing-id]");
+            return subEl ? { type: "subDrawing", id: subEl.dataset.subdrawingId } : null;
+          })();
 
     if (targetEntity && !multiSelect) {
       if (!isEntitySelected(targetEntity.type, targetEntity.id)) {
@@ -632,7 +658,8 @@ export function createEventBinder({
       }
     }
 
-    if (!target.closest("[data-station-id],[data-line-id],[data-shape-id],[data-text-id]")) {
+    if (!target.closest("[data-station-id],[data-line-id],[data-shape-id],[data-text-id]")
+      && !target.closest("[data-subdrawing-id]")) {
       if (state.activeTool === "select") {
         state.drag.mode = "marquee";
         state.drag.marqueeStart = point;
@@ -643,10 +670,9 @@ export function createEventBinder({
         return;
       }
 
-      // In shape placement mode, blank click should place shape, not start panning.
-      if (state.activeTool === "shape" && state.menuSelection.shape) {
-        // Do not prevent default here: some SVG click flows may be swallowed,
-        // causing placement click to never fire.
+      // In shape/subDrawing placement mode, blank click should place, not start panning.
+      if ((state.activeTool === "shape" && state.menuSelection.shape)
+        || (state.activeTool === "subDrawing" && state.menuSelection.subDrawing)) {
         return;
       }
 
@@ -787,12 +813,22 @@ export function createEventBinder({
             shape.x = entry.startX + dx;
             shape.y = entry.startY + dy;
           }
+          return;
+        }
+
+        if (entry.type === "subDrawing") {
+          const sd = state.subDrawings.find((item) => item.id === entry.id);
+          if (sd) {
+            sd.x = entry.startX + dx;
+            sd.y = entry.startY + dy;
+          }
         }
       });
 
       renderer.renderStations();
       renderer.renderLines();
       renderer.renderShapes();
+      renderer.renderSubDrawings();
       renderer.renderTexts();
       return;
     }
@@ -989,6 +1025,19 @@ export function createEventBinder({
             id: shape.id,
             startX: shape.x,
             startY: shape.y
+          });
+        }
+        return;
+      }
+
+      if (entity.type === "subDrawing") {
+        const sd = state.subDrawings.find((item) => item.id === entity.id);
+        if (sd) {
+          moveEntities.push({
+            type: "subDrawing",
+            id: sd.id,
+            startX: sd.x,
+            startY: sd.y
           });
         }
       }
@@ -1953,7 +2002,7 @@ export function createEventBinder({
     const matches = [];
     const filter = state.selectionFilter && typeof state.selectionFilter === "object"
       ? state.selectionFilter
-      : { station: true, line: true, text: true, shape: true };
+      : { station: true, line: true, text: true, shape: true, subDrawing: true };
 
     if (filter.station !== false) {
       state.nodes.forEach((station) => {
@@ -2025,6 +2074,18 @@ export function createEventBinder({
           matches.push({ type: "shape", id });
         }
       });
+
+      if (filter.subDrawing !== false) {
+        shapeLayer.querySelectorAll("[data-subdrawing-id]").forEach((el) => {
+          const id = el.getAttribute("data-subdrawing-id");
+          if (!id) return;
+          const bbox = getTransformedBBox(el);
+          if (!bbox) return;
+          if (intersectsRect(rect, bbox)) {
+            matches.push({ type: "subDrawing", id });
+          }
+        });
+      }
     }
 
     return matches;

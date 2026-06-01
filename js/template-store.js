@@ -8,6 +8,7 @@ const templateSources = {
   "submenu-text": "/template/submenu/submenu-text.html",
   "submenu-shape": "/template/submenu/submenu-shape.html",
   "submenu-shape-empty": "/template/submenu/submenu-shape-empty.html",
+  "submenu-subdrawing": "/template/submenu/submenu-subdrawing.html",
   "submenu-settings": "/template/submenu/submenu-settings.html",
   "submenu-about": "/template/submenu/submenu-about.html",
   "submenu-select-tip": "/template/submenu/submenu-select-tip.html",

@@ -34,6 +34,7 @@ export function createSettingsRenderer({
   renderStations,
   renderLines,
   renderShapes,
+  renderSubDrawings,
   renderTexts,
   moveLineInStack,
   applyStationType,
@@ -567,16 +568,21 @@ export function createSettingsRenderer({
       .map((entity) => state.shapes.find((item) => item.id === entity.id))
       .filter(Boolean);
 
+    const selectedSubDrawings = selectedEntities
+      .filter((entity) => entity.type === "subDrawing")
+      .map((entity) => state.subDrawings.find((item) => item.id === entity.id))
+      .filter(Boolean);
+
     if (selectedLines.length !== 1) {
       state.lineMoveMode = null;
     }
 
-    const typeCount = [selectedStations.length, selectedLines.length, selectedTexts.length, selectedShapes.length]
+    const typeCount = [selectedStations.length, selectedLines.length, selectedTexts.length, selectedShapes.length, selectedSubDrawings.length]
       .filter((count) => count > 0)
       .length;
 
     const summaryHtml = selectedEntities.length > 1
-      ? `<div class="kv">已选择：车站 ${selectedStations.length} 个，线条 ${selectedLines.length} 条，文本 ${selectedTexts.length} 个，图形 ${selectedShapes.length} 个</div>`
+      ? `<div class="kv">已选择：车站 ${selectedStations.length} 个，线条 ${selectedLines.length} 条，文本 ${selectedTexts.length} 个，图形 ${selectedShapes.length} 个，子绘图 ${selectedSubDrawings.length} 个</div>`
       : "";
 
     const alignTargets = [
@@ -643,6 +649,19 @@ export function createSettingsRenderer({
         renderSingleShape(selectedShapes[0], summaryHtml);
       } else {
         renderBatchShapes(selectedShapes, summaryHtml);
+      }
+      return;
+    }
+
+    if (selectedSubDrawings.length > 0) {
+      if (selectedSubDrawings.length === 1) {
+        renderSingleSubDrawing(selectedSubDrawings[0], summaryHtml);
+      } else {
+        settingsBody.innerHTML = renderTemplate("settings-message", {
+          summaryHtml,
+          messageHtml: "<div class=\"kv\">子绘图多选暂不支持批量设置。</div>"
+        });
+        appendSelectionActions();
       }
     }
   };
@@ -1633,6 +1652,76 @@ export function createSettingsRenderer({
 
       inputEl.addEventListener("input", apply);
       inputEl.addEventListener("change", apply);
+    });
+
+    appendSelectionActions();
+  }
+
+  function renderSingleSubDrawing(sd, summaryHtml) {
+    const safeX = Number(sd.x) || 0;
+    const safeY = Number(sd.y) || 0;
+    const safeScale = clamp(Number(sd.scale) || 0.5, 0.001, 10);
+    const safeRotation = Number.isFinite(Number(sd.rotation)) ? Number(sd.rotation) : 0;
+
+    settingsBody.innerHTML = `
+      ${summaryHtml}
+      <div class="kv">组件类型: 子绘图</div>
+      <div class="field">
+        <label for="subDrawingXInput">位置 X</label>
+        <input id="subDrawingXInput" type="number" step="1" value="${safeX}" />
+      </div>
+      <div class="field">
+        <label for="subDrawingYInput">位置 Y</label>
+        <input id="subDrawingYInput" type="number" step="1" value="${safeY}" />
+      </div>
+      <div class="field">
+        <label for="subDrawingScaleInput">缩放比例</label>
+        <input id="subDrawingScaleInput" type="number" min="0.001" max="10" step="0.001" value="${safeScale}" />
+      </div>
+      <div class="field">
+        <label for="subDrawingRotationInput">旋转角度</label>
+        <input id="subDrawingRotationInput" type="number" min="-360" max="360" step="1" value="${safeRotation}" />
+      </div>
+    `;
+
+    const xInput = document.getElementById("subDrawingXInput");
+    xInput?.addEventListener("change", () => {
+      sd.x = Number(xInput.value) || 0;
+      xInput.value = String(sd.x);
+      renderSubDrawings?.();
+      renderStations?.();
+      renderLines?.();
+      onStateChanged?.();
+      renderSettings();
+    });
+
+    const yInput = document.getElementById("subDrawingYInput");
+    yInput?.addEventListener("change", () => {
+      sd.y = Number(yInput.value) || 0;
+      yInput.value = String(sd.y);
+      renderSubDrawings?.();
+      renderStations?.();
+      renderLines?.();
+      onStateChanged?.();
+      renderSettings();
+    });
+
+    const scaleInput = document.getElementById("subDrawingScaleInput");
+    scaleInput?.addEventListener("change", () => {
+      sd.scale = clamp(Number(scaleInput.value) || 0.25, 0.001, 10);
+      scaleInput.value = String(sd.scale);
+      renderSubDrawings?.();
+      onStateChanged?.();
+      renderSettings();
+    });
+
+    const rotationInput = document.getElementById("subDrawingRotationInput");
+    rotationInput?.addEventListener("change", () => {
+      sd.rotation = Number(rotationInput.value) || 0;
+      rotationInput.value = String(sd.rotation);
+      renderSubDrawings?.();
+      onStateChanged?.();
+      renderSettings();
     });
 
     appendSelectionActions();

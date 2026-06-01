@@ -25,7 +25,8 @@ import { autoCropSvg, buildRenderableShapeSvg } from "./shape/utils.js";
 import {
   appendStationTexts,
   buildShapeParamValuesFromRuntime,
-  buildStationRuntimeParamMap
+  buildStationRuntimeParamMap,
+  resolveTextBindingValue
 } from "./station/text-utils.js";
 import { loadVersion } from "./version.js";
 
@@ -45,6 +46,8 @@ export function createRenderer({
   copySelection,
   duplicateSelection,
   deleteSelectedEntity,
+  getSavedDrawings,
+  findDrawingById,
   onStateChanged
 }) {
   const {
@@ -279,6 +282,96 @@ export function createRenderer({
         });
 
         shapeList.appendChild(button);
+      });
+
+      return;
+    }
+
+    if (state.activeTool === "subDrawing") {
+      submenuTitle.textContent = "子绘图工具";
+      submenuItems.innerHTML = getTemplate("submenu-subdrawing");
+
+      const listEl = submenuItems.querySelector("[data-list=\"sub-drawings\"]") || submenuItems;
+
+      if (!Array.isArray(state.subDrawingLibraryCache)) {
+        state.subDrawingLibraryCache = [];
+      }
+
+      const savedList = typeof getSavedDrawings === "function" ? getSavedDrawings() : [];
+      state.subDrawingLibraryCache = savedList;
+
+      if (!savedList.length) {
+        const empty = document.createElement("div");
+        empty.className = "kv";
+        empty.textContent = "没有已保存的绘图。请先在 文件→绘图存档 中创建绘图。";
+        listEl.appendChild(empty);
+        return;
+      }
+
+      // 只有当前正在编辑的绘图才不能引用自身
+      const activeId = state.drawingManager?.activeId
+        || (typeof localStorage !== "undefined" ? localStorage.getItem("rmcreator.activeDrawingId.v1") : null);
+
+      // 检查某个绘图是否会导致循环引用（递归检查目标绘图的子绘图）
+      const wouldCauseCycle = (targetDrawingId) => {
+        if (activeId && String(targetDrawingId) === String(activeId)) return true;
+        // 递归检查：目标绘图中引用的子绘图不能包含当前绘图
+        const visited = new Set();
+        const checkRecursive = (drawId) => {
+          if (visited.has(drawId)) return false;
+          visited.add(drawId);
+          if (activeId && String(drawId) === String(activeId)) return true;
+          const entry = savedList.find((d) => String(d.id) === String(drawId));
+          if (!entry) return false;
+          try {
+            const data = JSON.parse(entry.snapshot);
+            if (data && Array.isArray(data.subDrawings)) {
+              return data.subDrawings.some((sd) => checkRecursive(sd.drawingId));
+            }
+          } catch { /* ignore */ }
+          return false;
+        };
+        return checkRecursive(targetDrawingId);
+      };
+
+      savedList.forEach((drawing) => {
+        const button = document.createElement("button");
+        button.className = "menu-item menu-item-subdrawing";
+        button.classList.toggle("active", state.menuSelection.subDrawing === drawing.id);
+
+        const isBanned = wouldCauseCycle(String(drawing.id));
+        if (isBanned) {
+          button.classList.add("disabled");
+          button.disabled = true;
+          button.title = "不能引用此绘图（会形成循环引用）";
+        }
+
+        const row = document.createElement("div");
+        row.className = "menu-item-shape-row";
+
+        const title = document.createElement("span");
+        title.className = "menu-item-shape-title";
+        title.textContent = drawing.name || "无名绘图";
+        if (isBanned) {
+          title.textContent += " ⛔";
+        }
+
+        const meta = document.createElement("span");
+        meta.className = "menu-item-subdrawing-meta";
+        meta.textContent = `${drawing.counts?.nodes || 0} 站 · ${drawing.counts?.edges || 0} 线`;
+
+        row.appendChild(title);
+        row.appendChild(meta);
+        button.appendChild(row);
+
+        if (!isBanned) {
+          button.addEventListener("click", () => {
+            state.menuSelection.subDrawing = state.menuSelection.subDrawing === drawing.id ? null : drawing.id;
+            renderSubmenu();
+          });
+        }
+
+        listEl.appendChild(button);
       });
 
       return;
@@ -828,6 +921,434 @@ export function createRenderer({
     });
   }
 
+  function buildDrawingSnapshotSvg(snapshotJson) {
+    // 将保存的绘图数据渲染为完整 SVG（保留所有样式/线段/颜色/图形）
+    let drawing;
+    try {
+      drawing = typeof snapshotJson === "string" ? JSON.parse(snapshotJson) : snapshotJson;
+    } catch {
+      return "";
+    }
+    if (!drawing || typeof drawing !== "object") return "";
+
+    const nodes = Array.isArray(drawing.nodes) ? drawing.nodes : [];
+    const edges = Array.isArray(drawing.edges) ? drawing.edges : [];
+    const labels = Array.isArray(drawing.labels) ? drawing.labels : [];
+    const shapes = Array.isArray(drawing.shapes) ? drawing.shapes : [];
+    const lineTypes = Array.isArray(drawing.customLineTypes) ? drawing.customLineTypes : [];
+    const stationPresets = Array.isArray(drawing.stationPresets) ? drawing.stationPresets : [];
+    const shapeTypes = Array.isArray(drawing.shapeTypes) ? drawing.shapeTypes : [];
+
+    // 重建 stationTypes（与 applyDrawingData 中的逻辑一致）
+    const stationTypes = stationPresets.map((preset, index) => ({
+      name: preset.name,
+      radius: Number.isFinite(Number(preset.radius)) ? Number(preset.radius) : 12,
+      oval: Boolean(preset.oval),
+      stationPresetId: preset.id,
+      stationTypeIndex: index
+    }));
+
+    // 计算边界
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    nodes.forEach((n) => {
+      const x = Number(n.x) || 0, y = Number(n.y) || 0;
+      minX = Math.min(minX, x); minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x); maxY = Math.max(maxY, y);
+    });
+    edges.forEach((e) => {
+      const from = nodes.find((n) => n.id === e.fromStationId);
+      const to = nodes.find((n) => n.id === e.toStationId);
+      if (from && to) {
+        minX = Math.min(minX, Number(from.x) || 0, Number(to.x) || 0);
+        minY = Math.min(minY, Number(from.y) || 0, Number(to.y) || 0);
+        maxX = Math.max(maxX, Number(from.x) || 0, Number(to.x) || 0);
+        maxY = Math.max(maxY, Number(from.y) || 0, Number(to.y) || 0);
+      }
+    });
+    labels.forEach((l) => {
+      const x = Number(l.x) || 0, y = Number(l.y) || 0;
+      minX = Math.min(minX, x); minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x); maxY = Math.max(maxY, y);
+    });
+    shapes.forEach((s) => {
+      const x = Number(s.x) || 0, y = Number(s.y) || 0;
+      const scale = clamp(Number(s.scale) || 0.25, 0.001, 10);
+      minX = Math.min(minX, x - 30 * scale); minY = Math.min(minY, y - 30 * scale);
+      maxX = Math.max(maxX, x + 30 * scale); maxY = Math.max(maxY, y + 30 * scale);
+    });
+    if (!isFinite(minX)) { minX = 0; minY = 0; maxX = 240; maxY = 240; }
+    const pad = 40;
+    const vbX = minX - pad, vbY = minY - pad;
+    const vbW = Math.max(1, maxX - minX + pad * 2), vbH = Math.max(1, maxY - minY + pad * 2);
+
+    const svgDoc = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svgDoc.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+    svgDoc.setAttribute("viewBox", `${vbX} ${vbY} ${vbW} ${vbH}`);
+
+    // 内联样式
+    const style = document.createElementNS("http://www.w3.org/2000/svg", "style");
+    style.textContent = ".station{fill:#ffffff;stroke:#203554;stroke-width:2}.station.interchange{stroke-width:3}.link-line{stroke-linecap:butt}";
+    svgDoc.appendChild(style);
+
+    // === 1. 先渲染线条（在车站下面）===
+    const lineTypeMap = new Map();
+    lineTypes.forEach((lt) => lineTypeMap.set(String(lt.id), lt));
+    edges.forEach((edge) => {
+      const fromNode = nodes.find((n) => n.id === edge.fromStationId);
+      const toNode = nodes.find((n) => n.id === edge.toStationId);
+      if (!fromNode || !toNode) return;
+
+      const lineType = lineTypeMap.get(String(edge.lineTypeId));
+      const geometry = edge.geometry || "straight";
+      const fr = Number.isFinite(Number(fromNode.radius)) ? Number(fromNode.radius) : 6;
+      const tr = Number.isFinite(Number(toNode.radius)) ? Number(toNode.radius) : 6;
+      const points = getLinePoints(geometry,
+        { x: Number(fromNode.x) || 0, y: Number(fromNode.y) || 0, radius: fr },
+        { x: Number(toNode.x) || 0, y: Number(toNode.y) || 0, radius: tr },
+        { flip: Boolean(edge.flip) }
+      );
+
+      if (lineType && Array.isArray(lineType.segments) && lineType.segments.length) {
+        const baseLine = applyEndpointOffsets(points, Number(edge.startOffset) || 0, Number(edge.endOffset) || 0);
+        const edgeColors = Array.isArray(edge.colorList) ? edge.colorList : (lineType.colorList || ["#7b8da8"]);
+        const segs = edge.flipColor ? [...lineType.segments].reverse() : lineType.segments;
+        const offsets = getParallelOffsets(segs.map((s) => s.width || 2), -0.8);
+        const cornerRadiusBase = Math.max(0, Number(edge.cornerRadius) || 0);
+        const useCornerRadius = cornerRadiusBase > 0 && points.length > 2;
+        const radiusOffsets = getParallelOffsets(segs.map((s) => s.width || 2), 0);
+        const bx = Number(fromNode.x) || 0, by = Number(fromNode.y) || 0;
+        const ex = Number(toNode.x) || 0, ey = Number(toNode.y) || 0;
+        const turnSign = (bx * ey - by * ex) >= 0 ? 1 : -1;
+        segs.forEach((seg, idx) => {
+          const offsetPoints = getOffsetPolyline(baseLine, offsets[idx] || 0);
+          const radiusOffset = radiusOffsets[idx] || 0;
+          const cornerRadius = useCornerRadius ? Math.max(0, cornerRadiusBase - turnSign * radiusOffset) : 0;
+          const color = seg.colorMode === "fixed" ? (seg.fixedColor || "#7b8da8") : (edgeColors[seg.paletteIndex || 0] || "#7b8da8");
+          const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+          path.setAttribute("d", buildPathD(offsetPoints, cornerRadius));
+          path.setAttribute("fill", "none");
+          path.setAttribute("stroke", color);
+          path.setAttribute("stroke-width", String(seg.width || 2));
+          path.setAttribute("stroke-linecap", seg.roundCap ? "round" : "butt");
+          path.setAttribute("stroke-linejoin", "round");
+          if (seg.strokeStyle === "dashed") {
+            path.setAttribute("stroke-dasharray", `${seg.dashSolidLength || 10} ${seg.dashGapLength || 6}`);
+          }
+          svgDoc.appendChild(path);
+        });
+      } else {
+        const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        path.setAttribute("d", buildPathD(points));
+        path.setAttribute("fill", "none");
+        path.setAttribute("stroke", "#7b8da8");
+        path.setAttribute("stroke-width", "2");
+        path.setAttribute("stroke-linecap", "round");
+        path.setAttribute("stroke-linejoin", "round");
+        svgDoc.appendChild(path);
+      }
+    });
+
+    // === 2. 渲染图形（在线上）===
+    shapes.forEach((shapeInst) => {
+      const def = shapeTypes.find((st) => st && st.id === shapeInst.shapeId);
+      if (!def) return;
+      try {
+        const shapeSvg = buildRenderableShapeSvg(def, shapeInst.paramValues || {}, shapeInst.paramExpressions);
+        const parsed = parseShapeSvgContent(shapeSvg);
+        if (!parsed || !parsed.nodes.length) return;
+        const scale = clamp(Number(shapeInst.scale) || 0.25, 0.001, 10);
+        const rotation = Number.isFinite(Number(shapeInst.rotation)) ? Number(shapeInst.rotation) : 0;
+        const cx = parsed.minX + parsed.width / 2;
+        const cy = parsed.minY + parsed.height / 2;
+        const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+        g.setAttribute("transform",
+          `translate(${Number(shapeInst.x) || 0} ${Number(shapeInst.y) || 0}) rotate(${rotation}) scale(${scale}) translate(${-cx} ${-cy})`
+        );
+        parsed.nodes.forEach((c) => g.appendChild(svgDoc.ownerDocument.importNode(c, true)));
+        svgDoc.appendChild(g);
+      } catch { /* skip */ }
+    });
+
+    // === 3. 渲染独立文本 ===
+    labels.forEach((label) => {
+      const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+      text.setAttribute("x", String(label.x ?? 0));
+      text.setAttribute("y", String(label.y ?? 0));
+      text.setAttribute("text-anchor", "middle");
+      text.setAttribute("dominant-baseline", "hanging");
+      text.setAttribute("font-size", String(label.fontSize || 14));
+      text.setAttribute("fill", label.color || "#203554");
+      text.setAttribute("font-family", label.fontFamily || "Segoe UI, sans-serif");
+      const weight = label.bold ? "700" : "400";
+      const style2 = label.italic ? "italic" : "normal";
+      text.setAttribute("font-weight", weight);
+      text.setAttribute("font-style", style2);
+      const lines = String(label.value || "").split("\n");
+      lines.forEach((lineVal, idx) => {
+        const tspan = document.createElementNS("http://www.w3.org/2000/svg", "tspan");
+        tspan.setAttribute("x", String(label.x ?? 0));
+        tspan.setAttribute("dy", idx === 0 ? "0" : "1.2em");
+        tspan.textContent = lineVal || " ";
+        text.appendChild(tspan);
+      });
+      svgDoc.appendChild(text);
+    });
+
+    // === 4. 最后渲染车站（在最上层）===
+    nodes.forEach((node) => {
+      const x = Number(node.x) || 0, y = Number(node.y) || 0;
+      const typeIndex = Number.isInteger(node.stationTypeIndex) && node.stationTypeIndex >= 0 ? node.stationTypeIndex : -1;
+      const preset = typeIndex >= 0 && typeIndex < stationPresets.length ? stationPresets[typeIndex] : null;
+      const r = Number.isFinite(Number(node.radius)) ? Number(node.radius) : (preset?.radius ?? 6);
+      const isOval = Boolean(node.oval !== undefined ? node.oval : preset?.oval);
+
+      if (preset?.shapeId) {
+        const shapeDef = shapeTypes.find((st) => st && st.id === preset.shapeId);
+        if (shapeDef) {
+          const runtimeParams = buildStationRuntimeParamMap({
+            preset,
+            shape: shapeDef,
+            stationParamValues: node.paramValues
+          });
+          const paramValues = buildShapeParamValuesFromRuntime(shapeDef, runtimeParams);
+          const shapeSvg = buildRenderableShapeSvg(shapeDef, paramValues);
+          const parsed = parseShapeSvgContent(shapeSvg);
+          if (parsed && parsed.nodes.length) {
+            const rotation = Number.isFinite(Number(node.rotation)) ? Number(node.rotation) : 0;
+            const shapeRenderScale = 0.25;
+            const cx = parsed.minX + parsed.width / 2;
+            const cy = parsed.minY + parsed.height / 2;
+            const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+            g.setAttribute("transform", `translate(${x} ${y}) rotate(${rotation})`);
+            const sg = document.createElementNS("http://www.w3.org/2000/svg", "g");
+            sg.setAttribute("transform", `scale(${shapeRenderScale}) translate(${-cx} ${-cy})`);
+            parsed.nodes.forEach((nd) => sg.appendChild(svgDoc.ownerDocument.importNode(nd, true)));
+            g.appendChild(sg);
+            svgDoc.appendChild(g);
+            renderSnapshotStationTexts(svgDoc, preset, node, x, y, runtimeParams);
+            return;
+          }
+        }
+      }
+
+      const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      circle.setAttribute("cx", String(x));
+      circle.setAttribute("cy", String(y));
+      circle.setAttribute("r", String(r));
+      circle.setAttribute("class", isOval ? "station interchange" : "station");
+      svgDoc.appendChild(circle);
+
+      if (isOval) {
+        const inner = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+        inner.setAttribute("cx", String(x));
+        inner.setAttribute("cy", String(y));
+        inner.setAttribute("r", String(Math.max(2, r - 4)));
+        inner.setAttribute("fill", "none");
+        inner.setAttribute("stroke", "#203554");
+        inner.setAttribute("stroke-width", "1.5");
+        svgDoc.appendChild(inner);
+      }
+
+      renderSnapshotStationTexts(svgDoc, preset, node, x, y, null);
+    });
+
+    return new XMLSerializer().serializeToString(svgDoc);
+  }
+
+  /** 渲染快照中车站的文本 — 与 appendStationTexts 保持一致的布局逻辑 */
+  function renderSnapshotStationTexts(svgDoc, preset, node, x, y, runtimeParams) {
+    if (!preset) {
+      const rr = Number.isFinite(Number(node.radius)) ? Number(node.radius) : 6;
+      if (node.textValues && typeof node.textValues === "object") {
+        Object.values(node.textValues).forEach((txt, tIdx) => {
+          if (!txt) return;
+          const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+          text.setAttribute("x", String(x));
+          text.setAttribute("y", String(y + rr + 4 + tIdx * 11));
+          text.setAttribute("text-anchor", "middle");
+          text.setAttribute("font-size", "9");
+          text.setAttribute("fill", "#203554");
+          text.setAttribute("font-family", "Segoe UI, sans-serif");
+          text.textContent = String(txt);
+          svgDoc.appendChild(text);
+        });
+      }
+      return;
+    }
+
+    const cards = Array.isArray(preset.textCards) ? preset.textCards : [];
+    if (!cards.length) return;
+
+    const runtimeMap = runtimeParams || buildStationRuntimeParamMap({
+      preset,
+      shape: null,
+      stationParamValues: node.paramValues || {}
+    });
+
+    const blocks = [];
+    cards.forEach((card) => {
+      if (!card || typeof card !== "object") return;
+      const visible = Boolean(resolveTextBindingValue(
+        card.visibilityBinding || {}, "checkbox", runtimeMap, true
+      ));
+      if (!visible || card.locked) return;
+      const rawTxt = (node.textValues && typeof node.textValues === "object"
+        ? node.textValues[card.id] : null) ?? card.defaultValue ?? "";
+      if (!rawTxt) return;
+      const allowMultiline = Boolean(card.allowMultiline);
+      const lines = allowMultiline ? String(rawTxt).split("\n") : [String(rawTxt)];
+      const fontSize = Math.max(1, Number(
+        resolveTextBindingValue(card.fontSizeBinding, "number", runtimeMap, 9)
+      ) || 9);
+      const color = resolveTextBindingValue(
+        card.colorBinding, "color", runtimeMap, card.color ?? "#203554"
+      ) || "#203554";
+      const ff = card.fontFamily || "Segoe UI, sans-serif";
+      const textStyle = normalizeTextStyleFlags(card, card);
+      const lineGap = Number.isFinite(Number(card.lineGap)) ? Math.abs(Number(card.lineGap)) : 4;
+      const lineHeight = fontSize * 1.2;
+      const height = lines.length * lineHeight;
+      blocks.push({ lines, fontSize, color, ff, textStyle, lineGap, height, lineHeight });
+    });
+
+    if (!blocks.length) return;
+
+    let totalH = 0;
+    blocks.forEach((b, i) => {
+      totalH += b.height + (i < blocks.length - 1 ? b.lineGap : 0);
+    });
+
+    const slot = (node.textPlacement?.slot && typeof node.textPlacement.slot === "string"
+      ? node.textPlacement.slot.toLowerCase()
+      : (cards[0]?.slot?.toLowerCase?.() || "s"));
+
+    const r = Number.isFinite(Number(node.radius)) ? Number(node.radius) : (Number(preset.radius) || 6);
+    const distance = r * 0.4 + 2;
+
+    let anchorX = x, anchorY = y, textAnchor = "middle";
+    if (slot === "n") {
+      anchorY = y - r - distance - totalH;
+    } else if (slot === "s") {
+      anchorY = y + r + distance;
+    } else if (slot === "e") {
+      anchorX = x + r + distance; textAnchor = "start"; anchorY = y - totalH / 2;
+    } else if (slot === "w") {
+      anchorX = x - r - distance; textAnchor = "end"; anchorY = y - totalH / 2;
+    } else if (slot === "nw") {
+      anchorX = x - r - distance; anchorY = y - r - distance - totalH; textAnchor = "end";
+    } else if (slot === "ne") {
+      anchorX = x + r + distance; anchorY = y - r - distance - totalH; textAnchor = "start";
+    } else if (slot === "sw") {
+      anchorX = x - r - distance; anchorY = y + r + distance; textAnchor = "end";
+    } else if (slot === "se") {
+      anchorX = x + r + distance; anchorY = y + r + distance; textAnchor = "start";
+    }
+
+    let curY = anchorY;
+    blocks.forEach((b) => {
+      const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+      text.setAttribute("x", String(anchorX));
+      text.setAttribute("y", String(curY));
+      text.setAttribute("text-anchor", textAnchor);
+      text.setAttribute("dominant-baseline", "hanging");
+      text.setAttribute("fill", b.color);
+      text.setAttribute("font-size", String(b.fontSize));
+      text.setAttribute("font-family", b.ff);
+      text.setAttribute("font-weight", b.textStyle.bold ? "700" : "400");
+      text.setAttribute("font-style", b.textStyle.italic ? "italic" : "normal");
+      if (b.textStyle.underline || b.textStyle.strikethrough) {
+        text.setAttribute("text-decoration", getSvgTextDecoration(b.textStyle));
+      }
+      b.lines.forEach((line, li) => {
+        const tspan = document.createElementNS("http://www.w3.org/2000/svg", "tspan");
+        tspan.setAttribute("x", String(anchorX));
+        tspan.setAttribute("dy", li === 0 ? "0" : String(b.lineHeight));
+        tspan.textContent = line || " ";
+        text.appendChild(tspan);
+      });
+      svgDoc.appendChild(text);
+      curY += b.height + b.lineGap;
+    });
+  }
+
+  function renderSubDrawings() {
+    if (!shapeLayer) return;
+
+    shapeLayer.querySelectorAll("[data-subdrawing-id]").forEach((el) => el.remove());
+
+    // 缓存已生成的 SVG 数据 URL，避免重复转换同一绘图
+    if (!state.subDrawingSvgCache) state.subDrawingSvgCache = {};
+
+    (Array.isArray(state.subDrawings) ? state.subDrawings : []).forEach((sd) => {
+      const cached = state.subDrawingSvgCache[sd.drawingId];
+      const hasCached = cached && cached.snapshot === sd._lastSnapshot;
+      let svgDataUrl, imgW, imgH;
+      if (hasCached) {
+        svgDataUrl = cached.url;
+        imgW = cached.w;
+        imgH = cached.h;
+      } else {
+        const saved = (typeof getSavedDrawings === "function" ? getSavedDrawings() : []).find((s) => String(s.id) === String(sd.drawingId));
+        if (!saved) return;
+        const svgText = buildDrawingSnapshotSvg(saved.snapshot);
+        if (!svgText) return;
+        // 解析 viewBox 获取实际尺寸
+        const vbMatch = svgText.match(/viewBox="([^"]+)"/);
+        if (vbMatch) {
+          const parts = vbMatch[1].split(/[\s,]+/).map(Number).filter((v) => isFinite(v));
+          imgW = parts.length >= 4 ? parts[2] : 240;
+          imgH = parts.length >= 4 ? parts[3] : 240;
+        } else {
+          imgW = 240; imgH = 240;
+        }
+        svgDataUrl = toSvgDataUrl(svgText);
+        state.subDrawingSvgCache[sd.drawingId] = { url: svgDataUrl, w: imgW, h: imgH, snapshot: saved.snapshot };
+      }
+
+      if (!svgDataUrl) return;
+
+      const scale = clamp(Number(sd.scale) || 0.25, 0.001, 10);
+      const rotation = Number.isFinite(Number(sd.rotation)) ? Number(sd.rotation) : 0;
+
+      const group = document.createElementNS(svgNs, "g");
+      group.setAttribute("data-subdrawing-id", String(sd.id));
+      group.setAttribute("class", "placed-subdrawing-instance");
+
+      if (isSelected("subDrawing", sd.id)) {
+        group.classList.add("selected-shape");
+      }
+
+      group.setAttribute(
+        "transform",
+        `translate(${Number(sd.x) || 0} ${Number(sd.y) || 0}) rotate(${rotation}) scale(${scale})`
+      );
+
+      // 透明点击区接收所有事件，data-* 确保 closest() 匹配
+      const hitRect = document.createElementNS(svgNs, "rect");
+      hitRect.setAttribute("x", "0");
+      hitRect.setAttribute("y", "0");
+      hitRect.setAttribute("width", String(imgW));
+      hitRect.setAttribute("height", String(imgH));
+      hitRect.setAttribute("fill", "transparent");
+      hitRect.setAttribute("stroke", "none");
+      hitRect.setAttribute("pointer-events", "all");
+      hitRect.setAttribute("data-subdrawing-id", String(sd.id));
+      group.appendChild(hitRect);
+
+      const img = document.createElementNS(svgNs, "image");
+      img.setAttribute("href", svgDataUrl);
+      img.setAttribute("x", "0");
+      img.setAttribute("y", "0");
+      img.setAttribute("width", String(imgW));
+      img.setAttribute("height", String(imgH));
+      img.setAttribute("preserveAspectRatio", "none");
+      img.setAttribute("pointer-events", "none");
+
+      group.appendChild(img);
+      shapeLayer.appendChild(group);
+    });
+  }
+
   const renderSettings = createSettingsRenderer({
     state,
     settingsPanel,
@@ -838,6 +1359,7 @@ export function createRenderer({
     renderStations,
     renderLines,
     renderShapes,
+    renderSubDrawings,
     renderTexts,
     moveLineInStack,
     applyStationType,
@@ -1249,6 +1771,7 @@ export function createRenderer({
     renderStations,
     renderLines,
     renderShapes,
+    renderSubDrawings,
     renderTexts,
     renderSettings,
     drawLinePreview,

@@ -74,7 +74,8 @@ const state = {
     station: null,
     lineType: null,
     lineGeometry: null,
-    shape: null
+    shape: null,
+    subDrawing: null
   },
   zoom: 1,
   pan: { x: 0, y: 0 },
@@ -82,6 +83,7 @@ const state = {
   edges: [],
   labels: [],
   shapes: [],
+  subDrawings: [],
   shapeLibrary: [],
   stationLibrary: [],
   selectedEntities: [],
@@ -89,7 +91,8 @@ const state = {
     station: true,
     line: true,
     text: true,
-    shape: true
+    shape: true,
+    subDrawing: true
   },
   tempLineColorOverrides: {},
   lineMoveMode: null,
@@ -241,6 +244,8 @@ const renderer = createRenderer({
   copySelection: () => clipboardController?.copySelection?.(),
   duplicateSelection: () => clipboardController?.duplicateSelection?.(),
   deleteSelectedEntity,
+  getSavedDrawings: () => drawingManager?.getSavedList?.() || [],
+  findDrawingById: (id) => drawingManager?.findSavedById?.(id) || null,
   onStateChanged: commitStateChange
 });
 
@@ -345,6 +350,9 @@ const eventBinder = createEventBinder({
   addLine,
   addText,
   addShape,
+  addSubDrawing,
+  getSavedDrawings: () => drawingManager?.getSavedList?.() || [],
+  findDrawingById: (id) => drawingManager?.findSavedById?.(id) || null,
   selectEntity,
   selectEntities,
   toggleEntitySelection,
@@ -881,6 +889,12 @@ function applyDrawingData(drawing, {
     paramValues: shape.paramValues && typeof shape.paramValues === "object" ? { ...shape.paramValues } : {}
   }));
 
+  state.subDrawings = Array.isArray(drawing.subDrawings) ? drawing.subDrawings.map((sd) => ({
+    ...sd,
+    scale: clamp(Number(sd.scale) || 0.5, 0.001, 10),
+    rotation: Number.isFinite(Number(sd.rotation)) ? Number(sd.rotation) : 0
+  })) : [];
+
   // 恢复导出的车站预设和图形类型
   if (Array.isArray(drawing.stationPresets) && drawing.stationPresets.length) {
     state.stationLibrary = drawing.stationPresets;
@@ -1184,6 +1198,7 @@ function computeNextCounter() {
     ...state.edges.map((item) => item.id),
     ...state.labels.map((item) => item.id),
     ...state.shapes.map((item) => item.id),
+    ...state.subDrawings.map((item) => item.id),
     ...state.lineTypes.map((item) => item.id)
   ];
 
@@ -1583,6 +1598,23 @@ function addShape(x, y, shapeId) {
   commitStateChange();
 }
 
+function addSubDrawing(x, y, drawingId, drawingName) {
+  const subDrawing = {
+    id: getNextId("subdrawing"),
+    drawingId,
+    x,
+    y,
+    scale: 0.5,
+    rotation: 0,
+    name: drawingName || "子绘图"
+  };
+
+  state.subDrawings.push(subDrawing);
+  renderer.renderSubDrawings();
+  selectEntity({ type: "subDrawing", id: subDrawing.id });
+  commitStateChange();
+}
+
 function selectEntity(entity) {
   selectEntities([entity]);
 }
@@ -1676,6 +1708,13 @@ function deleteSelectedEntity() {
     state.shapes = state.shapes.filter((shape) => !selectedShapeIds.has(shape.id));
   }
 
+  const selectedSubDrawingIds = new Set(
+    state.selectedEntities.filter((item) => item.type === "subDrawing").map((item) => item.id)
+  );
+  if (selectedSubDrawingIds.size) {
+    state.subDrawings = state.subDrawings.filter((sd) => !selectedSubDrawingIds.has(sd.id));
+  }
+
   clearSelection();
   commitStateChange();
 }
@@ -1718,6 +1757,11 @@ function normalizeEntities(entities) {
 
     if (type === "shape" && state.shapes.some((item) => item.id === id)) {
       normalized.push({ type, id });
+      return;
+    }
+
+    if (type === "subDrawing" && state.subDrawings.some((item) => item.id === id)) {
+      normalized.push({ type, id });
     }
   });
 
@@ -1728,6 +1772,7 @@ function rerenderScene() {
   renderer.renderStations();
   renderer.renderLines();
   renderer.renderShapes();
+  renderer.renderSubDrawings();
   renderer.renderTexts();
 }
 
