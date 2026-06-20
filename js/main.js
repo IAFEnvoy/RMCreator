@@ -895,12 +895,25 @@ function applyDrawingData(drawing, {
     rotation: Number.isFinite(Number(sd.rotation)) ? Number(sd.rotation) : 0
   })) : [];
 
-  // 恢复导出的车站预设和图形类型
+  // 合并绘图中包含的车站预设（增量添加，不覆盖本地已有的）
   if (Array.isArray(drawing.stationPresets) && drawing.stationPresets.length) {
-    state.stationLibrary = drawing.stationPresets;
+    const existingIds = new Set((Array.isArray(state.stationLibrary) ? state.stationLibrary : []).map((p) => String(p.id || "")));
+    drawing.stationPresets.forEach((preset) => {
+      if (preset && !existingIds.has(String(preset.id || ""))) {
+        state.stationLibrary.push(preset);
+        existingIds.add(String(preset.id || ""));
+      }
+    });
   }
+  // 合并绘图中包含的图形类型（增量添加，不覆盖本地已有的）
   if (Array.isArray(drawing.shapeTypes) && drawing.shapeTypes.length) {
-    state.shapeLibrary = drawing.shapeTypes;
+    const existingIds = new Set((Array.isArray(state.shapeLibrary) ? state.shapeLibrary : []).map((s) => String(s.id || "")));
+    drawing.shapeTypes.forEach((shape) => {
+      if (shape && !existingIds.has(String(shape.id || ""))) {
+        state.shapeLibrary.push(shape);
+        existingIds.add(String(shape.id || ""));
+      }
+    });
   }
 
   // 同步车站类型索引

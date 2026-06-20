@@ -11,6 +11,10 @@
   display: none;
 }
 
+.import-select-backdrop {
+  z-index: 40;
+}
+
 .line-manager-modal {
   width: min(1060px, calc(100% - 30px));
   height: min(680px, calc(100% - 30px));
