@@ -3088,7 +3088,8 @@ export function createStationManager({
     bind,
     open,
     close,
-    openImportSelection
+    openImportSelection,
+    persistStationLibrary
   };
 }
 

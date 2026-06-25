@@ -4109,6 +4109,7 @@ export function createShapeManager({
     open,
     close,
     openImportSelection,
+    persistShapeLibrary,
     undo,
     redo,
     copySelection: clipboard.copySelection,
