@@ -354,6 +354,18 @@ export function setPrimitiveParamBinding(primitive, key, binding) {
   };
 }
 
+function createSimpleTextWidth() {
+  let canvas;
+  return (text, fontSize, fontFamily) => {
+    if (typeof document === "undefined") return 0;
+    if (!canvas) canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return 0;
+    ctx.font = `${Number(fontSize) || 14}px ${String(fontFamily || "Segoe UI")}`;
+    return ctx.measureText(String(text || "")).width;
+  };
+}
+
 export function resolvePrimitiveFieldValue(primitive, parameters, key, paramType, fallback) {
   const binding = getPrimitiveParamBinding(primitive, key, paramType);
   if (!binding) {
@@ -372,12 +384,15 @@ export function resolvePrimitiveFieldValue(primitive, parameters, key, paramType
   const expr = bindExprs && typeof bindExprs === "object" ? String(bindExprs[key] || "").trim() : "";
   if (expr) {
     try {
-      const safeName = String(param.label || param.id || key).replace(/["'`\n\r\t\\]/g, "_");
+      const env = {};
+      (Array.isArray(parameters) ? parameters : []).forEach((p) => {
+        const safeName = String(p.label || p.id).replace(/["'`\n\r\t\\]/g, "_");
+        env[safeName] = normalizeShapeParameterDefault(p.type, p.defaultValue);
+      });
       // eslint-disable-next-line no-new-func
-      const fn = new Function("params", "Math", "Number", "String", "Boolean", `"use strict"; return (${expr});`);
-      const env = { [safeName]: rawValue };
-      const result = fn(env, Math, Number, String, Boolean);
-      return normalizeShapeParameterDefault(paramType, result);
+      const fn = new Function("params", "Math", "Number", "String", "Boolean", "textWidth", `"use strict"; return (${expr});`);
+      const resolved = fn(env, Math, Number, String, Boolean, createSimpleTextWidth());
+      return normalizeShapeParameterDefault(paramType, resolved);
     } catch {
       // 表达式无效，回退到原始值
     }

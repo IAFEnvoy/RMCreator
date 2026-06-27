@@ -23,13 +23,20 @@ export function evaluateExpression(expr, paramValues = {}) {
   try {
     const safeParams = {};
     Object.keys(paramValues).forEach((key) => {
-      // 只过滤掉可能破坏 JS 语法的字符（引号、反引号、换行等），保留空格和中英文
       const safeKey = key.replace(/["'`\n\r\t\\]/g, "_");
       safeParams[safeKey] = paramValues[key];
     });
+    const textWidth = (text, fontSize, fontFamily) => {
+      if (typeof document === "undefined") return 0;
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return 0;
+      ctx.font = `${Number(fontSize) || 14}px ${String(fontFamily || "Segoe UI")}`;
+      return ctx.measureText(String(text || "")).width;
+    };
     // eslint-disable-next-line no-new-func
-    const fn = new Function("params", "Math", "Number", "String", "Boolean", `"use strict"; return (${trimmed});`);
-    const result = fn(safeParams, Math, Number, String, Boolean);
+    const fn = new Function("params", "Math", "Number", "String", "Boolean", "textWidth", `"use strict"; return (${trimmed});`);
+    const result = fn(safeParams, Math, Number, String, Boolean, textWidth);
     return { ok: true, value: result };
   } catch (err) {
     return { ok: false, error: err.message || "表达式计算失败" };
@@ -148,7 +155,7 @@ export function createParameterEditorModal({ modal, state, colorPicker, onStateC
     let html = `
       <div class="param-editor-info">
         <div class="kv">编辑类型：${escapeHtml(typeLabel)}（已选择 ${count} 个）</div>
-        <div class="kv">点击 fx 按钮编写 JS 表达式，可引用其他参数（<code>params["参数名"]</code>）及 Math 函数</div>
+        <div class="kv">点击 fx 按钮编写 JS 表达式，可引用其他参数（<code>params["参数名"]</code>）及 Math 函数，可用 <code>textWidth(text, fontSize, fontFamily)</code> 计算文本宽度</div>
       </div>
       <div class="param-list">
     `;
@@ -279,7 +286,7 @@ export function createParameterEditorModal({ modal, state, colorPicker, onStateC
     const result = expr ? evaluateExpression(expr, env) : { ok: false };
 
     const varHints = Object.keys(env).map((key) =>
-      `<span class="param-var-hint" data-insert-var="${idx}" data-var-name="${escapeHtml(key)}">params.${escapeHtml(key)}</span>`
+      `<span class="param-var-hint" data-insert-var="${idx}" data-var-name="${escapeHtml(key)}" title="点击插入 params[&quot;${escapeHtml(key)}&quot;]">params.${escapeHtml(key)}</span>`
     ).join("");
 
     const previewHtml = result.ok
@@ -489,23 +496,24 @@ export function createParameterEditorModal({ modal, state, colorPicker, onStateC
     if (!currentContext) return [];
     const params = Array.isArray(currentContext.params) ? currentContext.params : [];
     const includeSelf = Boolean(currentContext?.includeSelf);
-    return params.map((param, idx) => {
-      const expr = String(param.expression || "").trim();
-      let finalValue = param.value;
-      if (expr) {
-        const env = buildExpressionEnv(params, idx, includeSelf);
-        const result = evaluateExpression(expr, env);
-        if (result.ok) {
-          finalValue = normalizeShapeParameterDefault(param.type, result.value);
+    return params
+      .filter((p) => !p._readonly)
+      .map((param, idx) => {
+        const expr = String(param.expression || "").trim();
+        let finalValue = param.value;
+        if (expr) {
+          const env = buildExpressionEnv(params, params.indexOf(param), includeSelf);
+          const result = evaluateExpression(expr, env);
+          if (result.ok) {
+            finalValue = normalizeShapeParameterDefault(param.type, result.value);
+          }
         }
-        // 如果表达式无效，保留原值
-      }
-      return {
-        ...param,
-        finalValue,
-        expression: expr || undefined
-      };
-    });
+        return {
+          ...param,
+          finalValue,
+          expression: expr || undefined
+        };
+      });
   };
 
   /**
@@ -535,19 +543,29 @@ export function createParameterEditorModal({ modal, state, colorPicker, onStateC
   const open = (context) => {
     if (!context) return;
     ensureReady();
+
+    // 合并 editable params 和 allParams（引用参数，只读）
+    const editableParams = (Array.isArray(context.params) ? context.params : []).map((p) => ({
+      name: p.name || "",
+      id: p.id || "",
+      type: p.type || "text",
+      value: p.value,
+      expression: p.expression || "",
+      options: p.options || [],
+      _readonly: Boolean(p._readonly)
+    }));
+    const refParams = Array.isArray(context.allParams) ? context.allParams
+      .filter((p) => !editableParams.some((ep) => ep.id === p.id))
+      .map((p) => ({
+        ...p,
+        _readonly: true
+      })) : [];
+
     currentContext = {
       type: context.type,
       entities: Array.isArray(context.entities) ? context.entities : [],
       includeSelf: Boolean(context.includeSelf),
-      params: (Array.isArray(context.params) ? context.params : []).map((p) => ({
-        name: p.name || "",
-        id: p.id || "",
-        type: p.type || "text",
-        value: p.value,
-        expression: p.expression || "",
-        options: p.options || [],
-        _readonly: Boolean(p._readonly)
-      }))
+      params: [...editableParams, ...refParams]
     };
     pendingOnApply = typeof context.onApply === "function" ? context.onApply : null;
 

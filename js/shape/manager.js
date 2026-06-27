@@ -1330,38 +1330,28 @@ export function createShapeManager({
       toggleWrap.appendChild(switchRoot);
       labelRow.appendChild(toggleWrap);
 
-      const paramSelect = document.createElement("select");
-      paramSelect.className = "shape-prop-param-select";
-      if (params.length) {
-        params.forEach((param) => {
-          const option = document.createElement("option");
-          option.value = param.id;
-          option.textContent = param.label;
-          paramSelect.appendChild(option);
-        });
-      } else {
-        const empty = document.createElement("option");
-        empty.value = "";
-        empty.textContent = "暂无可用参数";
-        paramSelect.appendChild(empty);
-      }
-      field.appendChild(paramSelect);
-
-      // fx 按钮 - 绑定表达式编辑器
+      // fx 按钮 — 参数模式激活时可见，用于编辑表达式
       const fxBtn = document.createElement("button");
       fxBtn.type = "button";
       fxBtn.className = "param-fx-toggle";
-      fxBtn.title = "参数表达式（支持 JS 运算，如 params.参数名 / 2）";
+      fxBtn.title = "编辑表达式（可引用参数，支持 JS 运算）";
       fxBtn.textContent = "fx";
       fxBtn.hidden = true;
       fxBtn.addEventListener("click", (e) => {
         e.stopPropagation();
-        if (!selectedParamId) return;
-        const boundParam = shapeParameters.find((p) => p.id === selectedParamId);
-        if (!boundParam) return;
         const exprObj = primitives[0]?.paramBindExpressions;
         const existingExpr = (exprObj && typeof exprObj === "object") ? String(exprObj[key] || "").trim() : "";
-        const currentVal = normalizeShapeParameterDefault(paramType, boundParam.defaultValue);
+        const currentVal = primitives[0][key];
+
+        // 构建所有可引用参数的描述（不限于当前 paramType）
+        const allParamDescriptors = shapeParameters.map((p) => ({
+          name: p.label,
+          id: p.id,
+          type: p.type,
+          value: normalizeShapeParameterDefault(p.type, p.defaultValue),
+          expression: "",
+          _readonly: p.type !== paramType
+        }));
 
         if (!paramEditor || typeof paramEditor.open !== "function") return;
         paramEditor.open({
@@ -1369,12 +1359,13 @@ export function createShapeManager({
           includeSelf: true,
           entities: primitives,
           params: [{
-            name: boundParam.label,
+            name: key,
             id: key,
             type: paramType,
             value: currentVal,
             expression: existingExpr || ""
           }],
+          allParams: allParamDescriptors,
           onApply: (result) => {
             if (!result || !Array.isArray(result.params) || !result.params.length) return;
             const applied = result.params[0];
@@ -1400,85 +1391,69 @@ export function createShapeManager({
       });
       field.appendChild(fxBtn);
 
-      // 预览值显示（参数模式激活时可见）
       const previewSpan = document.createElement("span");
       previewSpan.className = "shape-prop-param-preview";
       previewSpan.hidden = true;
       field.appendChild(previewSpan);
 
-      const bindings = primitives.map((item) => getPrimitiveParamBinding(item, key, paramType));
-      const firstBinding = bindings[0] || null;
-      const allSame = bindings.every((binding) => (
-        (binding?.paramId ?? null) === (firstBinding?.paramId ?? null)
-      ));
-      let selectedParamId = firstBinding?.paramId && params.some((param) => param.id === firstBinding.paramId)
-        ? firstBinding.paramId
-        : (params[0]?.id || "");
-
-      if (selectedParamId) {
-        paramSelect.value = selectedParamId;
-      }
-
-      toggle.disabled = !params.length;
-      if (!params.length) {
-        const typeLabel = shapeParameterTypeDefinitions[paramType]?.label || "同类型参数";
-        const disabledHint = `暂无可用${typeLabel}，请先在“参数列表”中添加。`;
-        toggleWrap.classList.add("is-disabled");
-        switchRoot.classList.add("is-disabled");
-        toggleWrap.title = disabledHint;
-        switchRoot.title = disabledHint;
-      }
-      toggle.checked = Boolean(params.length && selectedParamId && firstBinding && allSame);
+      const exprObj2 = primitives[0]?.paramBindExpressions;
+      const hasBinding = exprObj2 && typeof exprObj2 === "object" && Object.prototype.hasOwnProperty.call(exprObj2, key);
+      toggle.checked = hasBinding;
 
       const applyMode = () => {
-        const useParam = Boolean(toggle.checked && params.length);
-        paramSelect.hidden = !useParam;
-        paramSelect.disabled = !useParam;
-
+        const useParam = Boolean(toggle.checked);
+        // 同步 paramBindExpressions 状态，确保 re-render 后开关不丢失
         if (useParam) {
-          selectedParamId = paramSelect.value || params[0].id;
-          paramSelect.value = selectedParamId;
           primitives.forEach((item) => {
-            setPrimitiveParamBinding(item, key, { type: paramType, paramId: selectedParamId });
+            let o2 = getPrimitiveParamBindExpressions(item);
+            if (!o2 || typeof o2 !== "object") {
+              o2 = {};
+              item.paramBindExpressions = o2;
+            }
+            if (!Object.prototype.hasOwnProperty.call(o2, key)) {
+              o2[key] = "";
+            }
           });
         } else {
           primitives.forEach((item) => {
-            setPrimitiveParamBinding(item, key, null);
+            const o2 = getPrimitiveParamBindExpressions(item);
+            if (o2 && typeof o2 === "object") {
+              delete o2[key];
+              if (!Object.keys(o2).length) item.paramBindExpressions = undefined;
+            }
           });
         }
-
-        // 更新 fx 按钮和预览可见性
+        // 更新 UI
         fxBtn.hidden = !useParam;
         fxBtn.style.display = useParam ? "" : "none";
         previewSpan.hidden = !useParam;
         previewSpan.style.display = useParam ? "" : "none";
         if (useParam) {
-          const exprObj = primitives[0]?.paramBindExpressions;
-          const hasExpr = exprObj && typeof exprObj === "object" && Boolean(exprObj[key]);
+          const eObj = primitives[0]?.paramBindExpressions;
+          const hasExpr = eObj && typeof eObj === "object" && Boolean(String(eObj[key] || "").trim());
           fxBtn.classList.toggle("is-active", hasExpr);
         }
-        if (useParam && selectedParamId) {
-          const boundParam = shapeParameters.find((p) => p.id === selectedParamId);
-          if (boundParam) {
-            const rawVal = normalizeShapeParameterDefault(paramType, boundParam.defaultValue);
-            const exprObj = primitives[0]?.paramBindExpressions;
-            const expr = exprObj && typeof exprObj === "object" ? String(exprObj[key] || "").trim() : "";
-            let displayVal = String(formatParamPreviewValue(paramType, rawVal));
-            if (expr) {
-              try {
-                const safeName = String(boundParam.label || boundParam.id).replace(/["'`\n\r\t\\]/g, "_");
-                // eslint-disable-next-line no-new-func
-                const fn = new Function("params", "Math", "Number", "String", "Boolean", `"use strict"; return (${expr});`);
-                const resolved = fn({ [safeName]: rawVal }, Math, Number, String, Boolean);
-                displayVal = String(formatParamPreviewValue(paramType, resolved)) + `  (${expr})`;
-              } catch (e) {
-                displayVal = String(formatParamPreviewValue(paramType, rawVal)) + `  [错误]`;
-              }
+        if (useParam) {
+          const eObj = primitives[0]?.paramBindExpressions;
+          const expr = eObj && typeof eObj === "object" ? String(eObj[key] || "").trim() : "";
+          const rawVal = primitives[0][key];
+          let displayVal = String(formatParamPreviewValue(paramType, rawVal));
+          if (expr) {
+            try {
+              const env = {};
+              shapeParameters.forEach((p) => {
+                const safeName = String(p.label || p.id).replace(/["'`\n\r\t\\]/g, "_");
+                env[safeName] = normalizeShapeParameterDefault(p.type, p.defaultValue);
+              });
+              const fn = new Function("params", "Math", "Number", "String", "Boolean", "textWidth", `"use strict"; return (${expr});`);
+              const resolved = fn(env, Math, Number, String, Boolean, createTextWidthFn());
+              displayVal = String(formatParamPreviewValue(paramType, resolved)) + `  (${expr})`;
+            } catch (err) {
+              displayVal = String(formatParamPreviewValue(paramType, rawVal)) + `  [错误: ${err.message}]`;
             }
-            previewSpan.textContent = displayVal;
           }
+          previewSpan.textContent = displayVal;
         }
-
         onModeChange(useParam);
       };
 
@@ -1487,12 +1462,21 @@ export function createShapeManager({
         commit({ rerenderProps: true, refreshLibrary: false });
       });
 
-      paramSelect.addEventListener("change", () => {
-        applyMode();
-        commit({ rerenderProps: true, refreshLibrary: false });
-      });
-
       applyMode();
+    };
+
+    /**
+     * 表达式沙箱可用的 textWidth 函数 — 计算文本渲染宽度。
+     */
+    const createTextWidthFn = () => {
+      let canvas;
+      return (text, fontSize, fontFamily) => {
+        if (!canvas) canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return 0;
+        ctx.font = `${Number(fontSize) || 14}px ${String(fontFamily || "Segoe UI")}`;
+        return ctx.measureText(String(text || "")).width;
+      };
     };
 
     const addNumber = (labelText, key, options = {}) => {
