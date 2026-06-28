@@ -1,16 +1,7 @@
+/* 加载动画由 index.html 内联 style 定义，此处仅作为后备 */
 #appLoader {
-  position: fixed;
-  inset: 0;
-  z-index: 9999;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--bg, #f5f6fa);
-  transition: opacity 0.3s ease;
-}
-
-#appLoader[hidden] {
-  display: none;
+  background: transparent;
+  pointer-events: none;
 }
 
 .app {
