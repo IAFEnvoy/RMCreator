@@ -367,19 +367,7 @@ function createSimpleTextWidth() {
 }
 
 export function resolvePrimitiveFieldValue(primitive, parameters, key, paramType, fallback) {
-  const binding = getPrimitiveParamBinding(primitive, key, paramType);
-  if (!binding) {
-    return primitive?.[key] ?? fallback;
-  }
-
-  const param = (Array.isArray(parameters) ? parameters : []).find((item) => item.id === binding.paramId && item.type === paramType);
-  if (!param) {
-    return primitive?.[key] ?? fallback;
-  }
-
-  const rawValue = normalizeShapeParameterDefault(paramType, param.defaultValue);
-
-  // 检查绑定表达式
+  // 优先检查绑定表达式（无需 binding 也可生效）
   const bindExprs = primitive?.paramBindExpressions;
   const expr = bindExprs && typeof bindExprs === "object" ? String(bindExprs[key] || "").trim() : "";
   if (expr) {
@@ -392,13 +380,27 @@ export function resolvePrimitiveFieldValue(primitive, parameters, key, paramType
       // eslint-disable-next-line no-new-func
       const fn = new Function("params", "Math", "Number", "String", "Boolean", "textWidth", `"use strict"; return (${expr});`);
       const resolved = fn(env, Math, Number, String, Boolean, createSimpleTextWidth());
+      // 无 binding 时 paramType 可能为空，此时返回表达式结果本身
+      if (!paramType || !shapeParameterTypeDefinitions[paramType]) {
+        return resolved;
+      }
       return normalizeShapeParameterDefault(paramType, resolved);
     } catch {
-      // 表达式无效，回退到原始值
+      // 表达式无效，回退
     }
   }
 
-  return rawValue;
+  const binding = getPrimitiveParamBinding(primitive, key, paramType);
+  if (!binding) {
+    return primitive?.[key] ?? fallback;
+  }
+
+  const param = (Array.isArray(parameters) ? parameters : []).find((item) => item.id === binding.paramId && item.type === paramType);
+  if (!param) {
+    return primitive?.[key] ?? fallback;
+  }
+
+  return normalizeShapeParameterDefault(paramType, param.defaultValue);
 }
 
 export function resolvePrimitiveWithParameters(primitive, parameters) {
@@ -408,12 +410,25 @@ export function resolvePrimitiveWithParameters(primitive, parameters) {
 
   const result = { ...primitive };
   const bindings = getPrimitiveParamBindings(primitive);
-  Object.entries(bindings).forEach(([key, binding]) => {
-    if (!binding?.type || !shapeParameterTypeDefinitions[binding.type]) {
+  const expressions = getPrimitiveParamBindExpressions(primitive);
+
+  // 合并所有需要解析的字段：来自 bindings 或 paramBindExpressions
+  const allKeys = new Set([...Object.keys(bindings), ...Object.keys(expressions)]);
+
+  allKeys.forEach((key) => {
+    if (!bindings[key] && !String(expressions[key] || "").trim()) {
       return;
     }
 
-    result[key] = resolvePrimitiveFieldValue(primitive, parameters, key, binding.type, primitive[key]);
+    const binding = bindings[key];
+    const paramType = binding?.type;
+
+    if (paramType && shapeParameterTypeDefinitions[paramType]) {
+      result[key] = resolvePrimitiveFieldValue(primitive, parameters, key, paramType, primitive[key]);
+    } else {
+      // 无 binding 类型时，表达式求值后不做类型规范化
+      result[key] = resolvePrimitiveFieldValue(primitive, parameters, key, null, primitive[key]);
+    }
   });
 
   return result;

@@ -1230,7 +1230,7 @@ export function createShapeManager({
 
   function renderPrimitiveFields(container, shape, indices, primitives) {
     const shapeParameters = normalizeShapeParameters(shape.parameters);
-    shape.parameters = shapeParameters;
+    // 注意：不写回 shape.parameters，避免替换数组后使参数列表中的 param 引用过期
     const primary = primitives[0];
 
     const commit = ({ rerenderProps = false, refreshLibrary = true } = {}) => {
@@ -2026,11 +2026,13 @@ export function createShapeManager({
       defaultLabel.textContent = "默认值";
       defaultBlock.appendChild(defaultLabel);
 
-      const commitDefault = ({ refreshLibrary = true } = {}) => {
+      const commitDefault = ({ refreshLibrary = true, skipProperties = false } = {}) => {
         syncShapeSvg(shape, { preserveParameters: true });
         persistShapeLibrary();
         renderEditorCanvas(shape);
-        renderPropertiesPanel(shape);
+        if (!skipProperties) {
+          renderPropertiesPanel(shape);
+        }
         if (refreshLibrary) {
           renderShapeLibraryList();
           renderSubmenu();
@@ -2539,22 +2541,16 @@ export function createShapeManager({
       input.type = "number";
       input.step = "0.1";
       input.value = String(toNumber(param.defaultValue, 0));
-      input.addEventListener("input", () => {
+      // 只用 change 事件（blur/回车），避免 input 事件中途拦截负数/小数
+      const applyNumberChange = () => {
         const previous = param.defaultValue;
         onBeforeDefaultChange?.(previous);
         const normalized = normalizeNumber(input.value, 0, -100000, 100000);
         param.defaultValue = normalized;
         input.value = String(normalized);
         commitDefault({ refreshLibrary: true });
-      });
-      input.addEventListener("change", () => {
-        const previous = param.defaultValue;
-        onBeforeDefaultChange?.(previous);
-        const normalized = normalizeNumber(input.value, 0, -100000, 100000);
-        param.defaultValue = normalized;
-        input.value = String(normalized);
-        commitDefault({ refreshLibrary: true });
-      });
+      };
+      input.addEventListener("change", applyNumberChange);
       return input;
     }
 
@@ -2582,11 +2578,12 @@ export function createShapeManager({
     const input = document.createElement("input");
     input.type = "text";
     input.value = String(param.defaultValue || "");
+    // input 事件仅做轻量同步（避免 stale param 后又被 renderPropertiesPanel 替换数组）
     input.addEventListener("input", () => {
       const previous = param.defaultValue;
       onBeforeDefaultChange?.(previous);
       param.defaultValue = String(input.value || "");
-      commitDefault({ refreshLibrary: true });
+      commitDefault({ refreshLibrary: false, skipProperties: true });
     });
     input.addEventListener("change", () => {
       const previous = param.defaultValue;
