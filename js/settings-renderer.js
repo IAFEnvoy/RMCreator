@@ -1908,20 +1908,57 @@ export function createSettingsRenderer({
     }
 
     const source = station.textValues && typeof station.textValues === "object"
-      ? station.textValues
+      ? { ...station.textValues }
       : {};
-    const normalized = {};
+    const cardList = Array.isArray(cards) ? cards : [];
 
-    (Array.isArray(cards) ? cards : []).forEach((card) => {
+    // 收集旧 source 中不属于新卡片集的 key（可能来自上一个类型的 textCards）
+    const newIdSet = new Set(cardList.map((c) => String(c?.id || "").trim()).filter(Boolean));
+    const orphanEntries = Object.entries(source).filter(([key]) => key && !newIdSet.has(key));
+
+    const normalized = {};
+    const usedOrphanKeys = new Set();
+
+    cardList.forEach((card, index) => {
       const id = String(card?.id || "").trim();
-      if (!id) {
-        return;
-      }
+      if (!id) return;
 
       if (Object.prototype.hasOwnProperty.call(source, id)) {
+        // 当前卡片 ID 在 source 中存在：直接保留
         normalized[id] = normalizeStationTextContent(source[id], Boolean(card?.allowMultiline));
       } else {
-        normalized[id] = normalizeStationTextContent(card?.defaultValue ?? "", Boolean(card?.allowMultiline));
+        // 尝试从孤儿条目中匹配
+        let migratedValue = null;
+        let matchedOrphanKey = null;
+
+        // 策略1：按标签匹配（source key 对应卡片在旧预设中有相同 label）
+        // 这里只能按索引做近似匹配
+        // 策略2：按孤儿条目在 source 中的顺序，匹配到新卡片同索引
+        if (orphanEntries.length > 0 && index < orphanEntries.length) {
+          const orphanKey = orphanEntries[index][0];
+          if (!usedOrphanKeys.has(orphanKey)) {
+            migratedValue = orphanEntries[index][1];
+            matchedOrphanKey = orphanKey;
+          }
+        }
+
+        // 策略3：如果按索引不匹配，尝试第一个未使用的孤儿条目
+        if (!migratedValue) {
+          for (const [oKey, oVal] of orphanEntries) {
+            if (!usedOrphanKeys.has(oKey) && String(oVal || "").trim()) {
+              migratedValue = oVal;
+              matchedOrphanKey = oKey;
+              break;
+            }
+          }
+        }
+
+        if (migratedValue != null && String(migratedValue || "").trim()) {
+          normalized[id] = normalizeStationTextContent(migratedValue, Boolean(card?.allowMultiline));
+          if (matchedOrphanKey) usedOrphanKeys.add(matchedOrphanKey);
+        } else {
+          normalized[id] = normalizeStationTextContent(card?.defaultValue ?? "", Boolean(card?.allowMultiline));
+        }
       }
     });
 
