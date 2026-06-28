@@ -333,18 +333,30 @@ export function createStationManager({
       if (!preset) return;
       const useParam = stationRotationUseParam.checked;
       if (useParam) {
-        // 绑定到第一个 number 类型参数
-        const customParams = normalizeShapeParameters(preset.params);
-        const firstNumber = customParams.find((p) => p.type === "number");
-        if (firstNumber) {
-          preset.rotationParamId = firstNumber.id;
-          // 将当前输入值写入参数默认值
-          preset.params = customParams.map((p) =>
-            p.id === firstNumber.id
-              ? { ...p, defaultValue: Number(stationRotationValue.value) || 0 }
-              : p
-          );
+        // 绑定到第一个 number 类型参数（不存在则自动创建）
+        let customParams = normalizeShapeParameters(preset.params);
+        let firstNumber = customParams.find((p) => p.type === "number");
+        if (!firstNumber) {
+          // 自动创建一个 number 参数
+          const newParam = {
+            id: createStationPresetId(),
+            type: "number",
+            label: "旋转角度",
+            defaultValue: Number(stationRotationValue.value) || 0,
+            conditions: [],
+            extensions: {}
+          };
+          preset.params = [...customParams, newParam];
+          firstNumber = preset.params[preset.params.length - 1];
         }
+        preset.rotationParamId = firstNumber.id;
+        // 将当前输入值写入参数默认值
+        preset.params = preset.params.map((p) => {
+          const pid = String(p?.id || "");
+          if (pid !== firstNumber.id) return p;
+          const val = Number(stationRotationValue.value);
+          return { ...p, defaultValue: Number.isFinite(val) ? val : (Number(p.defaultValue) || 0) };
+        });
       } else {
         preset.rotation = Number(stationRotationValue.value) || 0;
         delete preset.rotationParamId;
