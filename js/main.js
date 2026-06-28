@@ -1824,6 +1824,18 @@ function applyStationType(station, typeIndex) {
     return;
   }
 
+  // 保存旧数据用于迁移
+  const oldTextValues = { ...(station.textValues || {}) };
+  const oldTextStyleValues = { ...(station.textStyleValues || {}) };
+  const oldParamValues = { ...(station.paramValues || {}) };
+  const oldTextPlacement = station.textPlacement && typeof station.textPlacement === "object"
+    ? { ...station.textPlacement }
+    : {};
+  // 获取旧类型的 textCards（在修改状态之前）
+  const oldCards = getTextCardsForPreset(getStationPresetByTypeIndex(station.stationTypeIndex));
+  const oldCardLabelMap = new Map(oldCards.map(c => [c.label, c.id]));
+  const oldCardIdSet = new Set(Object.keys(oldTextValues));
+
   station.name = sourceType.name;
   station.radius = Number(sourceType.radius) || 10;
   station.oval = Boolean(sourceType.oval);
@@ -1832,6 +1844,117 @@ function applyStationType(station, typeIndex) {
   station.textValues = resolveStationTextDefaultsByTypeIndex(typeIndex);
   station.textStyleValues = resolveStationTextStyleDefaultsByTypeIndex(typeIndex);
   station.textPlacement = resolveStationTextPlacementByTypeIndex(typeIndex);
+
+  // --- 数据迁移：尽量保留旧数据 ---
+
+  // 获取新类型的 textCards
+  const newCards = getTextCardsForPreset(sourceType);
+  const newCardIds = new Set(Object.keys(station.textValues));
+  const usedCardIds = new Set();
+
+  // 1. 迁移 textValues：优先按 cardId 匹配，其次按标签匹配，最后按索引匹配
+  Object.entries(oldTextValues).forEach(([oldCardId, oldValue]) => {
+    if (String(oldValue || "").trim() === "") return;
+
+    const assign = (targetId) => {
+      station.textValues[targetId] = oldValue;
+      usedCardIds.add(targetId);
+    };
+
+    // 优先：相同 cardId
+    if (newCardIds.has(oldCardId)) {
+      assign(oldCardId);
+      return;
+    }
+
+    // 其次：按标签匹配
+    const oldCard = oldCards.find(c => c.id === oldCardId);
+    const oldLabel = oldCard?.label || "";
+    if (oldLabel.trim()) {
+      const newId = findUnusedCardByLabel(newCards, oldLabel, usedCardIds);
+      if (newId) { assign(newId); return; }
+    }
+
+    // 最后：按索引位置匹配
+    const oldIndex = oldCards.findIndex(c => c.id === oldCardId);
+    if (oldIndex >= 0 && oldIndex < newCards.length) {
+      const targetCard = newCards[oldIndex];
+      if (!usedCardIds.has(targetCard.id)) {
+        assign(targetCard.id);
+      }
+    }
+  });
+
+  // 2. 迁移 textStyleValues：优先按 cardId，其次按标签，最后按索引
+  const usedStyleCardIds = new Set();
+  Object.entries(oldTextStyleValues).forEach(([oldCardId, oldStyle]) => {
+    if (!oldStyle || typeof oldStyle !== "object") return;
+
+    const assign = (targetId) => {
+      station.textStyleValues[targetId] = { ...oldStyle };
+      usedStyleCardIds.add(targetId);
+    };
+
+    if (newCardIds.has(oldCardId)) {
+      assign(oldCardId);
+    } else {
+      const oldCard = oldCards.find(c => c.id === oldCardId);
+      const oldLabel = oldCard?.label || "";
+      if (oldLabel.trim()) {
+        const newId = findUnusedCardByLabel(newCards, oldLabel, usedStyleCardIds);
+        if (newId) { assign(newId); return; }
+      }
+      const oldIndex = oldCards.findIndex(c => c.id === oldCardId);
+      if (oldIndex >= 0 && oldIndex < newCards.length) {
+        const targetCard = newCards[oldIndex];
+        if (!usedStyleCardIds.has(targetCard.id)) {
+          assign(targetCard.id);
+        }
+      }
+    }
+  });
+
+  // 3. 迁移 paramValues：保留新旧类型共有的参数值
+  if (oldParamValues && typeof oldParamValues === "object") {
+    Object.entries(oldParamValues).forEach(([paramId, oldValue]) => {
+      if (Object.prototype.hasOwnProperty.call(station.paramValues, paramId)) {
+        station.paramValues[paramId] = oldValue;
+      }
+    });
+  }
+
+  // 4. 迁移 textPlacement：保留旧值
+  if (oldTextPlacement.slot) {
+    station.textPlacement.slot = oldTextPlacement.slot;
+  }
+  if (oldTextPlacement.distance != null) {
+    station.textPlacement.distance = oldTextPlacement.distance;
+  }
+  if (oldTextPlacement.distanceBinding && typeof oldTextPlacement.distanceBinding === "object") {
+    station.textPlacement.distanceBinding = { ...oldTextPlacement.distanceBinding };
+  }
+  if (oldTextPlacement.lineGap != null) {
+    station.textPlacement.lineGap = oldTextPlacement.lineGap;
+  }
+  if (oldTextPlacement.lineGapBinding && typeof oldTextPlacement.lineGapBinding === "object") {
+    station.textPlacement.lineGapBinding = { ...oldTextPlacement.lineGapBinding };
+  }
+}
+
+/** 从预设中获取有效的 textCards 列表 */
+function getTextCardsForPreset(preset) {
+  if (!preset) return [];
+  const cards = Array.isArray(preset.textCards) ? preset.textCards : [];
+  return cards.map((c, i) => ({
+    id: String(c?.id || `card-${i + 1}`),
+    label: String(c?.label || `文本 ${i + 1}`).trim()
+  }));
+}
+
+/** 在卡片列表中按标签查找未被使用的卡片 id */
+function findUnusedCardByLabel(cards, label, usedIds) {
+  const match = cards.find(c => c.label === label && !usedIds.has(c.id));
+  return match ? match.id : null;
 }
 
 function resolveStationTextDefaultsByTypeIndex(typeIndex) {

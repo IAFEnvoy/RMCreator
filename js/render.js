@@ -1194,7 +1194,8 @@ export function createRenderer({
       if (!visible || card.locked) return;
       const rawTxt = (node.textValues && typeof node.textValues === "object"
         ? node.textValues[card.id] : null) ?? card.defaultValue ?? "";
-      if (!rawTxt) return;
+      const rawStr = String(rawTxt).trim();
+      if (!rawStr) return;
       const allowMultiline = Boolean(card.allowMultiline);
       const lines = allowMultiline ? String(rawTxt).split("\n") : [String(rawTxt)];
       const fontSize = Math.max(1, Number(

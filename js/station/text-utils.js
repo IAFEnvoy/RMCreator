@@ -371,6 +371,10 @@ export function appendStationTexts({
       allowMultiline
     );
     const lines = allowMultiline ? textValue.split("\n") : [textValue];
+    // 全部行为空（仅空白字符）时，跳过该文本块
+    if (!lines.some((line) => String(line || "").trim().length > 0)) {
+      return null;
+    }
     const styleOverride = textStyleMap && typeof textStyleMap === "object"
       ? textStyleMap[card.id]
       : null;
