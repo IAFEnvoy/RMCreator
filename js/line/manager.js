@@ -526,19 +526,19 @@ export function createLineManager({
       });
 
       const removeBtn = row.querySelector("[data-remove-color-index]");
-      // disable if only one color or if any segment references this palette index
+      // disable only if any segment references this palette index
       const isReferenced = (state.lineManager.draft?.segments || []).some((seg) => seg.colorMode === "palette" && Number(seg.paletteIndex || 0) === index);
-      removeBtn.disabled = draft.colorList.length <= 1 || isReferenced;
+      removeBtn.disabled = isReferenced;
       if (removeBtn.disabled) {
         const wrapper = document.createElement("span");
         wrapper.className = "disabled-wrapper";
-        wrapper.title = draft.colorList.length <= 1 ? "至少需要保留一种颜色" : "该颜色已被小线条引用，无法删除";
+        wrapper.title = "该颜色已被小线条引用，无法删除";
         removeBtn.parentNode.replaceChild(wrapper, removeBtn);
         wrapper.appendChild(removeBtn);
       }
       removeBtn.addEventListener("click", () => {
         const liveDraft = state.lineManager.draft;
-        if (!liveDraft || liveDraft.colorList.length <= 1) {
+        if (!liveDraft) {
           return;
         }
         // prevent deleting a color that is referenced
@@ -550,7 +550,7 @@ export function createLineManager({
         liveDraft.colorList.splice(index, 1);
         liveDraft.segments.forEach((segment) => {
           if (segment.colorMode === "palette") {
-            segment.paletteIndex = clamp(segment.paletteIndex || 0, 0, liveDraft.colorList.length - 1);
+            segment.paletteIndex = clamp(segment.paletteIndex || 0, 0, Math.max(0, liveDraft.colorList.length - 1));
           }
         });
         autoSaveDraft({ syncUsage: false });

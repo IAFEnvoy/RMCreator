@@ -8,7 +8,7 @@ import {
 } from "./utils.js";
 
 const historyStorageKey = "rmcreator.colorHistory.v1";
-const maxHistoryItems = 12;
+const maxHistoryItems = 20;
 
 export function createColorPickerModal({ elements }) {
   const {

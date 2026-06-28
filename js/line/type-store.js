@@ -88,10 +88,6 @@ export function normalizeLineType(raw) {
       }
     }
 
-    if (colorMode === "palette" && colorList.length === 0) {
-      colorList.push(legacyColor);
-    }
-
     const paletteMax = Math.max(0, colorList.length - 1);
     const paletteIndex = clamp(Number(seg.paletteIndex) || 0, 0, paletteMax);
 
@@ -106,10 +102,6 @@ export function normalizeLineType(raw) {
       fixedColor: fixedColorValue
     };
   });
-
-  if (!colorList.length) {
-    colorList.push("#2f5d9d");
-  }
 
   const source = raw.source === "default" || raw.source === "preset"
     ? raw.source
