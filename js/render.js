@@ -762,13 +762,13 @@ export function createRenderer({
     return null;
   }
 
-  /** 解析车站旋转角度：若绑定了参数，从 runtimeParams 获取；否则使用直接值 */
+  /** 解析车站旋转角度：优先参数绑定，其次直接值 */
   function resolveStationRotation(station, runtimeParamMap) {
     const paramId = station?.rotationParamId;
     if (paramId && runtimeParamMap) {
       const entry = runtimeParamMap.get(paramId);
-      if (entry && entry.type === "number") {
-        return Number.isFinite(Number(entry.value)) ? Number(entry.value) : 0;
+      if (entry && entry.type === "number" && Number.isFinite(Number(entry.value))) {
+        return Number(entry.value);
       }
     }
     return Number.isFinite(Number(station?.rotation)) ? Number(station.rotation) : 0;

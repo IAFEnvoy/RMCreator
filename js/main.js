@@ -1467,6 +1467,15 @@ function addStation(x, y, typeIndex) {
     textPlacement: resolveStationTextPlacementByTypeIndex(typeIndex)
   };
 
+  // 从预设继承旋转角度
+  const preset = getStationPresetByTypeIndex(typeIndex);
+  if (preset) {
+    station.rotation = Number.isFinite(Number(preset.rotation)) ? Number(preset.rotation) : 0;
+    if (preset.rotationParamId) {
+      station.rotationParamId = preset.rotationParamId;
+    }
+  }
+
   state.nodes.push(station);
   renderer.renderStations();
   selectEntity({ type: "station", id: station.id });
@@ -1542,6 +1551,15 @@ function insertStationOnLine({ edgeId, point, stationTypeIndex, stationId, commi
       textStyleValues: resolveStationTextStyleDefaultsByTypeIndex(stationTypeIndex),
       textPlacement: resolveStationTextPlacementByTypeIndex(stationTypeIndex)
     };
+
+    // 从预设继承旋转角度
+    const preset = getStationPresetByTypeIndex(stationTypeIndex);
+    if (preset) {
+      station.rotation = Number.isFinite(Number(preset.rotation)) ? Number(preset.rotation) : 0;
+      if (preset.rotationParamId) {
+        station.rotationParamId = preset.rotationParamId;
+      }
+    }
 
     state.nodes.push(station);
   } else {
