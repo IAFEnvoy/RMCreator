@@ -710,7 +710,7 @@ export function createRenderer({
     const shapeRenderScale = 0.25;
     const cx = parsed.minX + parsed.width / 2;
     const cy = parsed.minY + parsed.height / 2;
-    const rotation = Number.isFinite(Number(station.rotation)) ? Number(station.rotation) : 0;
+    const rotation = resolveStationRotation(station, runtimeParams);
 
     group.setAttribute("transform", `translate(${Number(station.x) || 0} ${Number(station.y) || 0}) rotate(${rotation})`);
 
@@ -760,6 +760,18 @@ export function createRenderer({
     }
 
     return null;
+  }
+
+  /** 解析车站旋转角度：若绑定了参数，从 runtimeParams 获取；否则使用直接值 */
+  function resolveStationRotation(station, runtimeParamMap) {
+    const paramId = station?.rotationParamId;
+    if (paramId && runtimeParamMap) {
+      const entry = runtimeParamMap.get(paramId);
+      if (entry && entry.type === "number") {
+        return Number.isFinite(Number(entry.value)) ? Number(entry.value) : 0;
+      }
+    }
+    return Number.isFinite(Number(station?.rotation)) ? Number(station.rotation) : 0;
   }
 
   function renderStationTextsFallback(group, station, preset) {
@@ -1114,7 +1126,7 @@ export function createRenderer({
           const shapeSvg = buildRenderableShapeSvg(shapeDef, paramValues);
           const parsed = parseShapeSvgContent(shapeSvg);
           if (parsed && parsed.nodes.length) {
-            const rotation = Number.isFinite(Number(node.rotation)) ? Number(node.rotation) : 0;
+            const rotation = resolveStationRotation(node, runtimeParams);
             const shapeRenderScale = 0.25;
             const cx = parsed.minX + parsed.width / 2;
             const cy = parsed.minY + parsed.height / 2;

@@ -122,6 +122,20 @@
   align-items: center;
 }
 
+.station-rotation-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.station-rotation-row input[type="number"] {
+  flex: 1;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 6px 8px;
+  background: #fff;
+}
+
 .station-line-gap-controls {
   grid-template-columns: 88px auto 1fr 1fr;
 }

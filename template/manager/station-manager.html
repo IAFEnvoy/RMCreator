@@ -40,6 +40,16 @@
           <label for="stationShapeSelect">图形选择</label>
           <select id="stationShapeSelect"></select>
         </div>
+        <div class="field">
+          <label for="stationRotationValue">旋转角度</label>
+          <div class="station-rotation-row">
+            <input id="stationRotationValue" type="number" min="-360" max="360" step="1" value="0" />
+            <label class="toggle-switch" for="stationRotationUseParam" title="参数">
+              <input id="stationRotationUseParam" class="toggle-checkbox" type="checkbox" />
+              <span class="toggle-slider" aria-hidden="true"></span>
+            </label>
+          </div>
+        </div>
       </div>
       <section class="station-text-placement" id="stationTextPlacementPanel">
         <div class="station-placement-row">

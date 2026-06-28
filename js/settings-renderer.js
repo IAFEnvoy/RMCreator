@@ -763,10 +763,31 @@ export function createSettingsRenderer({
     `;
 
     const safeRotation = Number.isFinite(Number(station.rotation)) ? Number(station.rotation) : 0;
+    const rotationParamId = String(station.rotationParamId || "").trim();
+    const hasRotationParam = Boolean(rotationParamId);
+    const numberParams = stationParams.filter((p) => p.type === "number" && !p.locked);
+    const rotationParamOptions = numberParams
+      .map((p) => `<option value="${escapeHtml(p.id)}" ${p.id === rotationParamId ? "selected" : ""}>${escapeHtml(p.label)}</option>`)
+      .join("");
     const rotationHtml = `
       <div class="field">
-        <label for="stationRotationInput">旋转角度</label>
-        <input id="stationRotationInput" type="number" min="-360" max="360" step="1" value="${safeRotation}" />
+        <div class="shape-prop-label-row">
+          <label class="shape-prop-label" for="stationRotationInput">旋转角度</label>
+          <div class="shape-prop-param-toggle">
+            <span>参数</span>
+            <label class="toggle-switch" for="stationRotationParamToggle">
+              <input id="stationRotationParamToggle" class="toggle-checkbox" type="checkbox" ${hasRotationParam ? "checked" : ""} />
+              <span class="toggle-slider" aria-hidden="true"></span>
+            </label>
+          </div>
+        </div>
+        <div class="station-rotation-value" ${hasRotationParam ? "hidden" : ""}>
+          <input id="stationRotationInput" type="number" min="-360" max="360" step="1" value="${safeRotation}" />
+        </div>
+        <div class="station-rotation-param" ${hasRotationParam ? "" : "hidden"}>
+          <select id="stationRotationParamSelect">${rotationParamOptions}</select>
+          <span style="margin-left:8px;font-size:12px;color:var(--muted-text,#8e98a9)">当前值: ${renderCurrentParamValue(station, numberParams, rotationParamId)}</span>
+        </div>
       </div>
     `;
 
@@ -834,12 +855,50 @@ export function createSettingsRenderer({
     stationTypeSelect.addEventListener("change", () => {
       const nextIndex = Number(stationTypeSelect.value);
       applyStationType(station, nextIndex);
-      renderStations();
       renderSettings();
+      renderStations();
       onStateChanged?.();
     });
 
     const stationRotationInput = document.getElementById("stationRotationInput");
+    const stationRotationParamToggle = document.getElementById("stationRotationParamToggle");
+    const stationRotationParamSelect = document.getElementById("stationRotationParamSelect");
+    const rotationValueDiv = settingsBody.querySelector(".station-rotation-value");
+    const rotationParamDiv = settingsBody.querySelector(".station-rotation-param");
+
+    const updateRotationDisplay = () => {
+      const useParam = stationRotationParamToggle?.checked;
+      if (rotationValueDiv) rotationValueDiv.hidden = useParam;
+      if (rotationParamDiv) rotationParamDiv.hidden = !useParam;
+    };
+
+    stationRotationParamToggle?.addEventListener("change", () => {
+      if (stationRotationParamToggle.checked) {
+        station.rotationParamId = stationRotationParamSelect?.value || "";
+        // 把 rotation 值写进对应参数
+        if (station.rotationParamId && station.paramValues) {
+          station.paramValues[station.rotationParamId] = Number(stationRotationInput?.value) || 0;
+        }
+      } else {
+        // 取消绑定后，从参数中恢复 rotation 值
+        if (station.rotationParamId && station.paramValues) {
+          station.rotation = Number(station.paramValues[station.rotationParamId]) || 0;
+        }
+        delete station.rotationParamId;
+      }
+      updateRotationDisplay();
+      renderStations();
+      renderSettings();
+      onStateChanged?.({ coalesceKey: "station-rotation-bind" });
+    });
+
+    stationRotationParamSelect?.addEventListener("change", () => {
+      station.rotationParamId = stationRotationParamSelect.value;
+      renderStations();
+      renderSettings();
+      onStateChanged?.({ coalesceKey: "station-rotation-bind" });
+    });
+
     stationRotationInput?.addEventListener("change", () => {
       station.rotation = Number(stationRotationInput.value) || 0;
       stationRotationInput.value = String(station.rotation);
@@ -987,8 +1046,8 @@ export function createSettingsRenderer({
 
       const nextIndex = Number(batchStationTypeSelect.value);
       stations.forEach((station) => applyStationType(station, nextIndex));
-      renderStations();
       renderSettings();
+      renderStations();
       onStateChanged?.();
     });
 
@@ -1900,6 +1959,16 @@ export function createSettingsRenderer({
 
       station.paramValues[descriptor.id] = descriptor.defaultValue;
     });
+  }
+
+  /** 获取参数化旋转的当前值显示文本 */
+  function renderCurrentParamValue(station, numberParams, paramId) {
+    if (!paramId) return "0°";
+    const param = numberParams.find((p) => p.id === paramId);
+    const val = param
+      ? normalizeShapeParameterDefault("number", station.paramValues?.[paramId] ?? param.defaultValue)
+      : (station.paramValues?.[paramId] ?? 0);
+    return `${Number(val) || 0}°`;
   }
 
   function ensureStationTextValues(station, cards) {

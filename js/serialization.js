@@ -56,6 +56,8 @@ function sanitizeStationPresets(library) {
       virtualNode: Boolean(preset.virtualNode),
       radius: Number.isFinite(Number(preset.radius)) ? Number(preset.radius) : 12,
       oval: Boolean(preset.oval),
+      rotation: Number.isFinite(Number(preset.rotation)) ? Number(preset.rotation) : 0,
+      rotationParamId: String(preset.rotationParamId || "").trim() || undefined,
       shapeParamSettings: structuredClone(preset.shapeParamSettings || {}),
       paramExpressions: preset.paramExpressions && typeof preset.paramExpressions === "object"
         ? { ...preset.paramExpressions }
@@ -211,6 +213,7 @@ function sanitizeNodes(rawNodes) {
         oval: Boolean(node?.oval),
         stationTypeIndex: Number.isInteger(node?.stationTypeIndex) ? node.stationTypeIndex : 0,
         rotation: Number.isFinite(Number(node?.rotation)) ? Number(node.rotation) : 0,
+        rotationParamId: String(node?.rotationParamId || "").trim() || undefined,
         paramValues,
         paramExpressions,
         textValues,

@@ -69,6 +69,8 @@ export function createStationManager({
   let stationTextDistanceUseParam = null;
   let stationTextDistanceValue = null;
   let stationTextDistanceParamSelect = null;
+  let stationRotationUseParam = null;
+  let stationRotationValue = null;
   let stationVirtualToggle = null;
   let stationPreviewResetBtn = null;
   let stationPreviewCanvasWrap = null;
@@ -114,6 +116,8 @@ export function createStationManager({
     stationTextDistanceUseParam = getEl("#stationTextDistanceUseParam");
     stationTextDistanceValue = getEl("#stationTextDistanceValue");
     stationTextDistanceParamSelect = getEl("#stationTextDistanceParamSelect");
+    stationRotationUseParam = getEl("#stationRotationUseParam");
+    stationRotationValue = getEl("#stationRotationValue");
     stationVirtualToggle = getEl("#stationVirtualToggle");
     stationPreviewResetBtn = getEl("#stationPreviewResetBtn");
     stationPreviewCanvasWrap = getEl("#stationPreviewCanvasWrap");
@@ -323,6 +327,37 @@ export function createStationManager({
     stationTextDistanceUseParam.addEventListener("change", onTextDistanceChanged);
     stationTextDistanceValue.addEventListener("change", onTextDistanceChanged);
     stationTextDistanceParamSelect.addEventListener("change", onTextDistanceChanged);
+
+    const onRotationChanged = () => {
+      const preset = getSelectedPreset();
+      if (!preset) return;
+      const useParam = stationRotationUseParam.checked;
+      if (useParam) {
+        // 绑定到第一个 number 类型参数
+        const customParams = normalizeShapeParameters(preset.params);
+        const firstNumber = customParams.find((p) => p.type === "number");
+        if (firstNumber) {
+          preset.rotationParamId = firstNumber.id;
+          // 将当前输入值写入参数默认值
+          preset.params = customParams.map((p) =>
+            p.id === firstNumber.id
+              ? { ...p, defaultValue: Number(stationRotationValue.value) || 0 }
+              : p
+          );
+        }
+      } else {
+        preset.rotation = Number(stationRotationValue.value) || 0;
+        delete preset.rotationParamId;
+      }
+      persistStationLibrary();
+      renderPreview(preset);
+      renderRotation(preset);
+      rerenderScene?.();
+      onStateChanged?.({ coalesceKey: "station-rotation" });
+    };
+    stationRotationUseParam.addEventListener("change", onRotationChanged);
+    stationRotationValue.addEventListener("change", onRotationChanged);
+
     stationVirtualToggle.addEventListener("change", () => {
       const preset = getSelectedPreset();
       if (!preset) {
@@ -392,6 +427,7 @@ export function createStationManager({
     stationVirtualToggle.disabled = false;
     stationVirtualToggle.checked = Boolean(preset.virtualNode);
     renderShapeSelect();
+    renderRotation(preset);
     renderTextCards(preset);
     renderTextPlacementPanel(preset);
     renderParamsPanel(preset);
@@ -952,6 +988,29 @@ export function createStationManager({
       stationShapeSelect.value = preset.shapeId;
     } else {
       stationShapeSelect.value = "";
+    }
+  }
+
+  function renderRotation(preset) {
+    if (!preset) return;
+
+    const rotation = Number.isFinite(Number(preset.rotation)) ? Number(preset.rotation) : 0;
+    const paramId = String(preset.rotationParamId || "").trim();
+    const useParam = Boolean(paramId);
+
+    stationRotationUseParam.checked = useParam;
+    stationRotationValue.value = String(rotation);
+    // 参数模式时输入框只读，显示参数绑定状态
+    stationRotationValue.readOnly = useParam;
+    if (useParam) {
+      // 显示绑定的参数值作为占位提示
+      const customParams = normalizeShapeParameters(preset.params);
+      const boundParam = customParams.find((p) => p.id === paramId);
+      stationRotationValue.placeholder = boundParam ? `参数: ${boundParam.label}` : "已绑定参数";
+      stationRotationValue.style.opacity = "0.5";
+    } else {
+      stationRotationValue.placeholder = "";
+      stationRotationValue.style.opacity = "";
     }
   }
 
@@ -1964,6 +2023,18 @@ export function createStationManager({
     renderPreview(preset);
   }
 
+  /** 解析预设旋转角度：若绑定了参数，从 runtimeParams 获取；否则使用固定值 */
+  function resolvePresetRotation(preset, runtimeParamMap) {
+    const paramId = preset?.rotationParamId;
+    if (paramId && runtimeParamMap) {
+      const entry = runtimeParamMap.get(paramId);
+      if (entry && entry.type === "number") {
+        return Number.isFinite(Number(entry.value)) ? Number(entry.value) : 0;
+      }
+    }
+    return Number.isFinite(Number(preset?.rotation)) ? Number(preset.rotation) : 0;
+  }
+
   function renderPreview(preset) {
     if (!stationPreviewCanvas) {
       return;
@@ -2007,10 +2078,13 @@ export function createStationManager({
     const centerX = parsed.viewBox ? parsed.viewBox.x + parsed.viewBox.width / 2 : 120;
     const centerY = parsed.viewBox ? parsed.viewBox.y + parsed.viewBox.height / 2 : 120;
 
+    // 从预设获取旋转角度（参数化或固定值）
+    const rotation = resolvePresetRotation(preset, runtimeParams);
+
     const layer = document.createElementNS(svgNs, "g");
     layer.setAttribute(
       "transform",
-      `translate(${centerX} ${centerY}) scale(${previewInitialScale}) translate(${-centerX} ${-centerY})`
+      `translate(${centerX} ${centerY}) rotate(${rotation}) scale(${previewInitialScale}) translate(${-centerX} ${-centerY})`
     );
     Array.from(parsed.root.children).forEach((child) => {
       const tag = child.tagName.toLowerCase();
@@ -2048,6 +2122,7 @@ export function createStationManager({
       virtualNode: false,
       radius: 12,
       oval: false,
+      rotation: 0,
       shapeParamSettings: {},
       params: []
     };
@@ -2824,6 +2899,8 @@ export function createStationManager({
       virtualNode: Boolean(raw.virtualNode),
       radius: Number.isFinite(Number(raw.radius)) ? Number(raw.radius) : 12,
       oval: Boolean(raw.oval),
+      rotation: Number.isFinite(Number(raw.rotation)) ? Number(raw.rotation) : 0,
+      rotationParamId: String(raw.rotationParamId || "").trim() || undefined,
       shapeParamSettings: normalizeShapeParamSettings(raw.shapeParamSettings),
       paramExpressions: raw.paramExpressions && typeof raw.paramExpressions === "object"
         ? { ...raw.paramExpressions }
@@ -2848,6 +2925,8 @@ export function createStationManager({
       virtualNode: Boolean(type?.virtualNode),
       radius: Number(type?.radius) || 12,
       oval: Boolean(type?.oval),
+      rotation: Number.isFinite(Number(type?.rotation)) ? Number(type.rotation) : 0,
+      rotationParamId: String(type?.rotationParamId || "").trim() || undefined,
       shapeParamSettings: {},
       params: []
     });

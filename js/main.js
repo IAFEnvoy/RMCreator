@@ -938,7 +938,9 @@ function applyDrawingData(drawing, {
     radius: Number.isFinite(Number(preset.radius)) ? Number(preset.radius) : 12,
     oval: Boolean(preset.oval),
     stationPresetId: preset.id,
-    stationTypeIndex: index
+    stationTypeIndex: index,
+    rotation: Number.isFinite(Number(preset.rotation)) ? Number(preset.rotation) : 0,
+    rotationParamId: String(preset.rotationParamId || "").trim() || undefined
   }));
 
   state.selectedEntities = [];
@@ -1847,6 +1849,16 @@ function applyStationType(station, typeIndex) {
   station.textValues = { ...oldTextValues };
   station.textStyleValues = { ...oldTextStyleValues };
   station.textPlacement = resolveStationTextPlacementByTypeIndex(typeIndex);
+
+  // 从预设继承旋转角度
+  const preset = getStationPresetByTypeIndex(typeIndex);
+  if (preset?.rotationParamId) {
+    station.rotation = Number.isFinite(Number(preset.rotation)) ? Number(preset.rotation) : 0;
+    station.rotationParamId = preset.rotationParamId;
+  } else {
+    station.rotation = Number.isFinite(Number(preset?.rotation)) ? Number(preset.rotation) : 0;
+    delete station.rotationParamId;
+  }
 
   // 迁移 paramValues：保留新旧类型共有的参数值
   if (oldParamValues && typeof oldParamValues === "object") {
