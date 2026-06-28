@@ -204,7 +204,7 @@ function sanitizeNodes(rawNodes) {
 
       const paramExpressions = sanitizeParamExpressions(node?.paramExpressions);
 
-      return {
+      const result = {
         id: String(node?.id || "").trim(),
         x: Number(node?.x) || 0,
         y: Number(node?.y) || 0,
@@ -213,13 +213,17 @@ function sanitizeNodes(rawNodes) {
         oval: Boolean(node?.oval),
         stationTypeIndex: Number.isInteger(node?.stationTypeIndex) ? node.stationTypeIndex : 0,
         rotation: Number.isFinite(Number(node?.rotation)) ? Number(node.rotation) : 0,
-        rotationParamId: String(node?.rotationParamId || "").trim() || undefined,
         paramValues,
         paramExpressions,
         textValues,
         textStyleValues,
         textPlacement
       };
+      // 只有源数据显式包含 rotationParamId 时才写入（支持空字符串 sentinel）
+      if (Object.prototype.hasOwnProperty.call(node, "rotationParamId")) {
+        result.rotationParamId = String(node.rotationParamId || "").trim() || undefined;
+      }
+      return result;
     })
     .filter((node) => node.id.length > 0);
 }

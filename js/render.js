@@ -710,9 +710,17 @@ export function createRenderer({
     const shapeRenderScale = 0.25;
     const cx = parsed.minX + parsed.width / 2;
     const cy = parsed.minY + parsed.height / 2;
-    const rotation = resolveStationRotation(station, runtimeParams);
+    const rotation = resolveStationRotation(station, runtimeParams, preset);
+    // 实例显式关闭了参数化旋转时不走此路径
+    const hasParamRotation = Object.prototype.hasOwnProperty.call(station, "rotationParamId")
+      ? Boolean(station.rotationParamId)
+      : Boolean(preset?.rotationParamId);
 
-    group.setAttribute("transform", `translate(${Number(station.x) || 0} ${Number(station.y) || 0}) rotate(${rotation})`);
+    // 参数化旋转只转图形；实例旋转转整体（图形+文字）
+    group.setAttribute("transform",
+      hasParamRotation
+        ? `translate(${Number(station.x) || 0} ${Number(station.y) || 0})`
+        : `translate(${Number(station.x) || 0} ${Number(station.y) || 0}) rotate(${rotation})`);
 
     if (isSelected("station", station.id)) {
       group.classList.add("selected-shape");
@@ -721,7 +729,9 @@ export function createRenderer({
     const shapeGroup = document.createElementNS(svgNs, "g");
     shapeGroup.setAttribute(
       "transform",
-      `scale(${shapeRenderScale}) translate(${-cx} ${-cy})`
+      hasParamRotation
+        ? `rotate(${rotation}) scale(${shapeRenderScale}) translate(${-cx} ${-cy})`
+        : `scale(${shapeRenderScale}) translate(${-cx} ${-cy})`
     );
     parsed.nodes.forEach((node) => shapeGroup.appendChild(node));
     group.appendChild(shapeGroup);
@@ -762,9 +772,21 @@ export function createRenderer({
     return null;
   }
 
-  /** 解析车站旋转角度：优先参数绑定，其次直接值 */
-  function resolveStationRotation(station, runtimeParamMap) {
-    const paramId = station?.rotationParamId;
+  /** 解析车站旋转角度：实例显式设置 > preset fallback > 直接值 */
+  function resolveStationRotation(station, runtimeParamMap, preset) {
+    // 实例显式设置 rotationParamId（含空字符串表示强制关闭）
+    if (Object.prototype.hasOwnProperty.call(station || {}, "rotationParamId")) {
+      const paramId = station.rotationParamId;
+      if (paramId && runtimeParamMap) {
+        const entry = runtimeParamMap.get(paramId);
+        if (entry && entry.type === "number" && Number.isFinite(Number(entry.value))) {
+          return Number(entry.value);
+        }
+      }
+      return Number.isFinite(Number(station?.rotation)) ? Number(station.rotation) : 0;
+    }
+    // 实例未设置时从 preset 继承
+    const paramId = preset?.rotationParamId;
     if (paramId && runtimeParamMap) {
       const entry = runtimeParamMap.get(paramId);
       if (entry && entry.type === "number" && Number.isFinite(Number(entry.value))) {
@@ -1126,14 +1148,23 @@ export function createRenderer({
           const shapeSvg = buildRenderableShapeSvg(shapeDef, paramValues);
           const parsed = parseShapeSvgContent(shapeSvg);
           if (parsed && parsed.nodes.length) {
-            const rotation = resolveStationRotation(node, runtimeParams);
+            const rotation = resolveStationRotation(node, runtimeParams, preset);
+            const hasParamRotation = Object.prototype.hasOwnProperty.call(node, "rotationParamId")
+              ? Boolean(node.rotationParamId)
+              : Boolean(preset?.rotationParamId);
             const shapeRenderScale = 0.25;
             const cx = parsed.minX + parsed.width / 2;
             const cy = parsed.minY + parsed.height / 2;
             const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
-            g.setAttribute("transform", `translate(${x} ${y}) rotate(${rotation})`);
+            g.setAttribute("transform",
+              hasParamRotation
+                ? `translate(${x} ${y})`
+                : `translate(${x} ${y}) rotate(${rotation})`);
             const sg = document.createElementNS("http://www.w3.org/2000/svg", "g");
-            sg.setAttribute("transform", `scale(${shapeRenderScale}) translate(${-cx} ${-cy})`);
+            sg.setAttribute("transform",
+              hasParamRotation
+                ? `rotate(${rotation}) scale(${shapeRenderScale}) translate(${-cx} ${-cy})`
+                : `scale(${shapeRenderScale}) translate(${-cx} ${-cy})`);
             parsed.nodes.forEach((nd) => sg.appendChild(svgDoc.ownerDocument.importNode(nd, true)));
             g.appendChild(sg);
             svgDoc.appendChild(g);

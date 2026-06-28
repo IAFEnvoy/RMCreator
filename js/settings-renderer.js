@@ -843,8 +843,8 @@ export function createSettingsRenderer({
     stationRotationInput?.addEventListener("change", () => {
       station.rotation = Number(stationRotationInput.value) || 0;
       stationRotationInput.value = String(station.rotation);
-      // 手动编辑时解除参数绑定，使用直接值
-      delete station.rotationParamId;
+      // 手动编辑时覆盖参数绑定（设为空字符串阻止 preset fallback）
+      station.rotationParamId = "";
       renderStations();
       onStateChanged?.();
     });
