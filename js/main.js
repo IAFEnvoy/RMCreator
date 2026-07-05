@@ -38,7 +38,8 @@ import {
   geometryLabelMap
 } from "./constants.js";
 import { createHistoryManager } from "./history-manager.js";
-import { preloadTemplates } from "./template-store.js";
+import { preloadTemplates, rewriteTemplateIcons } from "./template-store.js";
+import { preloadIcons, getIconDataUri, syncExistingImages, startAutoRewrite } from "./icon-loader.js";
 
 const { linePreview, fileUndoBtn, fileRedoBtn, canvasBg } = elements;
 const defaultAppSettings = Object.freeze({
@@ -386,8 +387,94 @@ const historyManager = createHistoryManager({
 
 init();
 
+function detectSingleton() {
+  if (!("BroadcastChannel" in window)) {
+    return true; // 浏览器不支持，放行
+  }
+
+  const channel = new BroadcastChannel("rmcreator-singleton");
+  let conflict = false;
+
+  // 监听其他页面，如果有已存在的实例回复，标记冲突
+  const onMessage = (event) => {
+    if (event.data === "already-open") {
+      conflict = true;
+    }
+  };
+  channel.addEventListener("message", onMessage);
+
+  // 广播新页面消息，等待回复
+  channel.postMessage("new-tab");
+
+  // 给其他页面一点时间回复（同步检测，用 setTimeout 收集）
+  // BroadcastChannel message 事件在下一个 microtask/macrotask 触发
+  // 我们用一个短延迟来等冲突检测
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      channel.removeEventListener("message", onMessage);
+
+      if (conflict) {
+        channel.close();
+        showSingletonWarning();
+        resolve(false);
+      } else {
+        // 自己是第一个实例，持续监听后续新页面
+        channel.addEventListener("message", (event) => {
+          if (event.data === "new-tab") {
+            channel.postMessage("already-open");
+          }
+        });
+        // 页面关闭时清理
+        window.addEventListener("beforeunload", () => {
+          channel.close();
+        });
+        resolve(true);
+      }
+    }, 200);
+  });
+}
+
+function showSingletonWarning() {
+  // 停止加载动画
+  const loader = document.getElementById('appLoader');
+  if (loader) loader.setAttribute('hidden', '');
+
+  // 显示全屏遮罩
+  const overlay = document.createElement('div');
+  overlay.id = 'singletonOverlay';
+  overlay.innerHTML = `
+    <div style="
+      position: fixed; inset: 0; z-index: 99999;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(255,255,255,0.92);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+    ">
+      <div style="text-align:center; max-width: 400px; padding: 32px;">
+        <div style="font-size: 48px; margin-bottom: 16px;">⚠️</div>
+        <h2 style="margin: 0 0 12px; color: #d32f2f;">检测到多页面冲突</h2>
+        <p style="margin: 0 0 24px; color: #666; line-height: 1.6;">
+          RMCreator 已经在另一个标签页/窗口中打开。<br>
+          同时编辑互踢会导致数据覆盖丢失，请关闭另一个页面后刷新本页。
+        </p>
+        <button onclick="location.reload()" style="
+          padding: 10px 28px; border: none; border-radius: 8px;
+          background: #2f5d9d; color: #fff; font-size: 15px; cursor: pointer;
+        ">刷新重试</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+}
+
 async function init() {
-  await preloadTemplates();
+  const ok = await detectSingleton();
+  if (!ok) return;
+
+  await Promise.all([preloadTemplates(), preloadIcons()]);
+  // 图标预加载完成后，重写模板中的 img src 为 data URI
+  rewriteTemplateIcons(getIconDataUri);
+  // 把页面上已有的 img 也替换
+  syncExistingImages();
   await loadMenus();
   loadAppSettings();
   applyAppSettings();
@@ -411,6 +498,11 @@ async function init() {
   renderer.updateViewportTransform();
   renderer.updateZoomIndicator();
   registerServiceWorker();
+
+  // 再次替换页面上所有图标（此时 managers 已注入模板）
+  syncExistingImages();
+  // 启动自动重写：之后动态创建的 img 图标也会自动替换
+  startAutoRewrite();
 
   // 隐藏加载动画
   const loader = document.getElementById('appLoader');

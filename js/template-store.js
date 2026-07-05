@@ -1,6 +1,27 @@
 const templateCache = new Map();
+const rawTemplateCache = new Map(); // 原始模板字符串（图标重写前）
 const templateElements = new Map();
+let iconRewriter = null; // 由图标预加载器注入 (svgPath => dataUri | null)
 const imageCache = new Map();
+
+/** 图标预加载完成后调用，将所有已缓存模板中的 img src 替换为 data URI */
+export function rewriteTemplateIcons(rewriter) {
+  iconRewriter = typeof rewriter === "function" ? rewriter : null;
+  if (!iconRewriter) return;
+  // 重新处理已缓存的原始模板
+  for (const [key, rawHtml] of rawTemplateCache) {
+    templateCache.set(key, rewriteImgSrcs(rawHtml));
+  }
+}
+
+function rewriteImgSrcs(html) {
+  if (!iconRewriter) return html;
+  return html.replace(/<img\s[^>]*src="([^"]+)"[^>]*>/g, (match, src) => {
+    const dataUri = iconRewriter(src);
+    if (!dataUri) return match;
+    return match.replace(`src="${src}"`, `src="${dataUri}"`);
+  });
+}
 
 const templateSources = {
   "submenu-station": "/template/submenu/submenu-station.html",
@@ -82,8 +103,11 @@ class RmTemplate extends HTMLElement {
         throw new Error(`Failed to load template: ${src}`);
       }
       const html = await res.text();
-      templateCache.set(key, html);
-      primeTemplateAssets(html);
+      rawTemplateCache.set(key, html);
+      // 如果图标已预加载，当场替换；否则保留原始路径
+      const processed = iconRewriter ? rewriteImgSrcs(html) : html;
+      templateCache.set(key, processed);
+      primeTemplateAssets(processed);
     })();
   }
 

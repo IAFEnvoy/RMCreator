@@ -652,6 +652,15 @@ export function createRenderer({
 
       const renderedByShape = renderStationShape(group, station, preset);
       if (renderedByShape) {
+        // 透明热区圆：确保形状车站也能轻松点击连线
+        const hitCircle = document.createElementNS(svgNs, "circle");
+        hitCircle.setAttribute("cx", "0");
+        hitCircle.setAttribute("cy", "0");
+        hitCircle.setAttribute("r", "24");
+        hitCircle.setAttribute("fill", "transparent");
+        hitCircle.setAttribute("stroke", "none");
+        hitCircle.setAttribute("data-station-id", station.id);
+        group.appendChild(hitCircle);
         stationLayer.appendChild(group);
         return;
       }
@@ -661,6 +670,17 @@ export function createRenderer({
       base.setAttribute("cy", String(station.y));
       base.setAttribute("r", String(station.radius));
       base.setAttribute("class", station.oval ? "station interchange" : "station");
+      base.setAttribute("pointer-events", "none");
+
+      // 透明热区圆：确保小半径车站也能轻松点击
+      const hitCircle = document.createElementNS(svgNs, "circle");
+      hitCircle.setAttribute("cx", String(station.x));
+      hitCircle.setAttribute("cy", String(station.y));
+      hitCircle.setAttribute("r", String(Math.max(Number(station.radius) || 10, 14)));
+      hitCircle.setAttribute("fill", "transparent");
+      hitCircle.setAttribute("stroke", "none");
+      hitCircle.setAttribute("data-station-id", station.id);
+      group.appendChild(hitCircle);
 
       if (isSelected("station", station.id)) {
         base.classList.add("selected-shape");
@@ -727,6 +747,7 @@ export function createRenderer({
     }
 
     const shapeGroup = document.createElementNS(svgNs, "g");
+    shapeGroup.setAttribute("pointer-events", "none");
     shapeGroup.setAttribute(
       "transform",
       hasParamRotation
