@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>线路图绘制 · RMCreator</title>
+  <meta name="theme-color" content="#f6f8fb" />
+  <style>
+    #appLoader {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: transparent;
+      pointer-events: none;
+    }
+
+    #appLoader[hidden] {
+      display: none;
+    }
+  </style>
+  <link rel="stylesheet" href="css/common.css" />
+  <link rel="stylesheet" href="css/main.css" />
+  <link rel="stylesheet" href="css/modal-line-manager.css" />
+  <link rel="stylesheet" href="css/modal-shape-manager.css" />
+  <link rel="stylesheet" href="css/modal-station-manager.css" />
+  <link rel="stylesheet" href="css/modal-shortcuts.css" />
+  <link rel="stylesheet" href="css/modal-color-picker.css" />
+  <link rel="stylesheet" href="css/modal-parameter-editor.css" />
+  <link rel="icon" href="../favicon.webp" />
+</head>
+
+<body>
+  <div id="appLoader">
+    <loading-indicator></loading-indicator>
+  </div>
+  <div class="app">
+    <section class="canvas-wrap">
+      <svg id="railwayCanvas" class="canvas" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <pattern id="grid" width="24" height="24" patternUnits="userSpaceOnUse">
+            <path d="M 24 0 L 0 0 0 24" fill="none" stroke="#eceff4" stroke-width="1" />
+          </pattern>
+        </defs>
+        <g id="viewport">
+          <rect id="canvasBg" x="-10000" y="-10000" width="20000" height="20000" fill="url(#grid)"></rect>
+          <g id="lineLayer"></g>
+          <g id="shapeLayer"></g>
+          <g id="stationLayer"></g>
+          <g id="textLayer"></g>
+          <g id="snapGuideLayer" class="snap-guide-layer"></g>
+          <path id="linePreview" class="line-preview" d="" visibility="hidden"></path>
+          <rect id="selectionMarquee" class="selection-marquee" x="0" y="0" width="0" height="0" visibility="hidden">
+          </rect>
+        </g>
+      </svg>
+    </section>
+
+    <header class="topbar floating-panel">
+      <div class="brand">RMCreator</div>
+      <div class="file-menu" id="fileMenu">
+        <button class="tool-btn file-menu-btn" id="fileMenuBtn" type="button" aria-haspopup="true"
+          aria-expanded="false">
+          文件
+        </button>
+        <div class="file-menu-panel" id="fileMenuPanel" hidden>
+          <button class="file-menu-item" id="fileNewBtn" type="button">新建绘图</button>
+          <button class="file-menu-item" id="fileManageBtn" type="button">绘图管理</button>
+          <div class="file-menu-divider" role="separator"></div>
+          <button class="file-menu-item" id="fileImportBtn" type="button">导入内容</button>
+          <div class="file-menu-divider" role="separator"></div>
+          <button class="file-menu-item" id="fileExportJsonBtn" type="button">导出项目</button>
+          <button class="file-menu-item" id="fileExportSvgBtn" type="button">导出为 SVG</button>
+          <button class="file-menu-item" id="fileExportPngBtn" type="button">导出为 PNG</button>
+        </div>
+        <input id="fileLoadInput" type="file" accept="application/json,.json" hidden />
+      </div>
+      <div class="file-menu" id="editMenu">
+        <button class="tool-btn file-menu-btn" id="editMenuBtn" type="button" aria-haspopup="true"
+          aria-expanded="false">
+          编辑
+        </button>
+        <div class="file-menu-panel" id="editMenuPanel" hidden>
+          <button class="file-menu-item" id="fileUndoBtn" type="button">撤销 (Ctrl+Z)</button>
+          <button class="file-menu-item" id="fileRedoBtn" type="button">重做 (Ctrl+Shift+Z)</button>
+          <div class="file-menu-divider" role="separator"></div>
+          <button class="file-menu-item" id="fileCutBtn" type="button">剪切 (Ctrl+X)</button>
+          <button class="file-menu-item" id="fileCopyBtn" type="button">复制 (Ctrl+C)</button>
+          <button class="file-menu-item" id="filePasteBtn" type="button">粘贴 (Ctrl+V)</button>
+        </div>
+      </div>
+      <div class="tool-strip" id="toolStrip">
+        <button class="tool-btn" data-tool="select" aria-label="选择">
+          <img src="img/icon-select.svg" alt="选择" />
+          <span>选择</span>
+        </button>
+        <button class="tool-btn" data-tool="station" aria-label="车站">
+          <img src="img/icon-station.svg" alt="车站" />
+          <span>车站</span>
+        </button>
+        <button class="tool-btn" data-tool="line" aria-label="连线">
+          <img src="img/icon-line.svg" alt="连线" />
+          <span>连线</span>
+        </button>
+        <button class="tool-btn" data-tool="text" aria-label="文本">
+          <img src="img/icon-text.svg" alt="文本" />
+          <span>文本</span>
+        </button>
+        <button class="tool-btn" data-tool="shape" aria-label="图形">
+          <img src="img/icon-shape.svg" alt="图形" />
+          <span>图形</span>
+        </button>
+        <button class="tool-btn" data-tool="subDrawing" aria-label="子绘图">
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+            <rect x="2" y="2" width="14" height="14" rx="2" stroke="currentColor" stroke-width="1.5" fill="none" />
+            <line x1="2" y1="7" x2="16" y2="7" stroke="currentColor" stroke-width="1" />
+            <line x1="7" y1="7" x2="7" y2="16" stroke="currentColor" stroke-width="1" />
+          </svg>
+          <span>子绘图</span>
+        </button>
+        <button class="tool-btn" data-tool="settings" aria-label="设置">
+          <img src="img/icon-settings.svg" alt="设置" />
+          <span>设置</span>
+        </button>
+        <button class="tool-btn" data-tool="about" aria-label="关于">
+          <img src="img/icon-about.svg" alt="关于" />
+          <span>关于</span>
+        </button>
+      </div>
+      <div class="zoom-indicator-wrap">
+        <button class="zoom-indicator" id="zoomIndicator" type="button" aria-haspopup="true"
+          aria-expanded="false">100%</button>
+        <div class="zoom-menu" id="zoomMenu" hidden>
+          <button class="zoom-menu-item" type="button" data-zoom="0.25">25%</button>
+          <button class="zoom-menu-item" type="button" data-zoom="0.5">50%</button>
+          <button class="zoom-menu-item" type="button" data-zoom="1">100%</button>
+          <button class="zoom-menu-item" type="button" data-zoom="2">200%</button>
+        </div>
+      </div>
+    </header>
+
+    <aside class="submenu floating-panel" id="submenuPanel">
+      <div class="submenu-title" id="submenuTitle">请选择工具</div>
+      <div class="submenu-items" id="submenuItems"></div>
+    </aside>
+
+    <aside class="settings floating-panel" id="settingsPanel" hidden>
+      <div class="settings-head">
+        <span>属性</span>
+      </div>
+      <div class="settings-body" id="settingsBody"></div>
+    </aside>
+
+    <div class="modal-backdrop" id="lineManagerModal" hidden></div>
+    <div class="modal-backdrop import-select-backdrop" id="stationImportSelectModal" hidden></div>
+    <div class="modal-backdrop import-select-backdrop" id="lineImportSelectModal" hidden></div>
+    <div class="modal-backdrop import-select-backdrop" id="drawingImportSelectModal" hidden></div>
+    <div class="modal-backdrop import-select-backdrop" id="shapeImportSelectModal" hidden></div>
+
+    <div class="modal-backdrop" id="stationManagerModal" hidden></div>
+    <div class="modal-backdrop" id="shapeManagerModal" hidden></div>
+
+    <div class="modal-backdrop" id="exportPngModal" hidden>
+      <div class="line-manager-modal export-modal" role="dialog" aria-modal="true" aria-label="导出 PNG">
+        <div class="modal-head">
+          <h2>导出 PNG</h2>
+          <button class="btn-ghost" id="closeExportPngBtn" type="button" aria-label="关闭">
+            <img src="img/icon-close.svg" alt="关闭" />
+          </button>
+        </div>
+        <div class="export-modal-body">
+          <div class="field">
+            <label for="exportPngScaleSelect">缩放比例</label>
+            <select id="exportPngScaleSelect">
+              <option value="25">25%</option>
+              <option value="50">50%</option>
+              <option value="75">75%</option>
+              <option value="100" selected>100%</option>
+              <option value="125">125%</option>
+              <option value="150">150%</option>
+              <option value="175">175%</option>
+              <option value="200">200%</option>
+              <option value="250">250%</option>
+              <option value="300">300%</option>
+              <option value="400">400%</option>
+              <option value="500">500%</option>
+              <option value="600">600%</option>
+              <option value="700">700%</option>
+              <option value="800">800%</option>
+            </select>
+          </div>
+          <div class="field field-toggle">
+            <label for="exportPngTransparentInput">使用透明背景</label>
+            <label class="toggle-switch" for="exportPngTransparentInput">
+              <input id="exportPngTransparentInput" class="toggle-checkbox" type="checkbox" />
+              <span class="toggle-slider" aria-hidden="true"></span>
+            </label>
+          </div>
+          <div class="field field-toggle">
+            <label for="exportPngShowGridInput">显示背景网格</label>
+            <label class="toggle-switch" for="exportPngShowGridInput">
+              <input id="exportPngShowGridInput" class="toggle-checkbox" type="checkbox" />
+              <span class="toggle-slider" aria-hidden="true"></span>
+            </label>
+          </div>
+          <div class="modal-actions export-modal-actions">
+            <button class="btn-ghost" id="exportPngCancelBtn" type="button">取消</button>
+            <button class="btn-main" id="exportPngConfirmBtn" type="button">导出</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-backdrop" id="shortcutsModal" hidden></div>
+
+    <div class="modal-backdrop" id="colorPickerModal" hidden>
+      <div class="line-manager-modal color-picker-modal" role="dialog" aria-modal="true" aria-label="颜色选择器">
+        <div class="modal-head">
+          <h2 id="colorPickerTitle">颜色选择</h2>
+          <button class="btn-ghost" id="closeColorPickerBtn" type="button" aria-label="关闭">
+            <img src="img/icon-close.svg" alt="关闭" />
+          </button>
+        </div>
+        <div class="color-picker-body">
+          <div class="color-picker-row">
+            <label for="colorPickerInput">RGB</label>
+            <div class="color-picker-inputs">
+              <input id="colorPickerInput" type="color" />
+              <div class="color-picker-preview" id="colorPickerPreview"></div>
+              <div class="color-picker-value" id="colorPickerValue">#000000 100%</div>
+            </div>
+          </div>
+          <div class="color-picker-row">
+            <label for="colorPickerAlpha">Alpha</label>
+            <div class="color-picker-alpha">
+              <input id="colorPickerAlpha" type="range" min="0" max="100" value="100" />
+              <input id="colorPickerAlphaNumber" type="number" min="0" max="100" step="1" value="100" />
+            </div>
+          </div>
+          <div class="color-picker-history">
+            <div class="color-picker-history-head">历史记录</div>
+            <div class="color-picker-history-list" id="colorPickerHistoryList"></div>
+          </div>
+          <div class="modal-actions">
+            <button class="btn-ghost" id="colorPickerCancelBtn" type="button">取消</button>
+            <button class="btn-main" id="colorPickerConfirmBtn" type="button">确定</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="paramEditorModal" hidden></div>
+
+  <div class="modal-backdrop" id="drawingManagerModal" hidden></div>
+
+  <script src="js/main.js" type="module"></script>
+</body>
+
+</html>

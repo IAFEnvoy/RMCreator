@@ -1,263 +1,77 @@
 <!doctype html>
 <html lang="zh-CN">
-
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>RMCreator - 线路图绘制器</title>
-  <script src="https://static.iafenvoy.com/loading-indicator.js"></script>
-  <style>
-    #appLoader {
-      position: fixed;
-      inset: 0;
-      z-index: 9999;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: transparent;
-      pointer-events: none;
-    }
-
-    #appLoader[hidden] {
-      display: none;
-    }
-  </style>
-  <link rel="stylesheet" href="css/common.css" />
-  <link rel="stylesheet" href="css/main.css" />
-  <link rel="stylesheet" href="css/modal-line-manager.css" />
-  <link rel="stylesheet" href="css/modal-shape-manager.css" />
-  <link rel="stylesheet" href="css/modal-station-manager.css" />
-  <link rel="stylesheet" href="css/modal-shortcuts.css" />
-  <link rel="stylesheet" href="css/modal-color-picker.css" />
-  <link rel="stylesheet" href="css/modal-parameter-editor.css" />
-  <link rel="icon" href="favicon.webp" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#f6f8fb" />
+  <meta name="description" content="RMCreator 轨道交通设计工作台：绘制线路图，设计车站 3D 示意图与分层平面图。" />
+  <link rel="icon" href="./favicon.webp" />
+  <title>RMCreator · 轨道交通设计工作台</title>
+  <script type="module" src="./shared/home.js"></script>
 </head>
-
-<body>
-  <div id="appLoader">
-    <loading-indicator></loading-indicator>
-  </div>
-  <div class="app">
-    <section class="canvas-wrap">
-      <svg id="railwayCanvas" class="canvas" xmlns="http://www.w3.org/2000/svg">
-        <defs>
-          <pattern id="grid" width="24" height="24" patternUnits="userSpaceOnUse">
-            <path d="M 24 0 L 0 0 0 24" fill="none" stroke="#eceff4" stroke-width="1" />
-          </pattern>
-        </defs>
-        <g id="viewport">
-          <rect id="canvasBg" x="-10000" y="-10000" width="20000" height="20000" fill="url(#grid)"></rect>
-          <g id="lineLayer"></g>
-          <g id="shapeLayer"></g>
-          <g id="stationLayer"></g>
-          <g id="textLayer"></g>
-          <g id="snapGuideLayer" class="snap-guide-layer"></g>
-          <path id="linePreview" class="line-preview" d="" visibility="hidden"></path>
-          <rect id="selectionMarquee" class="selection-marquee" x="0" y="0" width="0" height="0" visibility="hidden">
-          </rect>
-        </g>
-      </svg>
+<body class="home-page">
+  <header class="home-header">
+    <a class="home-brand" href="./" aria-label="RMCreator 首页"><img src="./favicon.webp" alt="" width="33" height="33" /><span>RMCreator</span></a>
+    <nav class="home-nav" aria-label="主导航"><a href="./" aria-current="page">首页</a><a href="./route-map/">线路图</a><a href="./station-designer/">车站设计</a></nav>
+    <span class="home-local"><i></i>浏览器工作台</span>
+  </header>
+  <main class="home-main">
+    <section class="home-intro">
+      <div class="home-eyebrow"><span></span> RAIL TRANSIT DESIGN</div>
+      <h1>让轨道交通的想法，<br>在这里成形。</h1>
+      <p>从线路网络到车站空间，选择一个工具，开始你的设计。</p>
     </section>
-
-    <header class="topbar floating-panel">
-      <div class="brand">RMCreator</div>
-      <div class="file-menu" id="fileMenu">
-        <button class="tool-btn file-menu-btn" id="fileMenuBtn" type="button" aria-haspopup="true"
-          aria-expanded="false">
-          文件
-        </button>
-        <div class="file-menu-panel" id="fileMenuPanel" hidden>
-          <button class="file-menu-item" id="fileNewBtn" type="button">新建绘图</button>
-          <button class="file-menu-item" id="fileManageBtn" type="button">绘图管理</button>
-          <div class="file-menu-divider" role="separator"></div>
-          <button class="file-menu-item" id="fileImportBtn" type="button">导入内容</button>
-          <div class="file-menu-divider" role="separator"></div>
-          <button class="file-menu-item" id="fileExportJsonBtn" type="button">导出项目</button>
-          <button class="file-menu-item" id="fileExportSvgBtn" type="button">导出为 SVG</button>
-          <button class="file-menu-item" id="fileExportPngBtn" type="button">导出为 PNG</button>
-        </div>
-        <input id="fileLoadInput" type="file" accept="application/json,.json" hidden />
-      </div>
-      <div class="file-menu" id="editMenu">
-        <button class="tool-btn file-menu-btn" id="editMenuBtn" type="button" aria-haspopup="true"
-          aria-expanded="false">
-          编辑
-        </button>
-        <div class="file-menu-panel" id="editMenuPanel" hidden>
-          <button class="file-menu-item" id="fileUndoBtn" type="button">撤销 (Ctrl+Z)</button>
-          <button class="file-menu-item" id="fileRedoBtn" type="button">重做 (Ctrl+Shift+Z)</button>
-          <div class="file-menu-divider" role="separator"></div>
-          <button class="file-menu-item" id="fileCutBtn" type="button">剪切 (Ctrl+X)</button>
-          <button class="file-menu-item" id="fileCopyBtn" type="button">复制 (Ctrl+C)</button>
-          <button class="file-menu-item" id="filePasteBtn" type="button">粘贴 (Ctrl+V)</button>
-        </div>
-      </div>
-      <div class="tool-strip" id="toolStrip">
-        <button class="tool-btn" data-tool="select" aria-label="选择">
-          <img src="img/icon-select.svg" alt="选择" />
-          <span>选择</span>
-        </button>
-        <button class="tool-btn" data-tool="station" aria-label="车站">
-          <img src="img/icon-station.svg" alt="车站" />
-          <span>车站</span>
-        </button>
-        <button class="tool-btn" data-tool="line" aria-label="连线">
-          <img src="img/icon-line.svg" alt="连线" />
-          <span>连线</span>
-        </button>
-        <button class="tool-btn" data-tool="text" aria-label="文本">
-          <img src="img/icon-text.svg" alt="文本" />
-          <span>文本</span>
-        </button>
-        <button class="tool-btn" data-tool="shape" aria-label="图形">
-          <img src="img/icon-shape.svg" alt="图形" />
-          <span>图形</span>
-        </button>
-        <button class="tool-btn" data-tool="subDrawing" aria-label="子绘图">
-          <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-            <rect x="2" y="2" width="14" height="14" rx="2" stroke="currentColor" stroke-width="1.5" fill="none" />
-            <line x1="2" y1="7" x2="16" y2="7" stroke="currentColor" stroke-width="1" />
-            <line x1="7" y1="7" x2="7" y2="16" stroke="currentColor" stroke-width="1" />
+    <section class="tool-grid" aria-label="设计工具">
+      <a class="tool-card route-card" href="./route-map/">
+        <div class="tool-preview route-preview" aria-hidden="true">
+          <span class="preview-label">NETWORK / 线路</span>
+          <svg viewBox="0 0 520 250" fill="none">
+            <g class="map-grid" stroke="#dce3ee" stroke-width=".7"><path d="M0 50h520M0 100h520M0 150h520M0 200h520M60 0v250M110 0v250M160 0v250M210 0v250M260 0v250M310 0v250M360 0v250M410 0v250M460 0v250"/></g>
+            <path d="M40 185h105l75-75h120l66-66h72" stroke="#2f6de5" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M93 35v60l95 95h128l105-105h60" stroke="#49aa96" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M275 35v163l40 40" stroke="#edb05c" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+            <g fill="white" stroke="#2f6de5" stroke-width="3"><circle cx="51" cy="185" r="5"/><circle cx="112" cy="185" r="5"/><circle cx="192" cy="138" r="5"/><circle cx="328" cy="110" r="5"/><circle cx="405" cy="45" r="5"/><circle cx="465" cy="44" r="5"/></g>
+            <g fill="white" stroke="#49aa96" stroke-width="3"><circle cx="93" cy="48" r="5"/><circle cx="93" cy="90" r="5"/><circle cx="204" cy="190" r="5"/><circle cx="400" cy="106" r="5"/><circle cx="469" cy="85" r="5"/></g>
+            <g fill="white" stroke="#edb05c" stroke-width="3"><circle cx="275" cy="49" r="5"/><circle cx="275" cy="225" r="5"/></g>
+            <g fill="white" stroke="#344962" stroke-width="2"><circle cx="145" cy="147" r="8"/><circle cx="275" cy="110" r="8"/><circle cx="275" cy="190" r="8"/><circle cx="375" cy="75" r="8"/></g>
+            <g fill="#62708a" font-family="sans-serif" font-size="10"><text x="35" y="211">西园</text><text x="109" y="136">文化广场</text><text x="288" y="97">中央车站</text><text x="288" y="178">滨江</text><text x="384" y="66">科技园</text><text x="442" y="28">东湖</text></g>
           </svg>
-          <span>子绘图</span>
-        </button>
-        <button class="tool-btn" data-tool="settings" aria-label="设置">
-          <img src="/img/icon-settings.svg" alt="设置" />
-          <span>设置</span>
-        </button>
-        <button class="tool-btn" data-tool="about" aria-label="关于">
-          <img src="/img/icon-about.svg" alt="关于" />
-          <span>关于</span>
-        </button>
-      </div>
-      <div class="zoom-indicator-wrap">
-        <button class="zoom-indicator" id="zoomIndicator" type="button" aria-haspopup="true"
-          aria-expanded="false">100%</button>
-        <div class="zoom-menu" id="zoomMenu" hidden>
-          <button class="zoom-menu-item" type="button" data-zoom="0.25">25%</button>
-          <button class="zoom-menu-item" type="button" data-zoom="0.5">50%</button>
-          <button class="zoom-menu-item" type="button" data-zoom="1">100%</button>
-          <button class="zoom-menu-item" type="button" data-zoom="2">200%</button>
+          <span class="preview-badge"><i class="route-dot"></i>连接每一站</span>
         </div>
-      </div>
-    </header>
-
-    <aside class="submenu floating-panel" id="submenuPanel">
-      <div class="submenu-title" id="submenuTitle">请选择工具</div>
-      <div class="submenu-items" id="submenuItems"></div>
-    </aside>
-
-    <aside class="settings floating-panel" id="settingsPanel" hidden>
-      <div class="settings-head">
-        <span>属性</span>
-      </div>
-      <div class="settings-body" id="settingsBody"></div>
-    </aside>
-
-    <div class="modal-backdrop" id="lineManagerModal" hidden></div>
-    <div class="modal-backdrop import-select-backdrop" id="stationImportSelectModal" hidden></div>
-    <div class="modal-backdrop import-select-backdrop" id="lineImportSelectModal" hidden></div>
-    <div class="modal-backdrop import-select-backdrop" id="drawingImportSelectModal" hidden></div>
-    <div class="modal-backdrop import-select-backdrop" id="shapeImportSelectModal" hidden></div>
-
-    <div class="modal-backdrop" id="stationManagerModal" hidden></div>
-    <div class="modal-backdrop" id="shapeManagerModal" hidden></div>
-
-    <div class="modal-backdrop" id="exportPngModal" hidden>
-      <div class="line-manager-modal export-modal" role="dialog" aria-modal="true" aria-label="导出 PNG">
-        <div class="modal-head">
-          <h2>导出 PNG</h2>
-          <button class="btn-ghost" id="closeExportPngBtn" type="button" aria-label="关闭">
-            <img src="/img/icon-close.svg" alt="关闭" />
-          </button>
+        <div class="tool-card-body"><div class="tool-card-top"><span class="tool-number">01 / NETWORK</span><span class="tool-open" aria-hidden="true">↗</span></div><h2>线路图绘制</h2><p>规划线路、连接站点，绘制属于你的轨道交通网络。</p><div class="tool-capabilities"><span>线路与站点</span><span>矢量编辑</span><span>SVG / PNG 导出</span></div><span class="tool-start">开始绘制 <span aria-hidden="true">→</span></span></div>
+      </a>
+      <a class="tool-card station-card" href="./station-designer/">
+        <div class="tool-preview station-preview" aria-hidden="true">
+          <span class="preview-label">SPACE / 空间</span>
+          <svg viewBox="0 0 520 250" fill="none" stroke-linejoin="round">
+            <g transform="translate(54 5)">
+              <path d="m20 163 240-84 147 67-240 84Z" fill="#dbe4ef" stroke="#c3cfdf"/>
+              <path d="m20 163 147 67v9L20 172Zm147 67 240-84v9l-240 84Z" fill="#c6d3e4"/>
+              <path d="m43 160 225-79m-196 93 225-79m-194 93 225-79m-195 93 225-79" stroke="#7a8ea9" stroke-width="3"/>
+              <path d="m70 173 225-79 56 26-225 79Z" fill="#f5e8bb" stroke="#d4c594"/>
+              <path d="m70 173 56 26v5l-56-26Zm56 26 225-79v5l-225 79Z" fill="#decf9f"/>
+              <path d="m32 158 225-79m-112 139 225-79" stroke="#2f6de5" stroke-width="4"/>
+              <path d="m75 99 189-66 115 53-189 66Z" fill="#e7eef8" fill-opacity=".92" stroke="#c2d0e4"/>
+              <path d="m75 99 115 53v7L75 106Zm115 53 189-66v7l-189 66Z" fill="#c9d7e9"/>
+              <path d="m133 98 123-43 57 26-123 43Z" fill="#f6e9bf" stroke="#dfcfa1"/>
+              <path d="m158 117 30-11v40l-30 11Z" fill="#9daec4" stroke="#7f94af"/>
+              <path d="m158 117 14 7 30-11-14-7Z" fill="#d7e1ef"/>
+              <path d="m172 124 30-11v40l-30 11Z" fill="#bdcce0" stroke="#7f94af"/>
+              <path d="m176 130 25-9m-25 16 25-9m-25 16 25-9m-25 16 25-9m-25 16 25-9" stroke="#f8fafc" stroke-width="2"/>
+              <path d="m275 78 14 6v57l-14-6Zm14 6 16-6v57l-16 6Z" fill="#b7d9e3" fill-opacity=".9" stroke="#72a9b9"/>
+              <path d="m275 78 16-6 14 6-16 6Z" fill="#e1f1f5" stroke="#72a9b9"/>
+              <path d="m96 164 38-14 12 6-38 14Z" fill="#fff" stroke="#98abc3"/>
+              <path d="m96 164 12 6v8l-12-6Zm12 6 38-14v8l-38 14Z" fill="#d4dfee" stroke="#98abc3"/>
+              <path d="m110 168 33-12" stroke="#2f6de5" stroke-width="2"/>
+            </g>
+          </svg>
+          <span class="preview-badge"><i class="station-dot"></i>看见车站空间</span>
         </div>
-        <div class="export-modal-body">
-          <div class="field">
-            <label for="exportPngScaleSelect">缩放比例</label>
-            <select id="exportPngScaleSelect">
-              <option value="25">25%</option>
-              <option value="50">50%</option>
-              <option value="75">75%</option>
-              <option value="100" selected>100%</option>
-              <option value="125">125%</option>
-              <option value="150">150%</option>
-              <option value="175">175%</option>
-              <option value="200">200%</option>
-              <option value="250">250%</option>
-              <option value="300">300%</option>
-              <option value="400">400%</option>
-              <option value="500">500%</option>
-              <option value="600">600%</option>
-              <option value="700">700%</option>
-              <option value="800">800%</option>
-            </select>
-          </div>
-          <div class="field field-toggle">
-            <label for="exportPngTransparentInput">使用透明背景</label>
-            <label class="toggle-switch" for="exportPngTransparentInput">
-              <input id="exportPngTransparentInput" class="toggle-checkbox" type="checkbox" />
-              <span class="toggle-slider" aria-hidden="true"></span>
-            </label>
-          </div>
-          <div class="field field-toggle">
-            <label for="exportPngShowGridInput">显示背景网格</label>
-            <label class="toggle-switch" for="exportPngShowGridInput">
-              <input id="exportPngShowGridInput" class="toggle-checkbox" type="checkbox" />
-              <span class="toggle-slider" aria-hidden="true"></span>
-            </label>
-          </div>
-          <div class="modal-actions export-modal-actions">
-            <button class="btn-ghost" id="exportPngCancelBtn" type="button">取消</button>
-            <button class="btn-main" id="exportPngConfirmBtn" type="button">导出</button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="modal-backdrop" id="shortcutsModal" hidden></div>
-
-    <div class="modal-backdrop" id="colorPickerModal" hidden>
-      <div class="line-manager-modal color-picker-modal" role="dialog" aria-modal="true" aria-label="颜色选择器">
-        <div class="modal-head">
-          <h2 id="colorPickerTitle">颜色选择</h2>
-          <button class="btn-ghost" id="closeColorPickerBtn" type="button" aria-label="关闭">
-            <img src="/img/icon-close.svg" alt="关闭" />
-          </button>
-        </div>
-        <div class="color-picker-body">
-          <div class="color-picker-row">
-            <label for="colorPickerInput">RGB</label>
-            <div class="color-picker-inputs">
-              <input id="colorPickerInput" type="color" />
-              <div class="color-picker-preview" id="colorPickerPreview"></div>
-              <div class="color-picker-value" id="colorPickerValue">#000000 100%</div>
-            </div>
-          </div>
-          <div class="color-picker-row">
-            <label for="colorPickerAlpha">Alpha</label>
-            <div class="color-picker-alpha">
-              <input id="colorPickerAlpha" type="range" min="0" max="100" value="100" />
-              <input id="colorPickerAlphaNumber" type="number" min="0" max="100" step="1" value="100" />
-            </div>
-          </div>
-          <div class="color-picker-history">
-            <div class="color-picker-history-head">历史记录</div>
-            <div class="color-picker-history-list" id="colorPickerHistoryList"></div>
-          </div>
-          <div class="modal-actions">
-            <button class="btn-ghost" id="colorPickerCancelBtn" type="button">取消</button>
-            <button class="btn-main" id="colorPickerConfirmBtn" type="button">确定</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div class="modal-backdrop" id="paramEditorModal" hidden></div>
-
-  <div class="modal-backdrop" id="drawingManagerModal" hidden></div>
-
-  <script src="js/main.js" type="module"></script>
+        <div class="tool-card-body"><div class="tool-card-top"><span class="tool-number">02 / STATION</span><span class="tool-open" aria-hidden="true">↗</span></div><h2>车站空间设计</h2><p>组织楼层、轨道与设施，让车站结构一目了然。</p><div class="tool-capabilities"><span>3D 示意</span><span>分层平面</span><span>区域与设施</span></div><span class="tool-start">开始设计 <span aria-hidden="true">→</span></span></div>
+      </a>
+    </section>
+    <div class="home-note"><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="3" width="14" height="14" rx="3"/><path d="M6 3v5h8V3M6 17v-6h8v6"/></svg><span>作品自动保存在当前浏览器，可随时导出项目文件备份。</span></div>
+  </main>
+  <footer class="home-footer"><span>RMCreator</span><span>线路与空间，自由创造。</span><nav class="home-footer-links" aria-label="页脚链接"><span>友情链接</span><a href="https://china-emu.cn/" target="_blank" rel="noopener noreferrer">中国动车组 ↗</a><a href="https://github.com/IAFEnvoy/RMCreator" target="_blank" rel="noopener noreferrer">GitHub ↗</a></nav></footer>
 </body>
-
 </html>

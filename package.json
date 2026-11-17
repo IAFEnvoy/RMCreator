@@ -1,9 +1,18 @@
 {
-	"scripts": {
-		"dev": "vite dev",
-		"build": "vite build"
-	},
-	"dependencies": {
-		"vite": "^8.0.3"
-	}
+  "name": "rmcreator",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "vite build",
+    "preview": "vite preview --host 127.0.0.1",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "html-to-image": "^1.11.13",
+    "lucide": "^1.73.0",
+    "polygon-clipping": "^0.15.7",
+    "three": "^0.187.0",
+    "vite": "^8.3.8"
+  }
 }

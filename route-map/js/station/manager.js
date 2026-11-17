@@ -1,0 +1,3191 @@
+import { stationStorageKey } from "../constants.js";
+import { svgNs } from "../dom.js";
+import {
+  autoCropSvg,
+  buildRenderableShapeSvg,
+  normalizeNumber,
+  normalizeShapeParameterDefault,
+  normalizeShapeParameters,
+  safeColor,
+  shapeParameterTypeDefinitions,
+  toNumber
+} from "../shape/utils.js";
+import {
+  applyTextInputStyle,
+  formatColorWithAlpha,
+  normalizeColor,
+  normalizeTextStyleFlags
+} from "../utils.js";
+import {
+  appendStationTexts,
+  buildShapeParamValuesFromRuntime,
+  buildStationRuntimeParamMap,
+  buildStationTextParamOptions,
+  createDefaultStationTextCard,
+  createDefaultStationTextPlacement,
+  getStationTextFontOptions,
+  normalizeStationTextCards,
+  normalizeStationTextContent,
+  normalizeStationTextPlacement,
+  normalizeTextBinding,
+  normalizeTextSlot
+} from "./text-utils.js";
+import { getTemplate, renderTemplate } from "../template-store.js";
+
+const previewDefaultViewBox = Object.freeze({ x: -120, y: -120, width: 480, height: 480 });
+const previewInitialScale = 0.25;
+const defaultBlockGap = 4;
+
+function getTextStyleToolbarItems() {
+  return [
+    { flag: "bold", icon: "img/icon-bold.svg", label: "加粗" },
+    { flag: "italic", icon: "img/icon-italic.svg", label: "斜体" },
+    { flag: "underline", icon: "img/icon-underline.svg", label: "下划线" },
+    { flag: "strikethrough", icon: "img/icon-strikethrough.svg", label: "删除线" }
+  ];
+}
+
+export function createStationManager({
+  state,
+  elements,
+  createStationPresetId,
+  colorPicker,
+  paramEditor,
+  renderSubmenu,
+  onStateChanged,
+  rerenderScene
+}) {
+  const exportType = "stationType";
+  const stationManagerModal = elements.stationManagerModal;
+  let closeStationManagerBtn = null;
+  let newStationPresetBtn = null;
+  let stationLibraryList = null;
+  let stationSelectAllInput = null;
+  let stationPresetNameInput = null;
+  let stationShapeSearchInput = null;
+  let stationShapeSelect = null;
+  let stationTextPlacementPanel = null;
+  let stationTextPlacementSelect = null;
+  let stationTextDistanceUseParam = null;
+  let stationTextDistanceValue = null;
+  let stationTextDistanceParamSelect = null;
+  let stationRotationUseParam = null;
+  let stationRotationValue = null;
+  let stationVirtualToggle = null;
+  let stationPreviewResetBtn = null;
+  let stationPreviewCanvasWrap = null;
+  let stationPreviewCanvas = null;
+  let stationTabTextBtn = null;
+  let stationTabParamsBtn = null;
+  let stationTextPanel = null;
+  let stationParamsPanel = null;
+  let stationAddTextCardBtn = null;
+  let stationParamTypeSelect = null;
+  let stationAddParamBtn = null;
+  let stationCustomParamList = null;
+  let stationExistingParamList = null;
+  let stationTextCardList = null;
+  let deleteStationPresetBtn = null;
+  let downloadStationPresetBtn = null;
+  let importStationPresetBtn = null;
+  let stationPresetImportInput = null;
+  let stationDetailCopyBtn = null;
+  let stationDetailDeleteBtn = null;
+
+  const getEl = (selector) => (stationManagerModal ? stationManagerModal.querySelector(selector) : null);
+
+  function ensureInjected() {
+    if (!stationManagerModal) {
+      return;
+    }
+    if (!stationManagerModal.innerHTML.trim()) {
+      stationManagerModal.innerHTML = getTemplate("station-manager");
+    }
+  }
+
+  function syncElements() {
+    closeStationManagerBtn = getEl("#closeStationManagerBtn");
+    newStationPresetBtn = getEl("#newStationPresetBtn");
+    stationLibraryList = getEl("#stationLibraryList");
+    stationSelectAllInput = getEl("#stationSelectAllInput");
+    stationPresetNameInput = getEl("#stationPresetNameInput");
+    stationShapeSearchInput = getEl("#stationShapeSearchInput");
+    stationShapeSelect = getEl("#stationShapeSelect");
+    stationTextPlacementPanel = getEl("#stationTextPlacementPanel");
+    stationTextPlacementSelect = getEl("#stationTextPlacementSelect");
+    stationTextDistanceUseParam = getEl("#stationTextDistanceUseParam");
+    stationTextDistanceValue = getEl("#stationTextDistanceValue");
+    stationTextDistanceParamSelect = getEl("#stationTextDistanceParamSelect");
+    stationRotationUseParam = getEl("#stationRotationUseParam");
+    stationRotationValue = getEl("#stationRotationValue");
+    stationVirtualToggle = getEl("#stationVirtualToggle");
+    stationPreviewResetBtn = getEl("#stationPreviewResetBtn");
+    stationPreviewCanvasWrap = getEl("#stationPreviewCanvasWrap");
+    stationPreviewCanvas = getEl("#stationPreviewCanvas");
+    stationTabTextBtn = getEl("#stationTabTextBtn");
+    stationTabParamsBtn = getEl("#stationTabParamsBtn");
+    stationTextPanel = getEl("#stationTextPanel");
+    stationParamsPanel = getEl("#stationParamsPanel");
+    stationAddTextCardBtn = getEl("#stationAddTextCardBtn");
+    stationParamTypeSelect = getEl("#stationParamTypeSelect");
+    stationAddParamBtn = getEl("#stationAddParamBtn");
+    stationCustomParamList = getEl("#stationCustomParamList");
+    stationExistingParamList = getEl("#stationExistingParamList");
+    stationTextCardList = getEl("#stationTextCardList");
+    deleteStationPresetBtn = getEl("#deleteStationPresetBtn");
+    downloadStationPresetBtn = getEl("#downloadStationPresetBtn");
+    importStationPresetBtn = getEl("#importStationPresetBtn");
+    stationPresetImportInput = getEl("#stationPresetImportInput");
+    stationDetailCopyBtn = getEl("#stationDetailCopyBtn");
+    stationDetailDeleteBtn = getEl("#stationDetailDeleteBtn");
+  }
+
+  const previewState = {
+    viewBox: { ...previewDefaultViewBox },
+    isPanning: false,
+    startClientX: 0,
+    startClientY: 0,
+    startViewBox: { ...previewDefaultViewBox }
+  };
+
+  function getCheckedPresetIds() {
+    return Array.isArray(state.stationManager.checkedIds)
+      ? state.stationManager.checkedIds.map((id) => String(id))
+      : [];
+  }
+
+  function setCheckedPresetIds(ids) {
+    const validIds = new Set((Array.isArray(state.stationLibrary) ? state.stationLibrary : []).map((preset) => String(preset.id)));
+    const seen = new Set();
+    const next = [];
+    (Array.isArray(ids) ? ids : []).forEach((id) => {
+      const key = String(id || "");
+      if (!key || !validIds.has(key) || seen.has(key)) {
+        return;
+      }
+      seen.add(key);
+      next.push(key);
+    });
+    state.stationManager.checkedIds = next;
+  }
+
+  function resolvePresetTargets() {
+    const checkedIds = getCheckedPresetIds();
+    if (checkedIds.length) {
+      return checkedIds
+        .map((id) => (Array.isArray(state.stationLibrary) ? state.stationLibrary : []).find((preset) => preset.id === id))
+        .filter(Boolean);
+    }
+
+    const selected = getSelectedPreset();
+    return selected ? [selected] : [];
+  }
+
+  function syncStationBulkActionState() {
+    const totalCount = Array.isArray(state.stationLibrary) ? state.stationLibrary.length : 0;
+    const checkedCount = getCheckedPresetIds().length;
+
+    stationSelectAllInput.checked = totalCount > 0 && checkedCount === totalCount;
+    stationSelectAllInput.indeterminate = checkedCount > 0 && checkedCount < totalCount;
+
+    const hasChecked = checkedCount > 0;
+    const selectedPreset = getSelectedPreset();
+    deleteStationPresetBtn.disabled = !(hasChecked || selectedPreset);
+    downloadStationPresetBtn.disabled = !(hasChecked || selectedPreset);
+  }
+
+  function bind() {
+    ensureInjected();
+    syncElements();
+
+    if (
+      !stationManagerModal
+      || !closeStationManagerBtn
+      || !newStationPresetBtn
+      || !stationLibraryList
+      || !stationSelectAllInput
+      || !stationPresetNameInput
+      || !stationShapeSearchInput
+      || !stationShapeSelect
+      || !stationTextPlacementPanel
+      || !stationTextPlacementSelect
+      || !stationTextDistanceUseParam
+      || !stationTextDistanceValue
+      || !stationTextDistanceParamSelect
+      || !stationVirtualToggle
+      || !stationPreviewResetBtn
+      || !stationPreviewCanvasWrap
+      || !stationPreviewCanvas
+      || !stationTabTextBtn
+      || !stationTabParamsBtn
+      || !stationTextPanel
+      || !stationParamsPanel
+      || !stationAddTextCardBtn
+      || !stationParamTypeSelect
+      || !stationAddParamBtn
+      || !stationCustomParamList
+      || !stationExistingParamList
+      || !stationTextCardList
+      || !deleteStationPresetBtn
+      || !downloadStationPresetBtn
+      || !importStationPresetBtn
+      || !stationPresetImportInput
+    ) {
+      return;
+    }
+
+    ensureStationManagerState();
+    loadStationLibrary();
+
+    if (!Array.isArray(state.stationManager.checkedIds)) {
+      state.stationManager.checkedIds = [];
+    }
+
+    closeStationManagerBtn.addEventListener("click", close);
+    newStationPresetBtn.addEventListener("click", createEmptyPreset);
+    stationPreviewResetBtn.addEventListener("click", () => {
+      const preset = getSelectedPreset();
+      resetPreviewView(preset);
+      renderPreview(preset);
+    });
+
+    stationPreviewCanvas.addEventListener("mousedown", onPreviewMouseDown);
+    stationPreviewCanvas.addEventListener("wheel", onPreviewWheel, { passive: false });
+    window.addEventListener("mousemove", onWindowMouseMove);
+    window.addEventListener("mouseup", onWindowMouseUp);
+
+    stationTabTextBtn.addEventListener("click", () => {
+      state.stationManager.activeTab = "text";
+      syncTabVisibility();
+    });
+
+    stationTabParamsBtn.addEventListener("click", () => {
+      state.stationManager.activeTab = "params";
+      syncTabVisibility();
+      renderParamsPanel(getSelectedPreset());
+    });
+
+    stationParamTypeSelect.addEventListener("change", () => {
+      state.stationManager.paramType = stationParamTypeSelect.value;
+    });
+
+    stationAddParamBtn.addEventListener("click", () => {
+      addCustomParameter(stationParamTypeSelect.value);
+    });
+
+    stationAddTextCardBtn.addEventListener("click", addTextCard);
+    deleteStationPresetBtn.addEventListener("click", deleteSelectedStationPreset);
+    downloadStationPresetBtn.addEventListener("click", downloadSelectedStationPreset);
+    importStationPresetBtn.addEventListener("click", () => stationPresetImportInput.click());
+    stationPresetImportInput.addEventListener("change", importStationPresetsFromFile);
+    if (stationDetailCopyBtn) {
+      stationDetailCopyBtn.addEventListener("click", createStationPresetCopy);
+    }
+    if (stationDetailDeleteBtn) {
+      stationDetailDeleteBtn.addEventListener("click", deleteSelectedStationPreset);
+    }
+    stationSelectAllInput.addEventListener("change", () => {
+      if (stationSelectAllInput.checked) {
+        setCheckedPresetIds((Array.isArray(state.stationLibrary) ? state.stationLibrary : []).map((preset) => preset.id));
+      } else {
+        setCheckedPresetIds([]);
+      }
+      renderStationManager();
+    });
+
+    stationPresetNameInput.addEventListener("input", () => {
+      const preset = getSelectedPreset();
+      if (!preset) {
+        return;
+      }
+
+      preset.name = String(stationPresetNameInput.value || "").trim() || "车站预设";
+      persistStationLibrary();
+      renderStationManager();
+      renderSubmenu?.();
+    });
+
+    stationShapeSearchInput.addEventListener("input", () => {
+      state.stationManager.shapeQuery = String(stationShapeSearchInput.value || "");
+      renderShapeSelect();
+    });
+
+    stationShapeSelect.addEventListener("change", () => {
+      const preset = getSelectedPreset();
+      if (!preset) {
+        return;
+      }
+
+      preset.shapeId = stationShapeSelect.value || null;
+      preset.shapeParamSettings = {};
+      persistStationLibrary();
+      resetPreviewView(preset);
+      refreshStationParamPanels(preset);
+    });
+
+    stationTextPlacementSelect.addEventListener("change", onTextPlacementChanged);
+    stationTextDistanceUseParam.addEventListener("change", onTextDistanceChanged);
+    stationTextDistanceValue.addEventListener("change", onTextDistanceChanged);
+    stationTextDistanceParamSelect.addEventListener("change", onTextDistanceChanged);
+
+    const onRotationChanged = () => {
+      const preset = getSelectedPreset();
+      if (!preset) return;
+      const useParam = stationRotationUseParam.checked;
+      if (useParam) {
+        // 绑定到第一个 number 类型参数（不存在则自动创建）
+        let customParams = normalizeShapeParameters(preset.params);
+        let firstNumber = customParams.find((p) => p.type === "number");
+        if (!firstNumber) {
+          // 自动创建一个 number 参数
+          const newParam = {
+            id: createStationPresetId(),
+            type: "number",
+            label: "旋转角度",
+            defaultValue: Number(stationRotationValue.value) || 0,
+            conditions: [],
+            extensions: {}
+          };
+          preset.params = [...customParams, newParam];
+          firstNumber = preset.params[preset.params.length - 1];
+        }
+        preset.rotationParamId = firstNumber.id;
+        // 将当前输入值写入参数默认值
+        preset.params = preset.params.map((p) => {
+          const pid = String(p?.id || "");
+          if (pid !== firstNumber.id) return p;
+          const val = Number(stationRotationValue.value);
+          return { ...p, defaultValue: Number.isFinite(val) ? val : (Number(p.defaultValue) || 0) };
+        });
+      } else {
+        preset.rotation = Number(stationRotationValue.value) || 0;
+        delete preset.rotationParamId;
+      }
+      persistStationLibrary();
+      renderPreview(preset);
+      renderRotation(preset);
+      rerenderScene?.();
+      onStateChanged?.({ coalesceKey: "station-rotation" });
+    };
+    stationRotationUseParam.addEventListener("change", onRotationChanged);
+    stationRotationValue.addEventListener("change", onRotationChanged);
+
+    stationVirtualToggle.addEventListener("change", () => {
+      const preset = getSelectedPreset();
+      if (!preset) {
+        return;
+      }
+
+      preset.virtualNode = Boolean(stationVirtualToggle.checked);
+      persistStationLibrary();
+      renderPreview(preset);
+      renderSubmenu?.();
+      rerenderScene?.();
+      onStateChanged?.();
+    });
+
+    stationManagerModal.hidden = true;
+  }
+
+  function open() {
+    ensureInjected();
+    syncElements();
+
+    if (!stationManagerModal) {
+      return;
+    }
+
+    state.stationManager.isOpen = true;
+    stationManagerModal.hidden = false;
+    ensureSelectedPreset();
+    resetPreviewView(getSelectedPreset());
+    renderStationManager();
+  }
+
+  function close() {
+    if (!stationManagerModal) {
+      return;
+    }
+
+    state.stationManager.isOpen = false;
+    stationManagerModal.hidden = true;
+    stopPreviewPanning();
+  }
+
+  function renderStationManager() {
+    renderStationLibraryList();
+    syncTabVisibility();
+
+    const preset = getSelectedPreset();
+    stationShapeSearchInput.value = state.stationManager.shapeQuery || "";
+    stationParamTypeSelect.value = shapeParameterTypeDefinitions[state.stationManager.paramType]
+      ? state.stationManager.paramType
+      : "color";
+
+    if (!preset) {
+      stationPresetNameInput.value = "";
+      stationShapeSelect.innerHTML = "";
+      stationTextCardList.innerHTML = getTemplate("station-manager-text-card-empty");
+      stationVirtualToggle.checked = false;
+      stationVirtualToggle.disabled = true;
+      renderTextPlacementPanel(null);
+      renderParamsPanel(null);
+      renderPreview(null);
+      syncStationBulkActionState();
+      return;
+    }
+
+    stationPresetNameInput.value = preset.name || "";
+    stationVirtualToggle.disabled = false;
+    stationVirtualToggle.checked = Boolean(preset.virtualNode);
+    renderShapeSelect();
+    renderRotation(preset);
+    renderTextCards(preset);
+    renderTextPlacementPanel(preset);
+    renderParamsPanel(preset);
+    renderPreview(preset);
+    syncStationBulkActionState();
+    syncStationDetailActionState();
+  }
+
+  function buildCopyName(baseName, existingNames) {
+    const cleaned = String(baseName || "车站预设").trim() || "车站预设";
+    const baseCopy = `${cleaned} 副本`;
+    if (!existingNames.includes(baseCopy)) {
+      return baseCopy;
+    }
+
+    let index = 2;
+    let next = `${baseCopy} ${index}`;
+    while (existingNames.includes(next)) {
+      index += 1;
+      next = `${baseCopy} ${index}`;
+    }
+    return next;
+  }
+
+  function createStationPresetCopy() {
+    const selected = getSelectedPreset();
+    if (!selected) {
+      return;
+    }
+
+    const nextId = createStationPresetId();
+    const existingNames = (Array.isArray(state.stationLibrary) ? state.stationLibrary : []).map((p) => String(p.name || ""));
+    const nextName = buildCopyName(String(selected.name || "车站预设"), existingNames);
+
+    const copy = sanitizePreset({
+      ...structuredClone(selected),
+      id: nextId,
+      name: nextName
+    });
+    if (!copy) {
+      return;
+    }
+
+    state.stationLibrary.push(copy);
+    state.stationManager.selectedId = copy.id;
+    persistStationLibrary();
+    resetPreviewView(copy);
+    renderStationManager();
+    renderSubmenu?.();
+    rerenderScene?.();
+    onStateChanged?.();
+  }
+
+  function syncStationDetailActionState() {
+    const selected = getSelectedPreset();
+    if (stationDetailCopyBtn) {
+      stationDetailCopyBtn.disabled = !selected;
+    }
+    if (stationDetailDeleteBtn) {
+      stationDetailDeleteBtn.disabled = !selected;
+    }
+  }
+
+  function refreshStationParamPanels(preset) {
+    if (!preset) {
+      stationTextCardList.innerHTML = getTemplate("station-manager-text-card-empty");
+      renderParamsPanel(null);
+      renderTextPlacementPanel(null);
+      renderPreview(null);
+      return;
+    }
+
+    renderParamsPanel(preset);
+    renderTextCards(preset);
+    renderTextPlacementPanel(preset);
+    renderPreview(preset);
+    renderSubmenu?.();
+  }
+
+  function getStationUsageCountByPresetId(presetId) {
+    if (!presetId || !Array.isArray(state.nodes) || !Array.isArray(state.stationTypes)) {
+      return 0;
+    }
+
+    return state.nodes.filter((node) => {
+      const typeIndex = Number.isInteger(node?.stationTypeIndex) ? node.stationTypeIndex : -1;
+      const type = typeIndex >= 0 ? state.stationTypes[typeIndex] : null;
+      return type?.stationPresetId === presetId;
+    }).length;
+  }
+
+  function deleteSelectedStationPreset() {
+    const targets = resolvePresetTargets();
+    if (!targets.length) {
+      return;
+    }
+
+    const removedPresetIds = new Set(targets.map((preset) => String(preset.id)));
+
+    const presetIdByOldTypeIndex = (Array.isArray(state.stationTypes) ? state.stationTypes : [])
+      .map((type) => String(type?.stationPresetId || ""));
+
+    const removedStationIds = new Set(
+      (Array.isArray(state.nodes) ? state.nodes : [])
+        .filter((node) => {
+          const typeIndex = Number.isInteger(node?.stationTypeIndex) ? node.stationTypeIndex : -1;
+          const sourcePresetId = typeIndex >= 0 ? presetIdByOldTypeIndex[typeIndex] : "";
+          return removedPresetIds.has(sourcePresetId);
+        })
+        .map((node) => String(node.id))
+    );
+    const usageCount = removedStationIds.size;
+
+    const removedEdgeIds = new Set(
+      (Array.isArray(state.edges) ? state.edges : [])
+        .filter((edge) => removedStationIds.has(String(edge?.fromStationId)) || removedStationIds.has(String(edge?.toStationId)))
+        .map((edge) => String(edge.id))
+    );
+
+    const warningLines = [`将删除 ${targets.length} 个车站预设。`];
+    if (usageCount > 0) {
+      warningLines.push(`当前绘图中有 ${usageCount} 个车站在使用它们，删除后这些车站会被一并删除。`);
+    }
+    if (removedEdgeIds.size > 0) {
+      warningLines.push(`与这些车站连接的 ${removedEdgeIds.size} 条线也会被删除。`);
+    }
+    warningLines.push("此操作不可撤销，是否继续？");
+
+    if (state.appSettings?.confirmBeforeDelete !== false && !window.confirm(warningLines.join("\n"))) {
+      return;
+    }
+
+    if (removedStationIds.size > 0) {
+      state.nodes = state.nodes.filter((node) => !removedStationIds.has(String(node.id)));
+    }
+
+    if (removedEdgeIds.size > 0) {
+      state.edges = state.edges.filter((edge) => !removedEdgeIds.has(String(edge.id)));
+    }
+
+    if (Array.isArray(state.selectedEntities) && state.selectedEntities.length) {
+      state.selectedEntities = state.selectedEntities.filter((entity) => {
+        if (entity?.type === "station") {
+          return !removedStationIds.has(String(entity.id));
+        }
+        if (entity?.type === "line") {
+          return !removedEdgeIds.has(String(entity.id));
+        }
+        return true;
+      });
+    }
+
+    state.stationLibrary = state.stationLibrary.filter((item) => !removedPresetIds.has(String(item.id)));
+    setCheckedPresetIds(getCheckedPresetIds().filter((id) => !removedPresetIds.has(String(id))));
+
+    const hasSelected = state.stationLibrary.some((item) => item.id === state.stationManager.selectedId);
+    if (!hasSelected) {
+      state.stationManager.selectedId = state.stationLibrary[0]?.id || null;
+    }
+    state.stationManager.selectedTextCardId = null;
+
+    persistStationLibrary();
+
+    const newTypeIndexByPresetId = new Map(
+      (Array.isArray(state.stationTypes) ? state.stationTypes : [])
+        .map((type, typeIndex) => [String(type?.stationPresetId || ""), typeIndex])
+    );
+
+    (Array.isArray(state.nodes) ? state.nodes : []).forEach((node) => {
+      const oldTypeIndex = Number.isInteger(node?.stationTypeIndex) ? node.stationTypeIndex : -1;
+      const oldPresetId = oldTypeIndex >= 0 ? presetIdByOldTypeIndex[oldTypeIndex] : "";
+
+      if (oldPresetId && newTypeIndexByPresetId.has(oldPresetId)) {
+        node.stationTypeIndex = newTypeIndexByPresetId.get(oldPresetId);
+        return;
+      }
+
+      const fallbackIndex = (Array.isArray(state.stationTypes) ? state.stationTypes : []).findIndex((type) => (
+        Number(type?.radius) === Number(node?.radius) && Boolean(type?.oval) === Boolean(node?.oval)
+      ));
+      node.stationTypeIndex = fallbackIndex >= 0 ? fallbackIndex : 0;
+    });
+
+    renderStationManager();
+    renderSubmenu?.();
+    rerenderScene?.();
+    onStateChanged?.();
+  }
+
+  function downloadSelectedStationPreset() {
+    const targets = resolvePresetTargets();
+    if (!targets.length) {
+      return;
+    }
+
+    const payloadList = targets
+      .map((preset) => sanitizePreset(preset))
+      .filter(Boolean)
+      .map((safePreset) => ({
+        name: safePreset.name,
+        shapeId: safePreset.shapeId,
+        textCards: safePreset.textCards,
+        textPlacement: safePreset.textPlacement,
+        virtualNode: Boolean(safePreset.virtualNode),
+        radius: safePreset.radius,
+        oval: safePreset.oval,
+        shapeParamSettings: safePreset.shapeParamSettings,
+        paramExpressions: safePreset.paramExpressions,
+        params: safePreset.params
+      }));
+    if (!payloadList.length) {
+      return;
+    }
+
+    // 收集所引用的图形类型
+    const presetIds = targets.map((t) => String(t.id));
+    const usedShapeIds = new Set();
+    targets.forEach((preset) => {
+      if (preset?.shapeId) usedShapeIds.add(String(preset.shapeId));
+    });
+    const shapeTypes = (Array.isArray(state.shapeLibrary) ? state.shapeLibrary : [])
+      .filter((shape) => shape && usedShapeIds.has(String(shape.id)))
+      .map((shape) => structuredClone(shape));
+
+    const payload = {
+      type: exportType,
+      data: payloadList,
+      shapeTypes: shapeTypes.length ? shapeTypes : undefined
+    };
+    const downloadName = `RMC_StationType_${buildExportTimestamp()}.json`;
+
+    const blob = new Blob([JSON.stringify(payload)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = downloadName;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function importStationPresetsFromFile(event) {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    try {
+      const text = await file.text();
+      const payload = JSON.parse(text.replace(/^\uFEFF/, ""));
+      if (!payload || typeof payload !== "object") {
+        window.alert("导入失败：文件格式无效。");
+        return;
+      }
+      if (payload.type !== exportType) {
+        window.alert("导入失败：文件类型不匹配。");
+        return;
+      }
+      const entries = Array.isArray(payload.data) ? payload.data : [];
+      if (!entries.length) {
+        window.alert("导入失败：文件中没有可导入的车站预设。");
+        return;
+      }
+      // 导入附带图形类型
+      if (Array.isArray(payload.shapeTypes)) {
+        payload.shapeTypes.forEach((shape) => {
+          if (!shape || !shape.id) return;
+          // 不覆盖已有同名图形
+          const exists = state.shapeLibrary.some((s) => s.id === shape.id);
+          if (!exists) state.shapeLibrary.push(shape);
+        });
+      }
+      showStationImportSelectionModal(entries, file.name);
+    } catch {
+      window.alert("导入失败：JSON 文件格式无效。\n需要 {type:\"stationType\", data:[...]} 格式。");
+    } finally {
+      stationPresetImportInput.value = "";
+    }
+  }
+
+  function openImportSelection(items, fileName) {
+    if (!Array.isArray(items) || !items.length) {
+      window.alert("导入失败：文件中没有可导入的车站预设。");
+      return;
+    }
+    showStationImportSelectionModal(items, fileName || "导入");
+  }
+
+  function showStationImportSelectionModal(items, fileName) {
+    const modalId = 'stationImportSelectModal';
+    let modal = typeof stationManagerModal !== 'undefined' && stationManagerModal ? stationManagerModal.querySelector('#' + modalId) : null;
+    if (!modal) {
+      modal = document.getElementById(modalId);
+    }
+    if (modal && !modal.innerHTML.trim()) {
+      modal.innerHTML = renderTemplate('import-select-modal', {
+        title: '车站预设',
+        type: 'station',
+        Type: 'Station'
+      });
+    }
+
+    const listEl = modal ? modal.querySelector('#stationImportSelectList') : null;
+    const confirmBtn = modal ? modal.querySelector('#confirmStationImportSelectBtn') : null;
+    const cancelBtn = modal ? modal.querySelector('#cancelStationImportSelectBtn') : null;
+    const selectAllCheckbox = modal ? modal.querySelector('#stationImportSelectAll') : null;
+    const closeBtn2 = modal ? modal.querySelector('#closeStationImportSelectBtn') : null;
+
+    if (!modal || !listEl || !confirmBtn || !cancelBtn) {
+      // fallback: import all
+      try {
+        const imported = items
+          .map((entry) => sanitizePreset(entry))
+          .filter(Boolean)
+          .map((entry, index) => ({
+            ...entry,
+            id: createStationPresetId(),
+            name: String(entry.name || `车站预设 ${state.stationLibrary.length + index + 1}`).trim() || `车站预设 ${state.stationLibrary.length + index + 1}`
+          }));
+        if (!imported.length) return;
+        state.stationLibrary.push(...imported);
+        state.stationManager.selectedId = imported[0].id;
+        state.stationManager.selectedTextCardId = null;
+        persistStationLibrary();
+        resetPreviewView(imported[0]);
+        renderStationManager();
+        renderSubmenu?.();
+      } catch (err) {
+        // ignore
+      }
+      return;
+    }
+
+    listEl.innerHTML = '';
+    const normalized = items.map((it) => sanitizePreset(it)).map((it, idx) => ({ item: it, idx }));
+    normalized.forEach(({ item, idx }) => {
+      const row = document.createElement('div');
+      row.className = 'drawing-import-item';
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.className = 'drawing-import-item-checkbox';
+      checkbox.dataset.index = String(idx);
+      checkbox.checked = true;
+
+      const name = item && item.name ? item.name : `${fileName.replace(/\.[^/.]+$/, '')} ${idx + 1}`;
+      const usage = getStationUsageCountByPresetId(item?.id);
+      const label = document.createElement('label');
+      label.appendChild(checkbox);
+      const span = document.createElement('span');
+      span.textContent = `${name} — ${usage} 引用 (预览导入后可能变化)`;
+      label.appendChild(span);
+      row.appendChild(label);
+      listEl.appendChild(row);
+    });
+
+    function getSelectedIndexes() {
+      const boxes = listEl.querySelectorAll('.drawing-import-item-checkbox');
+      const res = [];
+      boxes.forEach((b) => { if (b.checked) res.push(Number(b.dataset.index)); });
+      return res;
+    }
+
+    function cleanupHandlers() {
+      confirmBtn.removeEventListener('click', confirmHandler);
+      cancelBtn.removeEventListener('click', cancelHandler);
+      if (selectAllCheckbox) selectAllCheckbox.removeEventListener('change', selectAllHandler);
+      if (closeBtn2) closeBtn2.removeEventListener('click', cancelHandler);
+    }
+
+    function confirmHandler() {
+      const idxs = getSelectedIndexes();
+      if (!idxs.length) {
+        window.alert('请先选择要导入的车站预设。');
+        return;
+      }
+      try {
+        const imported = idxs.map((i) => sanitizePreset(items[i])).filter(Boolean).map((entry, index) => ({
+          ...entry,
+          id: createStationPresetId(),
+          name: String(entry.name || `车站预设 ${state.stationLibrary.length + index + 1}`).trim() || `车站预设 ${state.stationLibrary.length + index + 1}`
+        }));
+        if (!imported.length) return;
+        state.stationLibrary.push(...imported);
+        state.stationManager.selectedId = imported[0].id;
+        state.stationManager.selectedTextCardId = null;
+        persistStationLibrary();
+        resetPreviewView(imported[0]);
+        renderStationManager();
+        renderSubmenu?.();
+      } catch (err) {
+        // ignore
+      } finally {
+        cleanupHandlers();
+        modal.hidden = true;
+      }
+    }
+
+    function cancelHandler() {
+      cleanupHandlers();
+      modal.hidden = true;
+    }
+
+    function selectAllHandler() {
+      const boxes = listEl.querySelectorAll('.drawing-import-item-checkbox');
+      boxes.forEach((b) => { b.checked = selectAllCheckbox.checked; });
+    }
+
+    if (selectAllCheckbox) {
+      selectAllCheckbox.checked = true;
+      selectAllCheckbox.addEventListener('change', selectAllHandler);
+    }
+    confirmBtn.addEventListener('click', confirmHandler);
+    cancelBtn.addEventListener('click', cancelHandler);
+    if (closeBtn2) closeBtn2.addEventListener('click', cancelHandler);
+    modal.hidden = false;
+  }
+
+  function renderStationLibraryList() {
+    stationLibraryList.innerHTML = "";
+    setCheckedPresetIds(getCheckedPresetIds());
+    const checkedSet = new Set(getCheckedPresetIds());
+
+    if (!Array.isArray(state.stationLibrary) || !state.stationLibrary.length) {
+      const empty = document.createElement("div");
+      empty.className = "kv";
+      empty.textContent = "车站库为空，请先新建。";
+      stationLibraryList.appendChild(empty);
+      return;
+    }
+
+    state.stationLibrary.forEach((preset) => {
+      const item = document.createElement("button");
+      item.type = "button";
+      item.className = "line-library-item";
+      item.classList.toggle("active", preset.id === state.stationManager.selectedId);
+
+      const row = document.createElement("div");
+      row.className = "line-library-item-row";
+
+      const lead = document.createElement("div");
+      lead.className = "line-library-item-lead";
+
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.className = "library-item-checkbox";
+      checkbox.checked = checkedSet.has(preset.id);
+      checkbox.addEventListener("click", (event) => event.stopPropagation());
+      checkbox.addEventListener("change", (event) => {
+        event.stopPropagation();
+        const next = new Set(getCheckedPresetIds());
+        if (checkbox.checked) {
+          next.add(preset.id);
+        } else {
+          next.delete(preset.id);
+        }
+        setCheckedPresetIds([...next]);
+        syncStationBulkActionState();
+      });
+
+      const title = document.createElement("span");
+      title.className = "line-library-item-title";
+      const usageCount = getStationUsageCountByPresetId(preset.id);
+      const safeName = preset.name || "未命名车站";
+      title.textContent = `${safeName} (${usageCount})`;
+      title.title = `${safeName}（${usageCount} 个引用）`;
+      lead.appendChild(checkbox);
+      lead.appendChild(title);
+      row.appendChild(lead);
+
+      const previewSrc = buildLibraryPreviewDataUrl(preset);
+      if (previewSrc) {
+        const preview = document.createElement("img");
+        preview.className = "shape-library-preview-inline station-library-preview-inline";
+        preview.alt = `${preset.name || "车站"} 预览`;
+        preview.src = previewSrc;
+        row.appendChild(preview);
+      } else {
+        const previewPlaceholder = document.createElement("span");
+        previewPlaceholder.className = "station-library-preview-placeholder";
+        previewPlaceholder.textContent = "-";
+        row.appendChild(previewPlaceholder);
+      }
+
+      item.appendChild(row);
+
+      item.addEventListener("click", () => {
+        state.stationManager.selectedId = preset.id;
+        renderStationManager();
+      });
+
+      stationLibraryList.appendChild(item);
+    });
+  }
+
+  function buildLibraryPreviewDataUrl(preset) {
+    const shape = getShapeById(preset?.shapeId);
+    if (!shape) {
+      return "";
+    }
+
+    const runtimeParams = buildStationRuntimeParamMap({
+      preset,
+      shape,
+      stationParamValues: null
+    });
+    const svgText = buildRenderableShapeSvg(shape, buildShapeParamValuesFromRuntime(shape, runtimeParams));
+    if (!svgText) {
+      return "";
+    }
+
+    // 自动检测边界并居中裁剪
+    const previewSvg = autoCropSvg(svgText);
+    return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(String(previewSvg))}`;
+  }
+
+  function renderShapeSelect() {
+    const preset = getSelectedPreset();
+    stationShapeSelect.innerHTML = "";
+
+    if (!preset) {
+      return;
+    }
+
+    const query = String(state.stationManager.shapeQuery || "").trim().toLowerCase();
+    const shapes = (Array.isArray(state.shapeLibrary) ? state.shapeLibrary : []).filter((shape) => {
+      if (!shape || typeof shape !== "object") {
+        return false;
+      }
+      if (!query) {
+        return true;
+      }
+      return String(shape.name || "").toLowerCase().includes(query);
+    });
+
+    if (!shapes.length) {
+      const option = document.createElement("option");
+      option.value = "";
+      option.textContent = "无可用图形";
+      stationShapeSelect.appendChild(option);
+      stationShapeSelect.disabled = true;
+      return;
+    }
+
+    stationShapeSelect.disabled = false;
+
+    const emptyOption = document.createElement("option");
+    emptyOption.value = "";
+    emptyOption.textContent = "请选择图形";
+    stationShapeSelect.appendChild(emptyOption);
+
+    shapes.forEach((shape) => {
+      const option = document.createElement("option");
+      option.value = shape.id;
+      option.textContent = shape.name;
+      stationShapeSelect.appendChild(option);
+    });
+
+    if (preset.shapeId && shapes.some((shape) => shape.id === preset.shapeId)) {
+      stationShapeSelect.value = preset.shapeId;
+    } else {
+      stationShapeSelect.value = "";
+    }
+  }
+
+  function renderRotation(preset) {
+    if (!preset) return;
+
+    const rotation = Number.isFinite(Number(preset.rotation)) ? Number(preset.rotation) : 0;
+    const paramId = String(preset.rotationParamId || "").trim();
+    const useParam = Boolean(paramId);
+
+    stationRotationUseParam.checked = useParam;
+    stationRotationValue.value = String(rotation);
+    // 参数模式时输入框只读，显示参数绑定状态
+    stationRotationValue.readOnly = useParam;
+    if (useParam) {
+      // 显示绑定的参数值作为占位提示
+      const customParams = normalizeShapeParameters(preset.params);
+      const boundParam = customParams.find((p) => p.id === paramId);
+      stationRotationValue.placeholder = boundParam ? `参数: ${boundParam.label}` : "已绑定参数";
+      stationRotationValue.style.opacity = "0.5";
+    } else {
+      stationRotationValue.placeholder = "";
+      stationRotationValue.style.opacity = "";
+    }
+  }
+
+  function renderTextCards(preset) {
+    stationTextCardList.innerHTML = "";
+
+    const cards = normalizeStationTextCards(preset?.textCards, createStationPresetId);
+    if (preset) {
+      preset.textCards = cards;
+      ensureSelectedTextCard(preset);
+    }
+
+    const shape = getShapeById(preset?.shapeId);
+    const paramOptions = buildStationTextParamOptions({ preset, shape });
+    const colorParamOptions = paramOptions.filter((item) => item.type === "color");
+    const numberParamOptions = paramOptions.filter((item) => item.type === "number");
+    const checkboxParamOptions = paramOptions.filter((item) => item.type === "checkbox");
+
+    // fx 辅助：为文本卡片绑定打开表达式编辑器
+    const openBindingFxEditor = (card, bindingObj, paramType, paramLabel, onApplied) => {
+      if (!paramEditor || typeof paramEditor.open !== "function") return;
+      const existingExpr = String(bindingObj?.expression || "").trim();
+      const currentVal = normalizeShapeParameterDefault(paramType, bindingObj?.value);
+      const boundOption = paramOptions.find((p) => p.id === bindingObj?.paramId);
+      const displayName = boundOption ? `${boundOption.label}` : paramLabel;
+      paramEditor.open({
+        type: "single",
+        includeSelf: true,
+        entities: [card],
+        params: [{
+          name: displayName,
+          id: paramLabel,
+          type: paramType,
+          value: currentVal,
+          expression: existingExpr || ""
+        }],
+        onApply: (result) => {
+          if (!result || !Array.isArray(result.params) || !result.params.length) return;
+          const applied = result.params[0];
+          const expr = String(applied.expression || "").trim();
+          if (typeof onApplied === "function") {
+            onApplied({
+              expression: expr,
+              finalValue: applied.finalValue !== undefined ? applied.finalValue : applied.value
+            });
+          }
+        }
+      });
+    };
+
+    // 格式化预览值
+    const fmtPreview = (type, val) => {
+      if (type === "color") return formatColorWithAlpha(normalizeColor(val));
+      if (type === "number") return String(Number(val) || 0);
+      if (type === "checkbox") return val ? "显示" : "隐藏";
+      return String(val || "");
+    };
+
+    // 创建通用的 fx + 预览行
+    const createFxPreviewRow = (bindingObj, paramType) => {
+      const row = document.createElement("div");
+      row.className = "station-binding-fx-row";
+      const fxBtn = document.createElement("button");
+      fxBtn.type = "button";
+      fxBtn.className = "param-fx-toggle";
+      fxBtn.title = "参数表达式（支持 JS 运算）";
+      fxBtn.textContent = "fx";
+      const preview = document.createElement("span");
+      preview.className = "shape-prop-param-preview station-binding-preview";
+      row.appendChild(fxBtn);
+      row.appendChild(preview);
+      return { row, fxBtn, preview };
+    };
+
+    if (!cards.length) {
+      const empty = document.createElement("div");
+      empty.className = "kv";
+      empty.textContent = "暂无文本卡片。";
+      stationTextCardList.appendChild(empty);
+      return;
+    }
+
+    cards.forEach((card, index) => {
+      const item = document.createElement("div");
+      item.className = "station-text-card shape-param-item";
+      item.setAttribute("data-text-card-id", card.id);
+      item.classList.toggle("active", card.id === state.stationManager.selectedTextCardId);
+
+      const head = document.createElement("div");
+      head.className = "station-text-card-head";
+
+      const indexBadge = document.createElement("span");
+      indexBadge.className = "station-text-card-index";
+      indexBadge.textContent = `#${index + 1}`;
+      head.appendChild(indexBadge);
+
+      const tools = document.createElement("div");
+      tools.className = "station-text-card-tools";
+
+      const drag = document.createElement("button");
+      drag.type = "button";
+      drag.className = "btn-ghost station-text-drag";
+      drag.innerHTML = '<img src="img/icon-drag-vertical.svg" alt="拖动" />';
+      drag.setAttribute("aria-label", "拖动");
+      drag.title = "拖拽调整顺序";
+      drag.setAttribute("draggable", "true");
+      tools.appendChild(drag);
+
+      const removeBtn = document.createElement("button");
+      removeBtn.type = "button";
+      removeBtn.className = "btn-ghost btn-danger param-remove-btn";
+      removeBtn.textContent = "删除";
+      removeBtn.addEventListener("click", (event) => {
+        event.stopPropagation();
+        removeTextCard(card.id);
+      });
+      tools.appendChild(removeBtn);
+      head.appendChild(tools);
+      item.appendChild(head);
+
+      const descField = document.createElement("label");
+      descField.className = "station-text-card-field";
+      const descLabel = document.createElement("span");
+      descLabel.textContent = "文本描述";
+      const descInput = document.createElement("input");
+      descInput.type = "text";
+      descInput.value = card.label;
+      descInput.addEventListener("change", () => {
+        mutateSelectedTextCard(card.id, (liveCard) => {
+          liveCard.label = String(descInput.value || `文本 ${index + 1}`).trim() || `文本 ${index + 1}`;
+        });
+        descInput.value = getSelectedTextCard(preset)?.label || descInput.value;
+        persistStationLibrary();
+        renderSubmenu?.();
+      });
+      descField.appendChild(descLabel);
+      descField.appendChild(descInput);
+      item.appendChild(descField);
+
+      const multilineField = document.createElement("div");
+      multilineField.className = "station-text-card-field station-text-card-toggle-row";
+      const multilineLabel = document.createElement("span");
+      multilineLabel.textContent = "接受多行";
+      const multilineSwitch = document.createElement("label");
+      multilineSwitch.className = "toggle-switch";
+      const multilineInput = document.createElement("input");
+      multilineInput.type = "checkbox";
+      multilineInput.className = "toggle-checkbox";
+      multilineInput.checked = Boolean(card.allowMultiline);
+      const multilineSlider = document.createElement("span");
+      multilineSlider.className = "toggle-slider";
+      multilineSlider.setAttribute("aria-hidden", "true");
+      multilineSwitch.appendChild(multilineInput);
+      multilineSwitch.appendChild(multilineSlider);
+      multilineField.appendChild(multilineLabel);
+      multilineField.appendChild(multilineSwitch);
+      item.appendChild(multilineField);
+
+      multilineInput.addEventListener("change", () => {
+        mutateSelectedTextCard(card.id, (liveCard) => {
+          liveCard.allowMultiline = Boolean(multilineInput.checked);
+          liveCard.defaultValue = normalizeStationTextContent(
+            liveCard.defaultValue,
+            liveCard.allowMultiline
+          );
+        });
+        persistStationLibrary();
+        renderTextCards(preset);
+        renderPreview(preset);
+        renderSubmenu?.();
+      });
+
+      const visibilityField = document.createElement("div");
+      visibilityField.className = "station-text-card-field";
+      const visibilityLabel = document.createElement("span");
+      visibilityLabel.textContent = "显示隐藏";
+      visibilityField.appendChild(visibilityLabel);
+
+      const visibilityModeRow = document.createElement("div");
+      visibilityModeRow.className = "station-binding-row";
+      const visibilityToggleWrap = document.createElement("div");
+      visibilityToggleWrap.className = "shape-prop-param-toggle";
+      const visibilityToggleText = document.createElement("span");
+      visibilityToggleText.textContent = "参数";
+      const visibilityToggle = document.createElement("input");
+      visibilityToggle.type = "checkbox";
+      visibilityToggle.className = "toggle-checkbox";
+      const visibilityToggleId = `station-text-visible-toggle-${card.id}`;
+      visibilityToggle.id = visibilityToggleId;
+      const visibilityToggleSlider = document.createElement("span");
+      visibilityToggleSlider.className = "toggle-slider";
+      visibilityToggleSlider.setAttribute("aria-hidden", "true");
+      const visibilityToggleSwitch = document.createElement("label");
+      visibilityToggleSwitch.className = "toggle-switch";
+      visibilityToggleSwitch.setAttribute("for", visibilityToggleId);
+      visibilityToggleSwitch.appendChild(visibilityToggle);
+      visibilityToggleSwitch.appendChild(visibilityToggleSlider);
+      visibilityToggleWrap.appendChild(visibilityToggleText);
+      visibilityToggleWrap.appendChild(visibilityToggleSwitch);
+      visibilityModeRow.appendChild(visibilityToggleWrap);
+
+      const visibilityValue = document.createElement("input");
+      visibilityValue.type = "text";
+      visibilityValue.className = "station-binding-static";
+      visibilityValue.value = "固定为显示";
+      visibilityValue.disabled = true;
+
+      const visibilityParam = document.createElement("select");
+      visibilityParam.innerHTML = checkboxParamOptions.length
+        ? checkboxParamOptions.map((option) => `<option value=\"${option.id}\">${option.label}</option>`).join("")
+        : "<option value=\"\">无可用布尔参数</option>";
+      visibilityParam.value = checkboxParamOptions.some((option) => option.id === card.visibilityBinding?.paramId)
+        ? card.visibilityBinding.paramId
+        : (checkboxParamOptions[0]?.id || "");
+
+      visibilityModeRow.appendChild(visibilityValue);
+      visibilityModeRow.appendChild(visibilityParam);
+      visibilityField.appendChild(visibilityModeRow);
+
+      const hasCheckboxParams = checkboxParamOptions.length > 0;
+      visibilityToggle.disabled = !hasCheckboxParams;
+      if (!hasCheckboxParams) {
+        visibilityToggleWrap.classList.add("is-disabled");
+        const disabledHint = "暂无可用布尔参数，请先在参数区添加勾选参数。";
+        visibilityToggleWrap.title = disabledHint;
+        visibilityToggleSwitch.title = disabledHint;
+      }
+      visibilityToggle.checked = hasCheckboxParams && card.visibilityBinding?.mode === "param";
+
+      const visFx = createFxPreviewRow(card.visibilityBinding, "checkbox");
+      visFx.row.hidden = true;
+      visibilityField.appendChild(visFx.row);
+
+      const syncVisibilityBindingView = () => {
+        const useParam = visibilityToggle.checked && hasCheckboxParams;
+        visibilityValue.hidden = useParam;
+        visibilityParam.hidden = !useParam;
+        visibilityParam.disabled = !useParam;
+        visFx.row.hidden = !useParam;
+        visFx.row.style.display = useParam ? "" : "none";
+        if (useParam) {
+          const boundOption = checkboxParamOptions.find((p) => p.id === visibilityParam.value);
+          if (boundOption) {
+            const rawVal = normalizeShapeParameterDefault("checkbox", boundOption.value);
+            const expr = String(card.visibilityBinding?.expression || "").trim();
+            const hasExpr = Boolean(expr);
+            visFx.fxBtn.classList.toggle("is-active", hasExpr);
+            let displayVal = fmtPreview("checkbox", rawVal);
+            if (expr) {
+              try {
+                const safeName = String(boundOption.label).replace(/["'`\n\r\t\\]/g, "_");
+                // eslint-disable-next-line no-new-func
+                const fn = new Function("params", "Math", "Number", "String", "Boolean", `"use strict"; return (${expr});`);
+                const resolved = fn({ [safeName]: rawVal }, Math, Number, String, Boolean);
+                displayVal = fmtPreview("checkbox", resolved) + `  (${expr})`;
+              } catch {
+                displayVal = fmtPreview("checkbox", rawVal) + `  [错误]`;
+              }
+            }
+            visFx.preview.textContent = displayVal;
+          }
+        }
+      };
+
+      visFx.fxBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        openBindingFxEditor(card, card.visibilityBinding, "checkbox", "显示隐藏", (applied) => {
+          const useParam = visibilityToggle.checked && hasCheckboxParams;
+          const mode = useParam ? "param" : "value";
+          const paramId = useParam ? visibilityParam.value : "";
+          mutateSelectedTextCard(card.id, (liveCard) => {
+            liveCard.visibilityBinding = normalizeTextBinding({
+              mode,
+              value: true,
+              paramId,
+              expression: applied.expression || undefined
+            }, "checkbox", true);
+            if (liveCard.visibilityBinding.mode !== "param") {
+              liveCard.visibilityBinding.value = true;
+              liveCard.visibilityBinding.paramId = "";
+            }
+          });
+          persistStationLibrary();
+          renderPreview(preset);
+          renderSubmenu?.();
+          renderTextCards(preset);
+        });
+      });
+
+      const applyVisibilityBinding = () => {
+        const useParam = visibilityToggle.checked && hasCheckboxParams;
+        if (useParam && !checkboxParamOptions.some((option) => option.id === visibilityParam.value)) {
+          visibilityParam.value = checkboxParamOptions[0]?.id || "";
+        }
+
+        mutateSelectedTextCard(card.id, (liveCard) => {
+          const existingExpr = String(liveCard.visibilityBinding?.expression || "").trim() || undefined;
+          liveCard.visibilityBinding = normalizeTextBinding({
+            mode: useParam ? "param" : "value",
+            value: true,
+            paramId: visibilityParam.value,
+            expression: existingExpr
+          }, "checkbox", true);
+          if (liveCard.visibilityBinding.mode !== "param") {
+            liveCard.visibilityBinding.value = true;
+            liveCard.visibilityBinding.paramId = "";
+          }
+        });
+
+        syncVisibilityBindingView();
+        persistStationLibrary();
+        renderPreview(preset);
+        renderSubmenu?.();
+      };
+
+      visibilityToggle.addEventListener("change", applyVisibilityBinding);
+      visibilityParam.addEventListener("change", applyVisibilityBinding);
+      syncVisibilityBindingView();
+      item.appendChild(visibilityField);
+
+      const lockField = document.createElement("div");
+      lockField.className = "station-text-card-field station-text-card-toggle-row";
+      const lockLabel = document.createElement("span");
+      lockLabel.textContent = "文字锁定";
+      const lockSwitch = document.createElement("label");
+      lockSwitch.className = "toggle-switch";
+      const lockInput = document.createElement("input");
+      lockInput.type = "checkbox";
+      lockInput.className = "toggle-checkbox";
+      lockInput.checked = Boolean(card.locked);
+      const lockSlider = document.createElement("span");
+      lockSlider.className = "toggle-slider";
+      lockSlider.setAttribute("aria-hidden", "true");
+      lockSwitch.appendChild(lockInput);
+      lockSwitch.appendChild(lockSlider);
+      lockField.appendChild(lockLabel);
+      lockField.appendChild(lockSwitch);
+      item.appendChild(lockField);
+
+      lockInput.addEventListener("change", () => {
+        mutateSelectedTextCard(card.id, (liveCard) => {
+          liveCard.locked = Boolean(lockInput.checked);
+        });
+        persistStationLibrary();
+        renderSubmenu?.();
+      });
+
+      const textStyleField = document.createElement("div");
+      textStyleField.className = "station-text-card-field";
+      const textStyleLabel = document.createElement("span");
+      textStyleLabel.textContent = "文字样式";
+      textStyleField.appendChild(textStyleLabel);
+
+      const styleToolbar = document.createElement("div");
+      styleToolbar.className = "text-style-toolbar";
+      const cardTextStyle = normalizeTextStyleFlags(card);
+      getTextStyleToolbarItems().forEach((itemDef) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "text-style-btn";
+        button.setAttribute("aria-label", itemDef.label);
+        const isActive = Boolean(cardTextStyle[itemDef.flag]);
+        button.classList.toggle("active", isActive);
+        button.setAttribute("aria-pressed", isActive ? "true" : "false");
+        button.innerHTML = `<img src="${itemDef.icon}" alt="${itemDef.label}" />`;
+        button.addEventListener("click", () => {
+          mutateSelectedTextCard(card.id, (liveCard) => {
+            const current = normalizeTextStyleFlags(liveCard);
+            liveCard[itemDef.flag] = !current[itemDef.flag];
+          });
+          persistStationLibrary();
+          renderTextCards(preset);
+          renderPreview(preset);
+          renderSubmenu?.();
+        });
+        styleToolbar.appendChild(button);
+      });
+      textStyleField.appendChild(styleToolbar);
+      item.appendChild(textStyleField);
+
+      const valueField = document.createElement("label");
+      valueField.className = "station-text-card-field";
+      const valueLabel = document.createElement("span");
+      valueLabel.textContent = "默认值";
+      const valueInput = card.allowMultiline
+        ? document.createElement("textarea")
+        : document.createElement("input");
+      if (valueInput instanceof HTMLInputElement) {
+        valueInput.type = "text";
+      }
+      valueInput.value = normalizeStationTextContent(card.defaultValue, Boolean(card.allowMultiline));
+      applyTextInputStyle(valueInput, cardTextStyle);
+      valueInput.addEventListener("input", () => {
+        const nextValue = normalizeStationTextContent(valueInput.value, Boolean(card.allowMultiline));
+        if (valueInput.value !== nextValue) {
+          valueInput.value = nextValue;
+        }
+        mutateSelectedTextCard(card.id, (liveCard) => {
+          liveCard.defaultValue = nextValue;
+        });
+        persistStationLibrary();
+        renderPreview(preset);
+        renderSubmenu?.();
+      });
+      valueField.appendChild(valueLabel);
+      valueField.appendChild(valueInput);
+      item.appendChild(valueField);
+
+      const colorBindingField = document.createElement("div");
+      colorBindingField.className = "station-text-card-field";
+      const colorBindingLabel = document.createElement("span");
+      colorBindingLabel.textContent = "颜色";
+      colorBindingField.appendChild(colorBindingLabel);
+
+      const colorModeRow = document.createElement("div");
+      colorModeRow.className = "station-binding-row";
+      const colorToggleWrap = document.createElement("div");
+      colorToggleWrap.className = "shape-prop-param-toggle";
+      const colorToggleText = document.createElement("span");
+      colorToggleText.textContent = "参数";
+      const colorToggle = document.createElement("input");
+      colorToggle.type = "checkbox";
+      colorToggle.className = "toggle-checkbox";
+      const colorToggleId = `station-text-color-toggle-${card.id}`;
+      colorToggle.id = colorToggleId;
+      const colorToggleSlider = document.createElement("span");
+      colorToggleSlider.className = "toggle-slider";
+      colorToggleSlider.setAttribute("aria-hidden", "true");
+      const colorToggleSwitch = document.createElement("label");
+      colorToggleSwitch.className = "toggle-switch";
+      colorToggleSwitch.setAttribute("for", colorToggleId);
+      colorToggleSwitch.appendChild(colorToggle);
+      colorToggleSwitch.appendChild(colorToggleSlider);
+      colorToggleWrap.appendChild(colorToggleText);
+      colorToggleWrap.appendChild(colorToggleSwitch);
+      colorModeRow.appendChild(colorToggleWrap);
+      const colorValue = document.createElement("button");
+      colorValue.type = "button";
+      colorValue.className = "color-modal-trigger";
+      const colorSwatch = document.createElement("span");
+      colorSwatch.className = "color-modal-swatch";
+      const colorText = document.createElement("span");
+      colorText.className = "color-modal-text";
+      colorValue.appendChild(colorSwatch);
+      colorValue.appendChild(colorText);
+      const setColorValue = (value) => {
+        const normalized = normalizeColor(value || "#000000ff");
+        colorValue.dataset.colorValue = normalized;
+        colorSwatch.style.setProperty("--swatch-color", normalized);
+        colorText.textContent = formatColorWithAlpha(normalized);
+      };
+      setColorValue(card.colorBinding?.value || "#000000ff");
+      const colorParam = document.createElement("select");
+      colorParam.innerHTML = colorParamOptions.length
+        ? colorParamOptions.map((option) => `<option value=\"${option.id}\">${option.label}</option>`).join("")
+        : "<option value=\"\">无可用颜色参数</option>";
+      colorParam.value = colorParamOptions.some((option) => option.id === card.colorBinding?.paramId)
+        ? card.colorBinding.paramId
+        : (colorParamOptions[0]?.id || "");
+      colorModeRow.appendChild(colorValue);
+      colorModeRow.appendChild(colorParam);
+      colorBindingField.appendChild(colorModeRow);
+
+      const hasColorParams = colorParamOptions.length > 0;
+      colorToggle.disabled = !hasColorParams;
+      if (!hasColorParams) {
+        colorToggleWrap.classList.add("is-disabled");
+        const disabledHint = "暂无可用颜色参数，请先在参数区添加。";
+        colorToggleWrap.title = disabledHint;
+        colorToggleSwitch.title = disabledHint;
+      }
+      colorToggle.checked = hasColorParams && card.colorBinding?.mode === "param";
+
+      const colorFx = createFxPreviewRow(card.colorBinding, "color");
+      colorFx.row.hidden = true;
+      colorBindingField.appendChild(colorFx.row);
+
+      const syncColorBindingView = () => {
+        const useParam = colorToggle.checked && hasColorParams;
+        colorValue.hidden = useParam;
+        colorValue.disabled = useParam;
+        colorParam.hidden = !useParam;
+        colorParam.disabled = !useParam;
+        colorFx.row.hidden = !useParam;
+        colorFx.row.style.display = useParam ? "" : "none";
+        if (useParam) {
+          const boundOption = colorParamOptions.find((p) => p.id === colorParam.value);
+          if (boundOption) {
+            const rawVal = normalizeShapeParameterDefault("color", boundOption.value);
+            const expr = String(card.colorBinding?.expression || "").trim();
+            const hasExpr = Boolean(expr);
+            colorFx.fxBtn.classList.toggle("is-active", hasExpr);
+            let displayVal = fmtPreview("color", rawVal);
+            if (expr) {
+              try {
+                const safeName = String(boundOption.label).replace(/["'`\n\r\t\\]/g, "_");
+                // eslint-disable-next-line no-new-func
+                const fn = new Function("params", "Math", "Number", "String", "Boolean", `"use strict"; return (${expr});`);
+                const resolved = fn({ [safeName]: rawVal }, Math, Number, String, Boolean);
+                displayVal = fmtPreview("color", resolved) + `  (${expr})`;
+              } catch {
+                displayVal = fmtPreview("color", rawVal) + `  [错误]`;
+              }
+            }
+            colorFx.preview.textContent = displayVal;
+          }
+        }
+      };
+
+      colorFx.fxBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        openBindingFxEditor(card, card.colorBinding, "color", "颜色", (applied) => {
+          const useParam = colorToggle.checked && hasColorParams;
+          const mode = useParam ? "param" : "value";
+          const paramId = useParam ? colorParam.value : "";
+          mutateSelectedTextCard(card.id, (liveCard) => {
+            liveCard.colorBinding = normalizeTextBinding({
+              mode,
+              value: colorValue.dataset.colorValue || "#000000ff",
+              paramId,
+              expression: applied.expression || undefined
+            }, "color", "#000000");
+          });
+          persistStationLibrary();
+          renderPreview(preset);
+          renderTextCards(preset);
+        });
+      });
+
+      const applyColorBinding = () => {
+        const useParam = colorToggle.checked && hasColorParams;
+        if (useParam && !colorParamOptions.some((option) => option.id === colorParam.value)) {
+          colorParam.value = colorParamOptions[0]?.id || "";
+        }
+        mutateSelectedTextCard(card.id, (liveCard) => {
+          const existingExpr = String(liveCard.colorBinding?.expression || "").trim() || undefined;
+          liveCard.colorBinding = normalizeTextBinding({
+            mode: useParam ? "param" : "value",
+            value: colorValue.dataset.colorValue || "#000000ff",
+            paramId: colorParam.value,
+            expression: existingExpr
+          }, "color", "#000000");
+        });
+        syncColorBindingView();
+        persistStationLibrary();
+        renderPreview(preset);
+      };
+
+      colorToggle.addEventListener("change", applyColorBinding);
+      colorValue.addEventListener("click", () => {
+        if (colorToggle.checked && hasColorParams) {
+          return;
+        }
+        if (!colorPicker) {
+          return;
+        }
+        colorPicker.open({
+          color: colorValue.dataset.colorValue || "#000000ff",
+          title: "文本颜色",
+          onConfirm: (nextColor) => {
+            setColorValue(nextColor);
+            applyColorBinding();
+          }
+        });
+      });
+      colorParam.addEventListener("change", applyColorBinding);
+      syncColorBindingView();
+      item.appendChild(colorBindingField);
+
+      const fontField = document.createElement("label");
+      fontField.className = "station-text-card-field";
+      const fontLabel = document.createElement("span");
+      fontLabel.textContent = "字体";
+      const fontSelect = document.createElement("select");
+      fontSelect.innerHTML = getStationTextFontOptions()
+        .map((name) => `<option value=\"${name}\">${name}</option>`)
+        .join("");
+      fontSelect.value = card.fontFamily || "Segoe UI";
+      fontSelect.addEventListener("change", () => {
+        mutateSelectedTextCard(card.id, (liveCard) => {
+          liveCard.fontFamily = fontSelect.value;
+        });
+        persistStationLibrary();
+        renderPreview(preset);
+      });
+      fontField.appendChild(fontLabel);
+      fontField.appendChild(fontSelect);
+      item.appendChild(fontField);
+
+      const fontSizeField = document.createElement("div");
+      fontSizeField.className = "station-text-card-field";
+      const fontSizeLabel = document.createElement("span");
+      fontSizeLabel.textContent = "文字大小";
+      fontSizeField.appendChild(fontSizeLabel);
+
+      const sizeModeRow = document.createElement("div");
+      sizeModeRow.className = "station-binding-row";
+      const sizeToggleWrap = document.createElement("div");
+      sizeToggleWrap.className = "shape-prop-param-toggle";
+      const sizeToggleText = document.createElement("span");
+      sizeToggleText.textContent = "参数";
+      const sizeToggle = document.createElement("input");
+      sizeToggle.type = "checkbox";
+      sizeToggle.className = "toggle-checkbox";
+      const sizeToggleId = `station-text-size-toggle-${card.id}`;
+      sizeToggle.id = sizeToggleId;
+      const sizeToggleSlider = document.createElement("span");
+      sizeToggleSlider.className = "toggle-slider";
+      sizeToggleSlider.setAttribute("aria-hidden", "true");
+      const sizeToggleSwitch = document.createElement("label");
+      sizeToggleSwitch.className = "toggle-switch";
+      sizeToggleSwitch.setAttribute("for", sizeToggleId);
+      sizeToggleSwitch.appendChild(sizeToggle);
+      sizeToggleSwitch.appendChild(sizeToggleSlider);
+      sizeToggleWrap.appendChild(sizeToggleText);
+      sizeToggleWrap.appendChild(sizeToggleSwitch);
+      sizeModeRow.appendChild(sizeToggleWrap);
+      const sizeValue = document.createElement("input");
+      sizeValue.type = "number";
+      sizeValue.step = "0.1";
+      sizeValue.min = "1";
+      sizeValue.value = String(Number(card.fontSizeBinding?.value) || 18);
+      const sizeParam = document.createElement("select");
+      sizeParam.innerHTML = numberParamOptions.length
+        ? numberParamOptions.map((option) => `<option value=\"${option.id}\">${option.label}</option>`).join("")
+        : "<option value=\"\">无可用数字参数</option>";
+      sizeParam.value = numberParamOptions.some((option) => option.id === card.fontSizeBinding?.paramId)
+        ? card.fontSizeBinding.paramId
+        : (numberParamOptions[0]?.id || "");
+      sizeModeRow.appendChild(sizeValue);
+      sizeModeRow.appendChild(sizeParam);
+      fontSizeField.appendChild(sizeModeRow);
+
+      const hasNumberParams = numberParamOptions.length > 0;
+      sizeToggle.disabled = !hasNumberParams;
+      if (!hasNumberParams) {
+        sizeToggleWrap.classList.add("is-disabled");
+        const disabledHint = "暂无可用数字参数，请先在参数区添加。";
+        sizeToggleWrap.title = disabledHint;
+        sizeToggleSwitch.title = disabledHint;
+      }
+      sizeToggle.checked = hasNumberParams && card.fontSizeBinding?.mode === "param";
+
+      const sizeFx = createFxPreviewRow(card.fontSizeBinding, "number");
+      sizeFx.row.hidden = true;
+      fontSizeField.appendChild(sizeFx.row);
+
+      const syncFontSizeBindingView = () => {
+        const useParam = sizeToggle.checked && hasNumberParams;
+        sizeValue.hidden = useParam;
+        sizeValue.disabled = useParam;
+        sizeParam.hidden = !useParam;
+        sizeParam.disabled = !useParam;
+        sizeFx.row.hidden = !useParam;
+        sizeFx.row.style.display = useParam ? "" : "none";
+        if (useParam) {
+          const boundOption = numberParamOptions.find((p) => p.id === sizeParam.value);
+          if (boundOption) {
+            const rawVal = normalizeShapeParameterDefault("number", boundOption.value);
+            const expr = String(card.fontSizeBinding?.expression || "").trim();
+            const hasExpr = Boolean(expr);
+            sizeFx.fxBtn.classList.toggle("is-active", hasExpr);
+            let displayVal = fmtPreview("number", rawVal);
+            if (expr) {
+              try {
+                const safeName = String(boundOption.label).replace(/["'`\n\r\t\\]/g, "_");
+                // eslint-disable-next-line no-new-func
+                const fn = new Function("params", "Math", "Number", "String", "Boolean", `"use strict"; return (${expr});`);
+                const resolved = fn({ [safeName]: rawVal }, Math, Number, String, Boolean);
+                displayVal = fmtPreview("number", resolved) + `  (${expr})`;
+              } catch {
+                displayVal = fmtPreview("number", rawVal) + `  [错误]`;
+              }
+            }
+            sizeFx.preview.textContent = displayVal;
+          }
+        }
+      };
+
+      sizeFx.fxBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        openBindingFxEditor(card, card.fontSizeBinding, "number", "文字大小", (applied) => {
+          const useParam = sizeToggle.checked && hasNumberParams;
+          const mode = useParam ? "param" : "value";
+          const paramId = useParam ? sizeParam.value : "";
+          mutateSelectedTextCard(card.id, (liveCard) => {
+            liveCard.fontSizeBinding = normalizeTextBinding({
+              mode,
+              value: Number(sizeValue.value) || 18,
+              paramId,
+              expression: applied.expression || undefined
+            }, "number", 18);
+          });
+          persistStationLibrary();
+          renderPreview(preset);
+          renderTextCards(preset);
+        });
+      });
+
+      const applyFontSizeBinding = () => {
+        const useParam = sizeToggle.checked && hasNumberParams;
+        if (useParam && !numberParamOptions.some((option) => option.id === sizeParam.value)) {
+          sizeParam.value = numberParamOptions[0]?.id || "";
+        }
+        mutateSelectedTextCard(card.id, (liveCard) => {
+          const existingExpr = String(liveCard.fontSizeBinding?.expression || "").trim() || undefined;
+          liveCard.fontSizeBinding = normalizeTextBinding({
+            mode: useParam ? "param" : "value",
+            value: Number(sizeValue.value) || 18,
+            paramId: sizeParam.value,
+            expression: existingExpr
+          }, "number", 18);
+        });
+        syncFontSizeBindingView();
+        persistStationLibrary();
+        renderPreview(preset);
+      };
+
+      sizeToggle.addEventListener("change", applyFontSizeBinding);
+      sizeValue.addEventListener("input", applyFontSizeBinding);
+      sizeParam.addEventListener("change", applyFontSizeBinding);
+      syncFontSizeBindingView();
+      item.appendChild(fontSizeField);
+
+      // 行间距（per-card gap between this card and the next one）
+      const gapField = document.createElement("div");
+      gapField.className = "station-text-card-field";
+      const gapLabel = document.createElement("span");
+      gapLabel.textContent = "行间距";
+      gapField.appendChild(gapLabel);
+
+      const gapInput = document.createElement("input");
+      gapInput.type = "number";
+      gapInput.step = "0.1";
+      gapInput.value = String(Number(card.lineGap) ?? defaultBlockGap);
+      gapInput.addEventListener("input", () => {
+        const v = Number(gapInput.value) ?? defaultBlockGap;
+        mutateSelectedTextCard(card.id, (liveCard) => {
+          liveCard.lineGap = v;
+        });
+        persistStationLibrary();
+        renderPreview(preset);
+      });
+      gapField.appendChild(gapInput);
+      item.appendChild(gapField);
+
+      head.addEventListener("click", () => {
+        selectTextCard(preset, card.id);
+      });
+
+      item.addEventListener("focusin", () => {
+        selectTextCard(preset, card.id, { rerenderCards: false });
+      });
+
+      drag.addEventListener("dragstart", (event) => {
+        state.stationManager.dragTextCardId = card.id;
+        item.classList.add("dragging");
+        event.dataTransfer?.setData("text/plain", card.id);
+        event.dataTransfer.effectAllowed = "move";
+      });
+
+      drag.addEventListener("dragend", () => {
+        state.stationManager.dragTextCardId = null;
+        stationTextCardList.querySelectorAll(".drop-target").forEach((el) => el.classList.remove("drop-target"));
+        item.classList.remove("dragging");
+      });
+
+      item.addEventListener("dragover", (event) => {
+        event.preventDefault();
+        if (state.stationManager.dragTextCardId && state.stationManager.dragTextCardId !== card.id) {
+          item.classList.add("drop-target");
+        }
+      });
+
+      item.addEventListener("dragleave", () => {
+        item.classList.remove("drop-target");
+      });
+
+      item.addEventListener("drop", (event) => {
+        event.preventDefault();
+        item.classList.remove("drop-target");
+        reorderTextCards(preset, state.stationManager.dragTextCardId, card.id);
+      });
+
+      stationTextCardList.appendChild(item);
+    });
+
+    updateActiveTextCardStyles();
+  }
+
+  function selectTextCard(preset, cardId, options = {}) {
+    const { rerenderCards = true } = options;
+    if (!preset || !cardId) {
+      return;
+    }
+
+    state.stationManager.selectedTextCardId = cardId;
+    if (rerenderCards) {
+      renderTextCards(preset);
+    } else {
+      updateActiveTextCardStyles();
+    }
+    renderTextPlacementPanel(preset);
+  }
+
+  function updateActiveTextCardStyles() {
+    const selectedId = state.stationManager.selectedTextCardId;
+    stationTextCardList.querySelectorAll("[data-text-card-id]").forEach((el) => {
+      el.classList.toggle("active", el.getAttribute("data-text-card-id") === selectedId);
+    });
+  }
+
+  function mutateSelectedTextCard(cardId, mutator) {
+    const preset = getSelectedPreset();
+    if (!preset || !cardId || typeof mutator !== "function") {
+      return;
+    }
+
+    preset.textCards = normalizeStationTextCards(preset.textCards, createStationPresetId);
+    const card = preset.textCards.find((item) => item.id === cardId);
+    if (!card) {
+      return;
+    }
+
+    mutator(card, preset);
+  }
+
+  function ensureSelectedTextCard(preset) {
+    const cards = normalizeStationTextCards(preset?.textCards, createStationPresetId);
+    preset.textCards = cards;
+
+    const current = cards.find((card) => card.id === state.stationManager.selectedTextCardId);
+    if (current) {
+      return current;
+    }
+
+    state.stationManager.selectedTextCardId = cards[0]?.id || null;
+    return cards[0] || null;
+  }
+
+  function getSelectedTextCard(preset) {
+    const cards = normalizeStationTextCards(preset?.textCards, createStationPresetId);
+    preset.textCards = cards;
+    return cards.find((card) => card.id === state.stationManager.selectedTextCardId) || null;
+  }
+
+  function addTextCard() {
+    const preset = getSelectedPreset();
+    if (!preset) {
+      return;
+    }
+
+    const cards = normalizeStationTextCards(preset.textCards, createStationPresetId);
+    const card = createDefaultStationTextCard(cards.length, createStationPresetId);
+    cards.push(card);
+    preset.textCards = cards;
+    state.stationManager.selectedTextCardId = card.id;
+
+    persistStationLibrary();
+    renderTextCards(preset);
+    renderTextPlacementPanel(preset);
+    renderPreview(preset);
+    renderSubmenu?.();
+  }
+
+  function removeTextCard(cardId) {
+    const preset = getSelectedPreset();
+    if (!preset) {
+      return;
+    }
+
+    const cards = normalizeStationTextCards(preset.textCards, createStationPresetId);
+    const target = cards.find((card) => card.id === cardId);
+    const label = String(target?.label || "文本卡片").trim() || "文本卡片";
+    if (state.appSettings?.confirmBeforeDelete !== false && !window.confirm(`确认删除${label}？`)) {
+      return;
+    }
+
+    const nextCards = cards.filter((card) => card.id !== cardId);
+    preset.textCards = nextCards.length ? nextCards : [createDefaultStationTextCard(0, createStationPresetId)];
+
+    if (!preset.textCards.some((card) => card.id === state.stationManager.selectedTextCardId)) {
+      state.stationManager.selectedTextCardId = preset.textCards[0]?.id || null;
+    }
+
+    persistStationLibrary();
+    renderTextCards(preset);
+    renderTextPlacementPanel(preset);
+    renderPreview(preset);
+    renderSubmenu?.();
+  }
+
+  function reorderTextCards(preset, fromId, toId) {
+    if (!preset || !fromId || !toId || fromId === toId) {
+      return;
+    }
+
+    const cards = normalizeStationTextCards(preset.textCards, createStationPresetId);
+    const fromIndex = cards.findIndex((card) => card.id === fromId);
+    const toIndex = cards.findIndex((card) => card.id === toId);
+    if (fromIndex < 0 || toIndex < 0) {
+      return;
+    }
+
+    const [moved] = cards.splice(fromIndex, 1);
+    cards.splice(toIndex, 0, moved);
+    preset.textCards = cards;
+    state.stationManager.selectedTextCardId = moved.id;
+
+    persistStationLibrary();
+    renderTextCards(preset);
+    renderTextPlacementPanel(preset);
+    renderPreview(preset);
+  }
+
+  function renderTextPlacementPanel(preset) {
+    if (!preset) {
+      stationTextPlacementSelect.value = "ne";
+      stationTextPlacementSelect.disabled = true;
+      const distanceToggleWrap = stationTextDistanceUseParam.closest(".shape-prop-param-toggle");
+      if (distanceToggleWrap) {
+        distanceToggleWrap.classList.add("is-disabled");
+        distanceToggleWrap.title = "暂无数字参数";
+      }
+      stationTextDistanceUseParam.disabled = true;
+      stationTextDistanceUseParam.checked = false;
+      stationTextDistanceValue.disabled = true;
+      stationTextDistanceParamSelect.disabled = true;
+      stationTextDistanceParamSelect.innerHTML = "<option value=\"\">暂无数字参数</option>";
+      return;
+    }
+
+    ensureSelectedTextCard(preset);
+
+    preset.textPlacement = normalizeStationTextPlacement(preset.textPlacement || {
+      slot: preset.textCards?.[0]?.placement?.slot,
+      distanceBinding: preset.textCards?.[0]?.placement?.distanceBinding,
+      lineGapBinding: { mode: "value", value: 4, paramId: "" }
+    });
+    const slot = normalizeTextSlot(preset.textPlacement.slot);
+    stationTextPlacementSelect.value = slot;
+    stationTextPlacementSelect.disabled = false;
+
+    const shape = getShapeById(preset.shapeId);
+    const options = buildStationTextParamOptions({ preset, shape }).filter((item) => item.type === "number");
+    stationTextDistanceParamSelect.innerHTML = options.length
+      ? options.map((option) => `<option value=\"${option.id}\">${option.label}</option>`).join("")
+      : "<option value=\"\">暂无数字参数</option>";
+
+    const distanceBinding = normalizeTextBinding(preset.textPlacement?.distanceBinding, "number", 18);
+    preset.textPlacement = {
+      slot,
+      distanceBinding,
+      lineGapBinding: { mode: "value", value: 0, paramId: "" }
+    };
+
+    const hasNumberParams = options.length > 0;
+    const distanceToggleWrap = stationTextDistanceUseParam.closest(".shape-prop-param-toggle");
+    if (distanceToggleWrap) {
+      distanceToggleWrap.classList.toggle("is-disabled", !hasNumberParams);
+      distanceToggleWrap.title = hasNumberParams ? "参数模式" : "暂无数字参数";
+    }
+    stationTextDistanceUseParam.disabled = !hasNumberParams;
+    stationTextDistanceUseParam.checked = hasNumberParams && distanceBinding.mode === "param";
+    stationTextDistanceValue.value = Number.isFinite(Number(distanceBinding.value))
+      ? String(Number(distanceBinding.value))
+      : "18";
+    stationTextDistanceParamSelect.value = options.some((item) => item.id === distanceBinding.paramId)
+      ? distanceBinding.paramId
+      : (options[0]?.id || "");
+    stationTextDistanceValue.disabled = stationTextDistanceUseParam.checked;
+    stationTextDistanceParamSelect.disabled = !stationTextDistanceUseParam.checked || !hasNumberParams;
+  }
+
+  function onTextPlacementChanged() {
+    const preset = getSelectedPreset();
+    if (!preset) {
+      return;
+    }
+
+    preset.textPlacement = normalizeStationTextPlacement(preset.textPlacement);
+    preset.textPlacement.slot = normalizeTextSlot(stationTextPlacementSelect.value);
+    persistStationLibrary();
+    renderTextPlacementPanel(preset);
+    renderPreview(preset);
+  }
+
+  function onTextDistanceChanged() {
+    const preset = getSelectedPreset();
+    if (!preset) {
+      return;
+    }
+
+    const shape = getShapeById(preset.shapeId);
+    const options = buildStationTextParamOptions({ preset, shape }).filter((item) => item.type === "number");
+    const hasNumberParams = options.length > 0;
+    if (!hasNumberParams) {
+      stationTextDistanceUseParam.checked = false;
+    }
+
+    preset.textPlacement = normalizeStationTextPlacement(preset.textPlacement);
+    preset.textPlacement.distanceBinding = normalizeTextBinding({
+      mode: stationTextDistanceUseParam.checked && hasNumberParams ? "param" : "value",
+      value: Number(stationTextDistanceValue.value) || 18,
+      paramId: stationTextDistanceParamSelect.value
+    }, "number", 18);
+
+    persistStationLibrary();
+    renderTextPlacementPanel(preset);
+    renderPreview(preset);
+  }
+
+  /** 解析预设旋转角度：若绑定了参数，从 runtimeParams 获取；否则使用固定值 */
+  function resolvePresetRotation(preset, runtimeParamMap) {
+    const paramId = preset?.rotationParamId;
+    if (paramId && runtimeParamMap) {
+      const entry = runtimeParamMap.get(paramId);
+      if (entry && entry.type === "number") {
+        return Number.isFinite(Number(entry.value)) ? Number(entry.value) : 0;
+      }
+    }
+    return Number.isFinite(Number(preset?.rotation)) ? Number(preset.rotation) : 0;
+  }
+
+  function renderPreview(preset) {
+    if (!stationPreviewCanvas) {
+      return;
+    }
+
+    stationPreviewCanvas.innerHTML = "";
+    const vb = getPreviewViewBox();
+    stationPreviewCanvas.setAttribute("viewBox", `${vb.x} ${vb.y} ${vb.width} ${vb.height}`);
+
+    const background = document.createElementNS(svgNs, "rect");
+    background.setAttribute("x", String(vb.x - vb.width));
+    background.setAttribute("y", String(vb.y - vb.height));
+    background.setAttribute("width", String(vb.width * 3));
+    background.setAttribute("height", String(vb.height * 3));
+    background.setAttribute("fill", "#ffffff");
+    stationPreviewCanvas.appendChild(background);
+
+    if (!preset) {
+      appendPreviewPlaceholder("暂无预设，请先新建。");
+      return;
+    }
+
+    const shape = getShapeById(preset.shapeId);
+    if (!shape || !shape.svg) {
+      appendPreviewPlaceholder("未选择图形");
+      return;
+    }
+
+    const runtimeParams = buildStationRuntimeParamMap({
+      preset,
+      shape,
+      stationParamValues: null
+    });
+    const shapeSvg = buildRenderableShapeSvg(shape, buildShapeParamValuesFromRuntime(shape, runtimeParams));
+    const parsed = parseSvgDocument(shapeSvg);
+    if (!parsed) {
+      appendPreviewPlaceholder("图形数据无效");
+      return;
+    }
+
+    const centerX = parsed.viewBox ? parsed.viewBox.x + parsed.viewBox.width / 2 : 120;
+    const centerY = parsed.viewBox ? parsed.viewBox.y + parsed.viewBox.height / 2 : 120;
+
+    // 从预设获取旋转角度（参数化或固定值）
+    const rotation = resolvePresetRotation(preset, runtimeParams);
+
+    const layer = document.createElementNS(svgNs, "g");
+    layer.setAttribute(
+      "transform",
+      `translate(${centerX} ${centerY}) rotate(${rotation}) scale(${previewInitialScale}) translate(${-centerX} ${-centerY})`
+    );
+    Array.from(parsed.root.children).forEach((child) => {
+      const tag = child.tagName.toLowerCase();
+      if (tag === "script" || tag === "foreignobject") {
+        return;
+      }
+
+      const clone = child.cloneNode(true);
+      layer.appendChild(stationPreviewCanvas.ownerDocument.importNode(clone, true));
+    });
+    stationPreviewCanvas.appendChild(layer);
+
+    appendStationTexts({
+      container: stationPreviewCanvas,
+      preset,
+      runtimeParamMap: runtimeParams,
+      centerX,
+      centerY,
+      pointerEvents: "none"
+    });
+  }
+
+  function createEmptyPreset() {
+    const primaryCard = {
+      ...createDefaultStationTextCard(0, createStationPresetId),
+      defaultValue: "站名"
+    };
+
+    const preset = {
+      id: createStationPresetId(),
+      name: `车站预设 ${state.stationLibrary.length + 1}`,
+      shapeId: null,
+      textCards: [primaryCard],
+      textPlacement: createDefaultStationTextPlacement(),
+      virtualNode: false,
+      radius: 12,
+      oval: false,
+      rotation: 0,
+      shapeParamSettings: {},
+      params: []
+    };
+
+    state.stationLibrary.push(preset);
+    state.stationManager.selectedId = preset.id;
+    persistStationLibrary();
+    resetPreviewView(preset);
+    renderStationManager();
+    renderSubmenu?.();
+  }
+
+  function ensureStationManagerState() {
+    if (!state.stationManager || typeof state.stationManager !== "object") {
+      state.stationManager = {};
+    }
+
+    state.stationManager.selectedId = state.stationManager.selectedId || null;
+    state.stationManager.isOpen = Boolean(state.stationManager.isOpen);
+    state.stationManager.shapeQuery = String(state.stationManager.shapeQuery || "");
+    state.stationManager.checkedIds = Array.isArray(state.stationManager.checkedIds)
+      ? state.stationManager.checkedIds.map((id) => String(id))
+      : [];
+    state.stationManager.paramType = shapeParameterTypeDefinitions[state.stationManager.paramType]
+      ? state.stationManager.paramType
+      : "color";
+    state.stationManager.selectedTextCardId = state.stationManager.selectedTextCardId || null;
+    state.stationManager.dragTextCardId = null;
+    state.stationManager.activeTab = state.stationManager.activeTab === "params"
+      ? "params"
+      : "text";
+
+    const vb = state.stationManager.previewViewBox;
+    if (!vb || !Number.isFinite(vb.x) || !Number.isFinite(vb.y) || !Number.isFinite(vb.width) || !Number.isFinite(vb.height)) {
+      state.stationManager.previewViewBox = { ...previewDefaultViewBox };
+    }
+    previewState.viewBox = { ...state.stationManager.previewViewBox };
+  }
+
+  function syncTabVisibility() {
+    const textActive = state.stationManager.activeTab !== "params";
+    stationTabTextBtn.classList.toggle("active", textActive);
+    stationTabParamsBtn.classList.toggle("active", !textActive);
+    stationTextPanel.hidden = !textActive;
+    stationParamsPanel.hidden = textActive;
+  }
+
+  function renderParamsPanel(preset) {
+    renderCustomParamList(preset);
+    renderExistingParamList(preset);
+  }
+
+  function collectReferencedParamIds(preset) {
+    const referenced = new Set();
+    if (!preset) {
+      return referenced;
+    }
+
+    const placement = normalizeStationTextPlacement(preset.textPlacement || createDefaultStationTextPlacement());
+    [placement.distanceBinding, placement.lineGapBinding].forEach((binding) => {
+      if (binding?.mode === "param" && binding.paramId) {
+        referenced.add(String(binding.paramId));
+      }
+    });
+
+    const cards = normalizeStationTextCards(preset.textCards, createStationPresetId);
+    cards.forEach((card) => {
+      if (card.visibilityBinding?.mode === "param" && card.visibilityBinding.paramId) {
+        referenced.add(String(card.visibilityBinding.paramId));
+      }
+      if (card.colorBinding?.mode === "param" && card.colorBinding.paramId) {
+        referenced.add(String(card.colorBinding.paramId));
+      }
+      if (card.fontSizeBinding?.mode === "param" && card.fontSizeBinding.paramId) {
+        referenced.add(String(card.fontSizeBinding.paramId));
+      }
+    });
+
+    return referenced;
+  }
+
+  /**
+   * 为预置参数的默认值打开表达式编辑器。
+   */
+  const openPresetParamEditor = (preset, paramId, paramType, paramLabel, currentValue, onApplied) => {
+    if (!paramEditor || typeof paramEditor.open !== "function") return;
+    if (!preset || !paramId) return;
+
+    const expressions = preset.paramExpressions && typeof preset.paramExpressions === "object"
+      ? preset.paramExpressions
+      : {};
+    const existingExpr = expressions[paramId] || "";
+
+    // 收集当前预设的自定义参数，使其在表达式中可通过 params["参数名"] 引用
+    const customParams = normalizeShapeParameters(preset.params);
+    const editorParams = [
+      {
+        name: paramLabel,
+        id: paramId,
+        type: paramType,
+        value: currentValue,
+        expression: existingExpr || ""
+      }
+    ];
+    customParams.forEach((cp) => {
+      // 排除自身（如果自定义参数 id 恰好等于要编辑的参数 id）
+      if (cp.id === paramId) return;
+      editorParams.push({
+        name: cp.label,
+        id: cp.id,
+        type: cp.type,
+        value: normalizeShapeParameterDefault(cp.type, cp.defaultValue),
+        expression: "",
+        _readonly: true  // 标记为只读（仅用于变量引用）
+      });
+    });
+
+    paramEditor.open({
+      type: "single",
+      entities: [preset],
+      params: editorParams,
+      onApply: (result) => {
+        if (!result || !Array.isArray(result.params) || !result.params.length) return;
+        const applied = result.params[0];
+        const expr = applied.expression || "";
+        if (typeof onApplied === "function") {
+          onApplied({
+            expression: expr,
+            finalValue: applied.finalValue !== undefined ? applied.finalValue : applied.value
+          });
+        }
+      }
+    });
+  };
+
+  function renderCustomParamList(preset) {
+    stationCustomParamList.innerHTML = "";
+    if (!preset) {
+      stationCustomParamList.innerHTML = getTemplate("station-manager-custom-param-unselected");
+      return;
+    }
+
+    const params = normalizeShapeParameters(preset.params);
+    preset.params = params;
+    if (!params.length) {
+      stationCustomParamList.innerHTML = getTemplate("station-manager-custom-param-empty");
+      return;
+    }
+
+    const referencedParamIds = collectReferencedParamIds(preset);
+
+    params.forEach((param, index) => {
+      const row = document.createElement("div");
+      row.className = "shape-param-item";
+
+      const head = document.createElement("div");
+      head.className = "shape-param-head";
+
+      const typeBadge = document.createElement("span");
+      typeBadge.className = "shape-param-type";
+      typeBadge.textContent = shapeParameterTypeDefinitions[param.type]?.label || "参数";
+      head.appendChild(typeBadge);
+
+      const removeBtn = document.createElement("button");
+      removeBtn.className = "btn-ghost param-remove-btn";
+      removeBtn.type = "button";
+      removeBtn.textContent = "删除";
+      const isReferenced = referencedParamIds.has(param.id);
+      if (isReferenced) {
+        removeBtn.disabled = true;
+        removeBtn.title = "参数已被文本绑定引用，无法删除。";
+      }
+      removeBtn.addEventListener("click", () => {
+        if (isReferenced) {
+          return;
+        }
+        preset.params = normalizeShapeParameters(preset.params);
+        preset.params.splice(index, 1);
+        persistStationLibrary();
+        refreshStationParamPanels(preset);
+      });
+      head.appendChild(removeBtn);
+
+      row.appendChild(head);
+
+      const labelInput = document.createElement("input");
+      labelInput.type = "text";
+      labelInput.value = param.label;
+      labelInput.placeholder = "参数名称";
+      labelInput.addEventListener("change", () => {
+        param.label = String(labelInput.value || "参数").trim() || "参数";
+        labelInput.value = param.label;
+        persistStationLibrary();
+        refreshStationParamPanels(preset);
+      });
+      row.appendChild(labelInput);
+
+      const defaultBlock = document.createElement("div");
+      defaultBlock.className = "shape-param-default";
+      const defaultLabel = document.createElement("span");
+      defaultLabel.className = "shape-param-default-label";
+      defaultLabel.textContent = "默认值";
+      defaultBlock.appendChild(defaultLabel);
+
+      const input = createParameterInput(param.type, param.defaultValue, (value) => {
+        param.defaultValue = value;
+        persistStationLibrary();
+        renderPreview(preset);
+        // 只刷新锁定的预览值，避免整块重建
+        refreshAllLockPreviews();
+        rerenderScene?.();
+        onStateChanged?.();
+      });
+      defaultBlock.appendChild(input);
+      row.appendChild(defaultBlock);
+
+      stationCustomParamList.appendChild(row);
+    });
+  }
+
+  /**
+   * 仅刷新已有参数区中所有锁定模式下表达式的预览值。
+   * 比 renderExistingParamList 轻量，不会重建 DOM/事件。
+   */
+  function refreshAllLockPreviews() {
+    const previewEls = stationExistingParamList.querySelectorAll(".station-lock-preview");
+    if (!previewEls.length) return;
+
+    const preset = getSelectedPreset();
+    if (!preset) return;
+
+    const customParams = normalizeShapeParameters(preset.params);
+    previewEls.forEach((el) => {
+      const expr = String(el.dataset?.lockExpr || "").trim();
+      if (!expr) {
+        el.textContent = "（未设置表达式）";
+        return;
+      }
+      const env = {};
+      customParams.forEach((cp) => env[cp.label] = normalizeShapeParameterDefault(cp.type, cp.defaultValue));
+      try {
+        const safeEnv = {};
+        Object.keys(env).forEach((k) => { safeEnv[k.replace(/["'`\\n\\r\\t\\\\]/g, "_")] = env[k]; });
+        // eslint-disable-next-line no-new-func
+        const fn = new Function("params", "Math", "Number", "String", "Boolean", `"use strict"; return (${expr});`);
+        const computed = fn(safeEnv, Math, Number, String, Boolean);
+        const display = typeof computed === "boolean" ? (computed ? "true" : "false")
+          : typeof computed === "number" ? String(computed)
+            : String(computed || "");
+        el.textContent = display + " (" + expr + ")";
+      } catch {
+        el.textContent = "[错误] (" + expr + ")";
+      }
+    });
+  }
+
+  function renderExistingParamList(preset) {
+    stationExistingParamList.innerHTML = "";
+    if (!preset) {
+      stationExistingParamList.innerHTML = getTemplate("station-manager-existing-param-unselected");
+      return;
+    }
+
+    const shape = getShapeById(preset.shapeId);
+    if (!shape) {
+      stationExistingParamList.innerHTML = getTemplate("station-manager-existing-param-no-shape");
+      return;
+    }
+
+    const shapeParams = normalizeShapeParameters(shape.parameters);
+    if (!shapeParams.length) {
+      stationExistingParamList.innerHTML = getTemplate("station-manager-existing-param-empty");
+      return;
+    }
+
+    if (!preset.shapeParamSettings || typeof preset.shapeParamSettings !== "object") {
+      preset.shapeParamSettings = {};
+    }
+
+    shapeParams.forEach((param) => {
+      const row = document.createElement("div");
+      row.className = "station-existing-param-item shape-prop-item";
+
+      const head = document.createElement("div");
+      head.className = "shape-param-head";
+
+      const title = document.createElement("span");
+      title.className = "shape-prop-label";
+      title.textContent = param.label;
+      head.appendChild(title);
+
+      const typeBadge = document.createElement("span");
+      typeBadge.className = "shape-param-type";
+      typeBadge.textContent = shapeParameterTypeDefinitions[param.type]?.label || "参数";
+      head.appendChild(typeBadge);
+
+      row.appendChild(head);
+
+      const modeWrap = document.createElement("label");
+      modeWrap.className = "station-param-mode-row";
+      const modeText = document.createElement("span");
+      modeText.textContent = "模式";
+      const modeSelect = document.createElement("select");
+      modeSelect.innerHTML = `
+        <option value="inherit">跟随图形默认</option>
+        <option value="default">重设默认值</option>
+        <option value="locked">锁定参数值</option>
+      `;
+
+      const setting = preset.shapeParamSettings[param.id];
+      const mode = setting?.mode === "default" || setting?.mode === "locked"
+        ? setting.mode
+        : "inherit";
+      modeSelect.value = mode;
+      modeWrap.appendChild(modeText);
+      modeWrap.appendChild(modeSelect);
+      row.appendChild(modeWrap);
+
+      const valueWrap = document.createElement("div");
+      valueWrap.className = "shape-param-default";
+      const valueLabel = document.createElement("span");
+      valueLabel.className = "shape-param-default-label";
+      valueLabel.textContent = mode === "locked" ? "锁定值" : "参数值";
+      valueWrap.appendChild(valueLabel);
+
+      // 值输入控件（inherit / default 模式可见，locked 模式隐藏）
+      const resolvedValue = mode === "inherit"
+        ? param.defaultValue
+        : normalizeShapeParameterDefault(param.type, setting?.value);
+      const valueInput = createParameterInput(param.type, resolvedValue, (value) => {
+        if (modeSelect.value === "inherit") {
+          return;
+        }
+        preset.shapeParamSettings[param.id] = {
+          mode: modeSelect.value,
+          value: normalizeShapeParameterDefault(param.type, value)
+        };
+        persistStationLibrary();
+        renderPreview(preset);
+      });
+      setParameterInputEnabled(valueInput, mode === "default");
+      valueWrap.appendChild(valueInput);
+
+      // 锁定模式的预览值（显示表达式计算结果）
+      const lockPreview = document.createElement("span");
+      lockPreview.className = "shape-prop-param-preview station-lock-preview";
+      valueWrap.appendChild(lockPreview);
+
+      // fx 按钮 - default 和 locked 模式均可用
+      const hasExpr = mode !== "inherit" && Boolean(preset.paramExpressions?.[param.id]);
+      const fxBtn = document.createElement("button");
+      fxBtn.type = "button";
+      fxBtn.className = "param-fx-toggle" + (hasExpr ? " is-active" : "");
+      fxBtn.title = "参数表达式编辑器（支持 JS 运算），可在表达式中通过 params[\"参数名\"] 引用自定义参数";
+      fxBtn.textContent = "fx";
+      const refreshLockPreview = () => {
+        const isLocked = modeSelect.value === "locked";
+        if (!isLocked) {
+          lockPreview.textContent = "";
+          lockPreview.hidden = true;
+          lockPreview.style.display = "none";
+          return;
+        }
+        const expr = String(preset.paramExpressions?.[param.id] || "").trim();
+        lockPreview.dataset.lockExpr = expr;
+        if (!expr) {
+          lockPreview.textContent = "（未设置表达式）";
+          lockPreview.hidden = false;
+          lockPreview.style.display = "";
+          return;
+        }
+        // 构建参数环境并求值
+        const customParams = normalizeShapeParameters(preset.params);
+        const env = {};
+        customParams.forEach((cp) => {
+          if (cp.id === param.id) return;
+          env[cp.label] = normalizeShapeParameterDefault(cp.type, cp.defaultValue);
+        });
+        try {
+          const safeEnv = {};
+          Object.keys(env).forEach((k) => { safeEnv[k.replace(/["'`\\n\\r\\t\\\\]/g, "_")] = env[k]; });
+          // eslint-disable-next-line no-new-func
+          const fn = new Function("params", "Math", "Number", "String", "Boolean", `"use strict"; return (${expr});`);
+          const computed = fn(safeEnv, Math, Number, String, Boolean);
+          const display = typeof computed === "boolean" ? (computed ? "true" : "false")
+            : typeof computed === "number" ? String(computed)
+              : String(computed || "");
+          lockPreview.textContent = display + " (" + expr + ")";
+          lockPreview.dataset.lockExpr = expr;
+        } catch (err) {
+          lockPreview.textContent = "[错误] (" + expr + ")";
+          lockPreview.dataset.lockExpr = expr;
+        }
+        lockPreview.hidden = false;
+        lockPreview.style.display = "";
+      };
+      if (mode === "inherit") {
+        fxBtn.disabled = true;
+        fxBtn.title = "请先切换到「重设默认值」或「锁定参数值」模式";
+      }
+      fxBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (modeSelect.value === "inherit") return;
+        const currentVal = normalizeShapeParameterDefault(param.type,
+          preset.shapeParamSettings[param.id]?.value ?? param.defaultValue);
+        openPresetParamEditor(preset, param.id, param.type, param.label, currentVal, (applied) => {
+          if (applied.expression) {
+            if (!preset.paramExpressions || typeof preset.paramExpressions !== "object") {
+              preset.paramExpressions = {};
+            }
+            preset.paramExpressions[param.id] = applied.expression;
+          } else {
+            if (preset.paramExpressions) {
+              delete preset.paramExpressions[param.id];
+              if (!Object.keys(preset.paramExpressions).length) {
+                preset.paramExpressions = undefined;
+              }
+            }
+          }
+          // 更新 shapeParamSettings 的值
+          if (modeSelect.value !== "inherit") {
+            preset.shapeParamSettings[param.id] = {
+              mode: modeSelect.value,
+              value: normalizeShapeParameterDefault(param.type, applied.finalValue)
+            };
+          }
+          persistStationLibrary();
+          renderPreview(preset);
+          renderExistingParamList(preset);
+          rerenderScene?.();
+          onStateChanged?.();
+        });
+      });
+      valueWrap.appendChild(fxBtn);
+      row.appendChild(valueWrap);
+
+      // 初始视图同步
+      const syncViewByMode = (nextMode) => {
+        const isLocked = nextMode === "locked";
+        const isDefault = nextMode === "default";
+        valueLabel.textContent = isLocked ? "锁定值" : "参数值";
+        valueInput.hidden = isLocked;
+        valueInput.style.display = isLocked ? "none" : "";
+        setParameterInputEnabled(valueInput, isDefault);
+        fxBtn.disabled = nextMode === "inherit";
+        fxBtn.title = nextMode === "inherit"
+          ? "请先切换到「重设默认值」或「锁定参数值」模式"
+          : "参数表达式编辑器（支持 JS 运算），可在表达式中通过 params[\"参数名\"] 引用自定义参数";
+        if (isLocked) {
+          refreshLockPreview();
+        } else {
+          lockPreview.hidden = true;
+          lockPreview.style.display = "none";
+        }
+      };
+      syncViewByMode(mode);
+
+      modeSelect.addEventListener("change", () => {
+        const nextMode = modeSelect.value;
+        syncViewByMode(nextMode);
+
+        if (nextMode === "inherit") {
+          delete preset.shapeParamSettings[param.id];
+          setParameterInputValue(valueInput, param.type, param.defaultValue);
+          setParameterInputEnabled(valueInput, false);
+        } else {
+          const current = readParameterInputValue(valueInput, param.type, param.defaultValue);
+          preset.shapeParamSettings[param.id] = {
+            mode: nextMode,
+            value: normalizeShapeParameterDefault(param.type, current)
+          };
+          setParameterInputEnabled(valueInput, nextMode === "default");
+        }
+
+        persistStationLibrary();
+        renderPreview(preset);
+        rerenderScene?.();
+        onStateChanged?.();
+      });
+
+      stationExistingParamList.appendChild(row);
+    });
+  }
+
+  function addCustomParameter(type) {
+    const preset = getSelectedPreset();
+    if (!preset) {
+      return;
+    }
+
+    const normalizedType = shapeParameterTypeDefinitions[type] ? type : "text";
+    const definition = shapeParameterTypeDefinitions[normalizedType] || shapeParameterTypeDefinitions.text;
+    const nextNo = Array.isArray(preset.params) ? preset.params.length + 1 : 1;
+
+    if (!Array.isArray(preset.params)) {
+      preset.params = [];
+    }
+
+    preset.params.push({
+      id: createStationPresetId(),
+      type: normalizedType,
+      label: `${definition.label} ${nextNo}`,
+      defaultValue: normalizeShapeParameterDefault(normalizedType, definition.defaultValue),
+      conditions: [],
+      extensions: {}
+    });
+
+    persistStationLibrary();
+    refreshStationParamPanels(preset);
+  }
+
+  function createParameterInput(type, value, onValueChanged) {
+    if (type === "color") {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "color-modal-trigger";
+      const swatch = document.createElement("span");
+      swatch.className = "color-modal-swatch";
+      const text = document.createElement("span");
+      text.className = "color-modal-text";
+      button.appendChild(swatch);
+      button.appendChild(text);
+
+      const applyColor = (nextValue) => {
+        const normalized = normalizeColor(nextValue || "#2f5d9dff");
+        button.dataset.colorValue = normalized;
+        swatch.style.setProperty("--swatch-color", normalized);
+        text.textContent = formatColorWithAlpha(normalized);
+      };
+
+      applyColor(value || "#2f5d9dff");
+      button.addEventListener("click", () => {
+        if (!colorPicker) {
+          return;
+        }
+        colorPicker.open({
+          color: button.dataset.colorValue || "#2f5d9dff",
+          title: "参数颜色",
+          onConfirm: (nextColor) => {
+            applyColor(nextColor);
+            onValueChanged(normalizeColor(nextColor));
+          }
+        });
+      });
+      return button;
+    }
+
+    if (type === "number") {
+      const input = document.createElement("input");
+      input.type = "number";
+      input.step = "0.1";
+      input.value = String(toNumber(value, 0));
+      input.addEventListener("input", () => {
+        const normalized = normalizeNumber(input.value, 0, -100000, 100000);
+        input.value = String(normalized);
+        onValueChanged(normalized);
+      });
+      input.addEventListener("change", () => {
+        const normalized = normalizeNumber(input.value, 0, -100000, 100000);
+        input.value = String(normalized);
+        onValueChanged(normalized);
+      });
+      return input;
+    }
+
+    if (type === "checkbox") {
+      const wrapper = document.createElement("label");
+      wrapper.className = "toggle-switch";
+      const input = document.createElement("input");
+      input.type = "checkbox";
+      input.className = "toggle-checkbox";
+      input.checked = Boolean(value);
+      const slider = document.createElement("span");
+      slider.className = "toggle-slider";
+      slider.setAttribute("aria-hidden", "true");
+      input.addEventListener("change", () => {
+        onValueChanged(Boolean(input.checked));
+      });
+      wrapper.appendChild(input);
+      wrapper.appendChild(slider);
+      return wrapper;
+    }
+
+    const input = document.createElement("input");
+    input.type = "text";
+    input.value = String(value || "");
+    input.addEventListener("input", () => {
+      onValueChanged(String(input.value || ""));
+    });
+    input.addEventListener("change", () => {
+      onValueChanged(String(input.value || ""));
+    });
+    return input;
+  }
+
+  function setParameterInputEnabled(input, enabled) {
+    if (input instanceof HTMLInputElement || input instanceof HTMLSelectElement || input instanceof HTMLTextAreaElement) {
+      input.disabled = !enabled;
+      return;
+    }
+
+    if (input instanceof Element) {
+      input.querySelectorAll("input,select,textarea").forEach((el) => {
+        el.disabled = !enabled;
+      });
+    }
+  }
+
+  function setParameterInputValue(input, type, value) {
+    if (type === "checkbox") {
+      const checkbox = input instanceof HTMLInputElement
+        ? input
+        : input.querySelector("input[type='checkbox']");
+      if (checkbox) {
+        checkbox.checked = Boolean(value);
+      }
+      return;
+    }
+
+    const field = (input instanceof HTMLInputElement || input instanceof HTMLButtonElement)
+      ? input
+      : input.querySelector("input,button");
+    if (!field) {
+      return;
+    }
+
+    if (type === "color") {
+      const normalized = normalizeColor(value || "#2f5d9dff");
+      if (field instanceof HTMLButtonElement) {
+        field.dataset.colorValue = normalized;
+        const swatch = field.querySelector(".color-modal-swatch");
+        if (swatch) {
+          swatch.style.setProperty("--swatch-color", normalized);
+        }
+        const text = field.querySelector(".color-modal-text");
+        if (text) {
+          text.textContent = formatColorWithAlpha(normalized);
+        }
+        return;
+      }
+      field.value = safeColor(normalized);
+      return;
+    }
+
+    if (type === "number") {
+      field.value = String(toNumber(value, 0));
+      return;
+    }
+
+    field.value = String(value || "");
+  }
+
+  function readParameterInputValue(input, type, fallback) {
+    if (type === "checkbox") {
+      const checkbox = input instanceof HTMLInputElement
+        ? input
+        : input.querySelector("input[type='checkbox']");
+      return checkbox ? Boolean(checkbox.checked) : Boolean(fallback);
+    }
+
+    const field = (input instanceof HTMLInputElement || input instanceof HTMLButtonElement)
+      ? input
+      : input.querySelector("input,button");
+    if (!field) {
+      return fallback;
+    }
+
+    if (type === "color") {
+      if (field instanceof HTMLButtonElement) {
+        return normalizeColor(field.dataset.colorValue || fallback || "#2f5d9dff");
+      }
+      return safeColor(field.value || fallback || "#2f5d9d");
+    }
+
+    if (type === "number") {
+      return normalizeNumber(field.value, toNumber(fallback, 0), -100000, 100000);
+    }
+
+    return String(field.value || fallback || "");
+  }
+
+  function ensureSelectedPreset() {
+    if (!Array.isArray(state.stationLibrary) || !state.stationLibrary.length) {
+      state.stationManager.selectedId = null;
+      return;
+    }
+
+    const selected = getSelectedPreset();
+    if (selected) {
+      return;
+    }
+
+    state.stationManager.selectedId = state.stationLibrary[0].id;
+  }
+
+  function getSelectedPreset() {
+    return (Array.isArray(state.stationLibrary) ? state.stationLibrary : [])
+      .find((preset) => preset.id === state.stationManager.selectedId) || null;
+  }
+
+  function loadStationLibrary() {
+    const stored = readStationLibrary();
+    if (stored.length) {
+      state.stationLibrary = stored;
+    } else {
+      state.stationLibrary = (Array.isArray(state.stationTypes) ? state.stationTypes : [])
+        .map((type, index) => convertTypeToPreset(type, index));
+      persistStationLibrary();
+    }
+
+    syncStationTypesFromLibrary();
+    ensureSelectedPreset();
+  }
+
+  function persistStationLibrary() {
+    try {
+      const payload = (Array.isArray(state.stationLibrary) ? state.stationLibrary : [])
+        .map((preset) => sanitizePreset(preset))
+        .filter(Boolean);
+      localStorage.setItem(stationStorageKey, JSON.stringify(payload));
+      syncStationTypesFromLibrary();
+    } catch {
+      // Ignore localStorage quota/availability errors.
+    }
+  }
+
+  function readStationLibrary() {
+    try {
+      const raw = localStorage.getItem(stationStorageKey);
+      if (!raw) {
+        return [];
+      }
+
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) {
+        return [];
+      }
+
+      return parsed.map((preset) => sanitizePreset(preset)).filter(Boolean);
+    } catch {
+      return [];
+    }
+  }
+
+  function sanitizePreset(raw) {
+    if (!raw || typeof raw !== "object") {
+      return null;
+    }
+
+    const cards = normalizeStationTextCards(raw.textCards, createStationPresetId);
+    if (String(raw.label || "").trim() && !String(cards[0]?.defaultValue || "").trim()) {
+      cards[0].defaultValue = String(raw.label || "").trim();
+    }
+    if (cards.length === 1 && cards[0].label === "主文本") {
+      cards[0].label = "文本 1";
+    }
+
+    const rawParams = Array.isArray(raw.params) ? structuredClone(raw.params) : [];
+    const filteredParams = rawParams.filter((param) => (
+      param?.id !== "station-virtual-node" && param?.extensions?.role !== "virtual-node"
+    ));
+
+    const preset = {
+      id: String(raw.id || createStationPresetId()),
+      name: String(raw.name || "车站预设").trim() || "车站预设",
+      shapeId: raw.shapeId ? String(raw.shapeId) : null,
+      textCards: cards,
+      textPlacement: normalizeStationTextPlacement(raw.textPlacement || {
+        slot: raw.position,
+        distanceBinding: Object.prototype.hasOwnProperty.call(raw, "distance")
+          ? { mode: "value", value: raw.distance }
+          : undefined
+      }),
+      virtualNode: Boolean(raw.virtualNode),
+      radius: Number.isFinite(Number(raw.radius)) ? Number(raw.radius) : 12,
+      oval: Boolean(raw.oval),
+      rotation: Number.isFinite(Number(raw.rotation)) ? Number(raw.rotation) : 0,
+      rotationParamId: String(raw.rotationParamId || "").trim() || undefined,
+      shapeParamSettings: normalizeShapeParamSettings(raw.shapeParamSettings),
+      paramExpressions: raw.paramExpressions && typeof raw.paramExpressions === "object"
+        ? { ...raw.paramExpressions }
+        : undefined,
+      params: filteredParams
+    };
+    return preset;
+  }
+
+  function convertTypeToPreset(type, index) {
+    const primaryCard = {
+      ...createDefaultStationTextCard(0, createStationPresetId),
+      defaultValue: "站名"
+    };
+
+    return sanitizePreset({
+      id: createStationPresetId(),
+      name: String(type?.name || `车站类型 ${index + 1}`),
+      shapeId: type?.shapeId ? String(type.shapeId) : null,
+      textCards: [primaryCard],
+      textPlacement: createDefaultStationTextPlacement(),
+      virtualNode: Boolean(type?.virtualNode),
+      radius: Number(type?.radius) || 12,
+      oval: Boolean(type?.oval),
+      rotation: Number.isFinite(Number(type?.rotation)) ? Number(type.rotation) : 0,
+      rotationParamId: String(type?.rotationParamId || "").trim() || undefined,
+      shapeParamSettings: {},
+      params: []
+    });
+  }
+
+  function normalizeShapeParamSettings(raw) {
+    if (!raw || typeof raw !== "object") {
+      return {};
+    }
+
+    const normalized = {};
+    Object.entries(raw).forEach(([paramId, setting]) => {
+      if (!setting || typeof setting !== "object") {
+        return;
+      }
+
+      const mode = setting.mode === "default" || setting.mode === "locked"
+        ? setting.mode
+        : null;
+      if (!mode) {
+        return;
+      }
+
+      normalized[String(paramId)] = {
+        mode,
+        value: setting.value
+      };
+    });
+
+    return normalized;
+  }
+
+  function syncStationTypesFromLibrary() {
+    state.stationTypes = (Array.isArray(state.stationLibrary) ? state.stationLibrary : []).map((preset, index) => ({
+      name: preset.name,
+      radius: Number.isFinite(Number(preset.radius)) ? Number(preset.radius) : 12,
+      oval: Boolean(preset.oval),
+      stationPresetId: preset.id,
+      stationTypeIndex: index
+    }));
+
+    const length = state.stationTypes.length;
+    if (!Number.isInteger(state.menuSelection?.station)) {
+      return;
+    }
+
+    if (length <= 0) {
+      state.menuSelection.station = null;
+      return;
+    }
+
+    state.menuSelection.station = Math.max(0, Math.min(length - 1, state.menuSelection.station));
+  }
+
+  function getShapeById(id) {
+    if (!id) {
+      return null;
+    }
+
+    return (Array.isArray(state.shapeLibrary) ? state.shapeLibrary : []).find((shape) => shape.id === id) || null;
+  }
+
+  function appendPreviewPlaceholder(message) {
+    const text = document.createElementNS(svgNs, "text");
+    text.setAttribute("x", "120");
+    text.setAttribute("y", "120");
+    text.setAttribute("fill", "#7b8da8");
+    text.setAttribute("font-size", "13");
+    text.setAttribute("font-family", "Segoe UI");
+    text.setAttribute("text-anchor", "middle");
+    text.textContent = message;
+    stationPreviewCanvas.appendChild(text);
+  }
+
+  function parseSvgDocument(svgText) {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(String(svgText || ""), "image/svg+xml");
+    if (doc.querySelector("parsererror")) {
+      return null;
+    }
+
+    const root = doc.documentElement;
+    if (!root || root.tagName.toLowerCase() !== "svg") {
+      return null;
+    }
+
+    return {
+      root,
+      viewBox: parseViewBox(root.getAttribute("viewBox"))
+    };
+  }
+
+  function parseViewBox(value) {
+    const values = String(value || "")
+      .trim()
+      .split(/[\s,]+/)
+      .map((item) => Number(item));
+
+    if (values.length !== 4 || values.some((item) => !Number.isFinite(item))) {
+      return null;
+    }
+
+    const [x, y, width, height] = values;
+    if (width <= 0 || height <= 0) {
+      return null;
+    }
+
+    return { x, y, width, height };
+  }
+
+  function onPreviewMouseDown(event) {
+    if (!state.stationManager.isOpen || event.button !== 0) {
+      return;
+    }
+
+    previewState.isPanning = true;
+    previewState.startClientX = event.clientX;
+    previewState.startClientY = event.clientY;
+    previewState.startViewBox = { ...getPreviewViewBox() };
+    stationPreviewCanvasWrap.classList.add("panning");
+    event.preventDefault();
+  }
+
+  function onWindowMouseMove(event) {
+    if (!previewState.isPanning || !state.stationManager.isOpen) {
+      return;
+    }
+
+    const rect = stationPreviewCanvas.getBoundingClientRect();
+    if (!rect || rect.width <= 0 || rect.height <= 0) {
+      return;
+    }
+
+    const start = previewState.startViewBox;
+    const dx = ((event.clientX - previewState.startClientX) / rect.width) * start.width;
+    const dy = ((event.clientY - previewState.startClientY) / rect.height) * start.height;
+
+    previewState.viewBox = {
+      x: start.x - dx,
+      y: start.y - dy,
+      width: start.width,
+      height: start.height
+    };
+    state.stationManager.previewViewBox = { ...previewState.viewBox };
+    renderPreview(getSelectedPreset());
+  }
+
+  function onWindowMouseUp() {
+    stopPreviewPanning();
+  }
+
+  function stopPreviewPanning() {
+    previewState.isPanning = false;
+    stationPreviewCanvasWrap?.classList.remove("panning");
+  }
+
+  function onPreviewWheel(event) {
+    if (!state.stationManager.isOpen) {
+      return;
+    }
+
+    event.preventDefault();
+
+    const current = getPreviewViewBox();
+    const scaleFactor = event.deltaY < 0 ? 0.9 : 1.1;
+    const nextWidth = Math.max(20, Math.min(2400, current.width * scaleFactor));
+    const nextHeight = Math.max(20, Math.min(2400, current.height * scaleFactor));
+
+    const focus = clientToPreviewPoint(event.clientX, event.clientY) || {
+      x: current.x + current.width / 2,
+      y: current.y + current.height / 2
+    };
+
+    const rx = (focus.x - current.x) / current.width;
+    const ry = (focus.y - current.y) / current.height;
+
+    previewState.viewBox = {
+      x: focus.x - rx * nextWidth,
+      y: focus.y - ry * nextHeight,
+      width: nextWidth,
+      height: nextHeight
+    };
+    state.stationManager.previewViewBox = { ...previewState.viewBox };
+    renderPreview(getSelectedPreset());
+  }
+
+  function clientToPreviewPoint(clientX, clientY) {
+    const ctm = stationPreviewCanvas.getScreenCTM();
+    if (!ctm) {
+      return null;
+    }
+
+    const point = stationPreviewCanvas.createSVGPoint();
+    point.x = clientX;
+    point.y = clientY;
+    const transformed = point.matrixTransform(ctm.inverse());
+    return { x: transformed.x, y: transformed.y };
+  }
+
+  function getPreviewViewBox() {
+    const vb = previewState.viewBox || previewDefaultViewBox;
+    return {
+      x: Number(vb.x) || 0,
+      y: Number(vb.y) || 0,
+      width: Math.max(20, Math.min(2400, Number(vb.width) || 240)),
+      height: Math.max(20, Math.min(2400, Number(vb.height) || 240))
+    };
+  }
+
+  function resetPreviewView(preset) {
+    const shape = getShapeById(preset?.shapeId);
+    if (!shape?.svg) {
+      previewState.viewBox = { ...previewDefaultViewBox };
+      state.stationManager.previewViewBox = { ...previewState.viewBox };
+      return;
+    }
+
+    const parsed = parseSvgDocument(shape.svg);
+    const vb = parsed?.viewBox;
+    if (!vb) {
+      previewState.viewBox = { ...previewDefaultViewBox };
+      state.stationManager.previewViewBox = { ...previewState.viewBox };
+      return;
+    }
+
+    const pad = 20;
+    const baseViewBox = {
+      x: vb.x - pad,
+      y: vb.y - pad,
+      width: Math.max(80, vb.width + pad * 2),
+      height: Math.max(80, vb.height + pad * 2)
+    };
+    previewState.viewBox = { ...baseViewBox };
+    state.stationManager.previewViewBox = { ...previewState.viewBox };
+  }
+
+  return {
+    bind,
+    open,
+    close,
+    openImportSelection,
+    persistStationLibrary
+  };
+}
+
+function buildExportTimestamp() {
+  const now = new Date();
+  const pad = (value) => String(value).padStart(2, "0");
+  return `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+}

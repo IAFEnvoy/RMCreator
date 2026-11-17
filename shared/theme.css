@@ -1,0 +1,30 @@
+:root {
+  --bg: #f6f8fb;
+  --panel: #ffffff;
+  --line: #dce3ee;
+  --text: #1e2a39;
+  --muted: #62708a;
+  --accent: #2f6de5;
+  --accent-strong: #2a61cb;
+  --accent-soft: #eef4ff;
+  --accent-focus: #7fa9ff;
+  --accent-ink: #1f4f9a;
+  --accent-rgb: 47, 109, 229;
+  --soft: var(--accent-soft);
+  --selection-glow-color: rgba(47, 109, 229, .45);
+  --selection-glow-size: 4px;
+  --font-ui: "Segoe UI", "PingFang SC", "Noto Sans SC", "Microsoft YaHei", sans-serif;
+  font-family: var(--font-ui);
+  color: var(--text);
+  background: var(--bg);
+  font-synthesis: none;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; width: 100%; height: 100%; }
+body { font-family: var(--font-ui); background: linear-gradient(180deg, #fcfdff, #f3f6fb); }
+button, input, select, textarea { font-family: inherit; }
+a:focus-visible, button:focus-visible, summary:focus-visible {
+  outline: 2px solid var(--accent-focus);
+  outline-offset: 3px;
+}
