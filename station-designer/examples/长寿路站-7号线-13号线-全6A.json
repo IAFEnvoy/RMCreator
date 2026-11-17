@@ -1,0 +1,2173 @@
+{
+  "version": 4,
+  "name": "长寿路站 · 7 / 13号线 · 6A",
+  "english": "Changshou Road",
+  "updatedAt": "2026-11-17T14:29:32.124Z",
+  "floorHeight": 12,
+  "floors": [
+    {
+      "id": "B3",
+      "code": "B3",
+      "name": "7号线站台",
+      "elevation": 0
+    },
+    {
+      "id": "B2",
+      "code": "B2",
+      "name": "13号线站台",
+      "elevation": 12
+    },
+    {
+      "id": "B1",
+      "code": "B1",
+      "name": "共用站厅",
+      "elevation": 24
+    }
+  ],
+  "lines": [
+    {
+      "id": "line-7",
+      "name": "7号线",
+      "color": "#ed7026"
+    },
+    {
+      "id": "line-13",
+      "name": "13号线",
+      "color": "#e991bf"
+    }
+  ],
+  "zones": {
+    "B3": {},
+    "B2": {},
+    "B1": {}
+  },
+  "zoneColors": {
+    "paid": "#ecdd98",
+    "unpaid": "#abcfdc",
+    "staff": "#b8b3b0"
+  },
+  "snapping": true,
+  "boundaries": {
+    "railings": true,
+    "screenDoors": "half"
+  },
+  "display": {
+    "names": true,
+    "markers": true,
+    "fullMarkers": false,
+    "grid": false,
+    "exploded": true,
+    "texts": true
+  },
+  "entities": [
+    {
+      "name": "往花木路",
+      "icon": "tram-front",
+      "en": "Track",
+      "l": 201,
+      "d": 4,
+      "h": 0.35,
+      "color": "#ed7026",
+      "floor": "B3",
+      "direction": "backward",
+      "arrowVisible": true,
+      "id": "track-7-huamu",
+      "type": "track",
+      "x": -85.5,
+      "z": -49,
+      "rotation": 0,
+      "visible": true,
+      "lineId": "line-7",
+      "bandSide": "left",
+      "doorStyle": "half",
+      "bandVisible": true
+    },
+    {
+      "name": "往美兰湖",
+      "icon": "tram-front",
+      "en": "Track",
+      "l": 201,
+      "d": 4,
+      "h": 0.35,
+      "color": "#ed7026",
+      "floor": "B3",
+      "direction": "forward",
+      "arrowVisible": true,
+      "id": "track-7-meilan",
+      "type": "track",
+      "x": -85.5,
+      "z": -26,
+      "rotation": 0,
+      "visible": true,
+      "lineId": "line-7",
+      "bandSide": "right",
+      "doorStyle": "half",
+      "bandVisible": true
+    },
+    {
+      "name": "往金运路",
+      "icon": "tram-front",
+      "en": "Track",
+      "l": 201,
+      "d": 4,
+      "h": 0.35,
+      "color": "#e991bf",
+      "floor": "B2",
+      "direction": "backward",
+      "arrowVisible": true,
+      "id": "track-13-jinyun",
+      "type": "track",
+      "x": -30,
+      "z": 40.5,
+      "rotation": 90,
+      "visible": true,
+      "lineId": "line-13",
+      "bandSide": "left",
+      "doorStyle": "half",
+      "bandVisible": true
+    },
+    {
+      "name": "往张江路",
+      "icon": "tram-front",
+      "en": "Track",
+      "l": 201,
+      "d": 4,
+      "h": 0.35,
+      "color": "#e991bf",
+      "floor": "B2",
+      "direction": "forward",
+      "arrowVisible": true,
+      "id": "track-13-zhangjiang",
+      "type": "track",
+      "x": -8,
+      "z": 40.5,
+      "rotation": 90,
+      "visible": true,
+      "lineId": "line-13",
+      "bandSide": "right",
+      "doorStyle": "half",
+      "bandVisible": true
+    },
+    {
+      "name": "7号线 往花木路 · 6A",
+      "icon": "train-front",
+      "en": "Train decoration",
+      "category": "decoration",
+      "l": 142.82,
+      "d": 3,
+      "h": 3.842,
+      "color": "#ed7026",
+      "floor": "B3",
+      "trainPreset": "metro-a",
+      "trainCars": 6,
+      "trainUnits": 1,
+      "trainOffset": 0,
+      "trainFacing": "inherit",
+      "id": "train-7-huamu",
+      "type": "train",
+      "x": -85.5,
+      "z": -49,
+      "rotation": 0,
+      "visible": true,
+      "trackId": "track-7-huamu"
+    },
+    {
+      "name": "7号线 往美兰湖 · 6A",
+      "icon": "train-front",
+      "en": "Train decoration",
+      "category": "decoration",
+      "l": 142.82,
+      "d": 3,
+      "h": 3.842,
+      "color": "#ed7026",
+      "floor": "B3",
+      "trainPreset": "metro-a",
+      "trainCars": 6,
+      "trainUnits": 1,
+      "trainOffset": 0,
+      "trainFacing": "inherit",
+      "id": "train-7-meilan",
+      "type": "train",
+      "x": -85.5,
+      "z": -26,
+      "rotation": 0,
+      "visible": true,
+      "trackId": "track-7-meilan"
+    },
+    {
+      "name": "13号线 往金运路 · 6A",
+      "icon": "train-front",
+      "en": "Train decoration",
+      "category": "decoration",
+      "l": 142.82,
+      "d": 3,
+      "h": 3.842,
+      "color": "#e991bf",
+      "floor": "B2",
+      "trainPreset": "metro-a",
+      "trainCars": 6,
+      "trainUnits": 1,
+      "trainOffset": 0,
+      "trainFacing": "inherit",
+      "id": "train-13-jinyun",
+      "type": "train",
+      "x": -30,
+      "z": 40.5,
+      "rotation": 90,
+      "visible": true,
+      "trackId": "track-13-jinyun"
+    },
+    {
+      "name": "13号线 往张江路 · 6A",
+      "icon": "train-front",
+      "en": "Train decoration",
+      "category": "decoration",
+      "l": 142.82,
+      "d": 3,
+      "h": 3.842,
+      "color": "#e991bf",
+      "floor": "B2",
+      "trainPreset": "metro-a",
+      "trainCars": 6,
+      "trainUnits": 1,
+      "trainOffset": 0,
+      "trainFacing": "inherit",
+      "id": "train-13-zhangjiang",
+      "type": "train",
+      "x": -8,
+      "z": 40.5,
+      "rotation": 90,
+      "visible": true,
+      "trackId": "track-13-zhangjiang"
+    },
+    {
+      "name": "7号线西楼梯",
+      "icon": "list-filter",
+      "en": "Stairs",
+      "l": 36.124783736376884,
+      "d": 3.1,
+      "h": 24,
+      "color": "#c7bda8",
+      "floor": "B3",
+      "id": "stairs-7-west",
+      "type": "stairs",
+      "x": -141,
+      "z": -38.5,
+      "rotation": 355.23635830927384,
+      "visible": true,
+      "toFloor": "B1"
+    },
+    {
+      "name": "7号线西扶梯 A",
+      "icon": "arrow-up-right",
+      "en": "Escalator",
+      "l": 36.124783736376884,
+      "d": 2.2,
+      "h": 24,
+      "color": "#9ca6a3",
+      "floor": "B3",
+      "id": "escalator-7-west-a",
+      "type": "escalator",
+      "x": -141,
+      "z": -41.9,
+      "rotation": 355.23635830927384,
+      "visible": true,
+      "toFloor": "B1"
+    },
+    {
+      "name": "7号线西扶梯 B",
+      "icon": "arrow-up-right",
+      "en": "Escalator",
+      "l": 36.124783736376884,
+      "d": 2.2,
+      "h": 24,
+      "color": "#9ca6a3",
+      "floor": "B3",
+      "id": "escalator-7-west-b",
+      "type": "escalator",
+      "x": -141,
+      "z": -35.1,
+      "rotation": 355.23635830927384,
+      "visible": true,
+      "toFloor": "B1"
+    },
+    {
+      "name": "7号线东楼梯",
+      "icon": "list-filter",
+      "en": "Stairs",
+      "l": 36.22154055254967,
+      "d": 3.1,
+      "h": 24,
+      "color": "#c7bda8",
+      "floor": "B3",
+      "id": "stairs-7-east",
+      "type": "stairs",
+      "x": -50,
+      "z": -39,
+      "rotation": 353.6598082540901,
+      "visible": true,
+      "toFloor": "B1"
+    },
+    {
+      "name": "7号线东扶梯 A",
+      "icon": "arrow-up-right",
+      "en": "Escalator",
+      "l": 36.22154055254967,
+      "d": 2.2,
+      "h": 24,
+      "color": "#9ca6a3",
+      "floor": "B3",
+      "id": "escalator-7-east-a",
+      "type": "escalator",
+      "x": -50,
+      "z": -42.4,
+      "rotation": 353.6598082540901,
+      "visible": true,
+      "toFloor": "B1"
+    },
+    {
+      "name": "7号线东扶梯 B",
+      "icon": "arrow-up-right",
+      "en": "Escalator",
+      "l": 36.22154055254967,
+      "d": 2.2,
+      "h": 24,
+      "color": "#9ca6a3",
+      "floor": "B3",
+      "id": "escalator-7-east-b",
+      "type": "escalator",
+      "x": -50,
+      "z": -35.6,
+      "rotation": 353.6598082540901,
+      "visible": true,
+      "toFloor": "B1"
+    },
+    {
+      "name": "13号线北楼梯",
+      "icon": "list-filter",
+      "en": "Stairs",
+      "l": 20,
+      "d": 3,
+      "h": 12,
+      "color": "#c7bda8",
+      "floor": "B2",
+      "id": "stairs-13-north",
+      "type": "stairs",
+      "x": -19,
+      "z": -10,
+      "rotation": 270,
+      "visible": true,
+      "toFloor": "B1"
+    },
+    {
+      "name": "13号线北扶梯 A",
+      "icon": "arrow-up-right",
+      "en": "Escalator",
+      "l": 20,
+      "d": 2.1,
+      "h": 12,
+      "color": "#9ca6a3",
+      "floor": "B2",
+      "id": "escalator-13-north-a",
+      "type": "escalator",
+      "x": -22.1,
+      "z": -10,
+      "rotation": 270,
+      "visible": true,
+      "toFloor": "B1"
+    },
+    {
+      "name": "13号线北扶梯 B",
+      "icon": "arrow-up-right",
+      "en": "Escalator",
+      "l": 20,
+      "d": 2.1,
+      "h": 12,
+      "color": "#9ca6a3",
+      "floor": "B2",
+      "id": "escalator-13-north-b",
+      "type": "escalator",
+      "x": -15.9,
+      "z": -10,
+      "rotation": 270,
+      "visible": true,
+      "toFloor": "B1"
+    },
+    {
+      "name": "13号线中楼梯",
+      "icon": "list-filter",
+      "en": "Stairs",
+      "l": 20,
+      "d": 3,
+      "h": 12,
+      "color": "#c7bda8",
+      "floor": "B2",
+      "id": "stairs-13-middle",
+      "type": "stairs",
+      "x": -19,
+      "z": 26,
+      "rotation": 270,
+      "visible": true,
+      "toFloor": "B1"
+    },
+    {
+      "name": "13号线中扶梯 A",
+      "icon": "arrow-up-right",
+      "en": "Escalator",
+      "l": 20,
+      "d": 2.1,
+      "h": 12,
+      "color": "#9ca6a3",
+      "floor": "B2",
+      "id": "escalator-13-middle-a",
+      "type": "escalator",
+      "x": -22.1,
+      "z": 26,
+      "rotation": 270,
+      "visible": true,
+      "toFloor": "B1"
+    },
+    {
+      "name": "13号线中扶梯 B",
+      "icon": "arrow-up-right",
+      "en": "Escalator",
+      "l": 20,
+      "d": 2.1,
+      "h": 12,
+      "color": "#9ca6a3",
+      "floor": "B2",
+      "id": "escalator-13-middle-b",
+      "type": "escalator",
+      "x": -15.9,
+      "z": 26,
+      "rotation": 270,
+      "visible": true,
+      "toFloor": "B1"
+    },
+    {
+      "name": "13号线南楼梯",
+      "icon": "list-filter",
+      "en": "Stairs",
+      "l": 20,
+      "d": 3,
+      "h": 12,
+      "color": "#c7bda8",
+      "floor": "B2",
+      "id": "stairs-13-south",
+      "type": "stairs",
+      "x": -19,
+      "z": 62,
+      "rotation": 270,
+      "visible": true,
+      "toFloor": "B1"
+    },
+    {
+      "name": "13号线南扶梯 A",
+      "icon": "arrow-up-right",
+      "en": "Escalator",
+      "l": 20,
+      "d": 2.1,
+      "h": 12,
+      "color": "#9ca6a3",
+      "floor": "B2",
+      "id": "escalator-13-south-a",
+      "type": "escalator",
+      "x": -22.1,
+      "z": 62,
+      "rotation": 270,
+      "visible": true,
+      "toFloor": "B1"
+    },
+    {
+      "name": "13号线南扶梯 B",
+      "icon": "arrow-up-right",
+      "en": "Escalator",
+      "l": 20,
+      "d": 2.1,
+      "h": 12,
+      "color": "#9ca6a3",
+      "floor": "B2",
+      "id": "escalator-13-south-b",
+      "type": "escalator",
+      "x": -15.9,
+      "z": 62,
+      "rotation": 270,
+      "visible": true,
+      "toFloor": "B1"
+    },
+    {
+      "name": "7 / 13号线直接换乘 · 两跑转弯楼梯",
+      "icon": "list-filter",
+      "en": "Stairs",
+      "l": 36,
+      "d": 3.6,
+      "h": 12,
+      "color": "#c7bda8",
+      "floor": "B3",
+      "id": "stairs-transfer",
+      "type": "stairs",
+      "x": -29.5,
+      "z": -29.5,
+      "rotation": 0,
+      "visible": true,
+      "toFloor": "B2",
+      "landingDepth": 4,
+      "stairPath": [
+        {
+          "x": -10.5,
+          "z": -7.5
+        },
+        {
+          "x": 10.5,
+          "z": -7.5
+        },
+        {
+          "x": 10.5,
+          "z": 7.5
+        }
+      ]
+    },
+    {
+      "name": "站厅 ↔ 7号线站台",
+      "icon": "accessibility",
+      "en": "Elevator",
+      "l": 3.8,
+      "d": 3.8,
+      "h": 16,
+      "color": "#c4d4d5",
+      "floor": "B3",
+      "id": "lift-7",
+      "type": "elevator",
+      "x": -86,
+      "z": -38,
+      "rotation": 0,
+      "visible": true,
+      "toFloor": "B1"
+    },
+    {
+      "name": "站厅 ↔ 13号线站台",
+      "icon": "accessibility",
+      "en": "Elevator",
+      "l": 3.8,
+      "d": 3.8,
+      "h": 16,
+      "color": "#c4d4d5",
+      "floor": "B2",
+      "id": "lift-13",
+      "type": "elevator",
+      "x": -18,
+      "z": 82,
+      "rotation": 0,
+      "visible": true,
+      "toFloor": "B1"
+    },
+    {
+      "name": "地面 ↔ 站厅（5、6号口）",
+      "icon": "accessibility",
+      "en": "Elevator",
+      "l": 3.8,
+      "d": 3.8,
+      "h": 7,
+      "color": "#c4d4d5",
+      "floor": "B1",
+      "id": "lift-ground-west",
+      "type": "elevator",
+      "x": -151,
+      "z": -11,
+      "rotation": 0,
+      "visible": true
+    },
+    {
+      "name": "地面 ↔ 站厅（4号口）",
+      "icon": "accessibility",
+      "en": "Elevator",
+      "l": 3.8,
+      "d": 3.8,
+      "h": 7,
+      "color": "#c4d4d5",
+      "floor": "B1",
+      "id": "lift-ground-east",
+      "type": "elevator",
+      "x": -76.44,
+      "z": 44.8,
+      "rotation": 0,
+      "visible": true
+    },
+    {
+      "name": "1号口楼梯",
+      "icon": "list-filter",
+      "en": "Stairs",
+      "l": 17.23090537377534,
+      "d": 6,
+      "h": 3.4,
+      "color": "#c7bda8",
+      "floor": "B1",
+      "id": "exit-approach-1",
+      "type": "stairs",
+      "x": 30.32,
+      "z": -76.475,
+      "rotation": 330.25099433079936,
+      "visible": true
+    },
+    {
+      "name": "1号口 · 长寿路",
+      "icon": "door-open",
+      "en": "Exit",
+      "l": 6,
+      "d": 6,
+      "h": 0.15,
+      "color": "#5c856b",
+      "floor": "B1",
+      "id": "exit-1",
+      "type": "exit",
+      "x": 37.8,
+      "z": -80.75,
+      "rotation": 0,
+      "visible": true,
+      "exitNumber": "1"
+    },
+    {
+      "name": "2号口楼梯",
+      "icon": "list-filter",
+      "en": "Stairs",
+      "l": 15.820037926629631,
+      "d": 6,
+      "h": 3.4,
+      "color": "#c7bda8",
+      "floor": "B1",
+      "id": "exit-approach-2",
+      "type": "stairs",
+      "x": 24.54,
+      "z": -4.25,
+      "rotation": 43.053307899098456,
+      "visible": true
+    },
+    {
+      "name": "2号口 · 常德路 · 长寿路",
+      "icon": "door-open",
+      "en": "Exit",
+      "l": 6,
+      "d": 6,
+      "h": 0.15,
+      "color": "#5c856b",
+      "floor": "B1",
+      "id": "exit-2",
+      "type": "exit",
+      "x": 30.32,
+      "z": 1.15,
+      "rotation": 0,
+      "visible": true,
+      "exitNumber": "2"
+    },
+    {
+      "name": "3号口楼梯",
+      "icon": "list-filter",
+      "en": "Stairs",
+      "l": 16.712342744211536,
+      "d": 7,
+      "h": 3.4,
+      "color": "#c7bda8",
+      "floor": "B1",
+      "id": "exit-approach-3",
+      "type": "stairs",
+      "x": 23.52,
+      "z": 103.75,
+      "rotation": 347.5604379811535,
+      "visible": true
+    },
+    {
+      "name": "3号口 · 西康路 · 长寿路",
+      "icon": "door-open",
+      "en": "Exit",
+      "l": 6,
+      "d": 6,
+      "h": 0.15,
+      "color": "#5c856b",
+      "floor": "B1",
+      "id": "exit-3",
+      "type": "exit",
+      "x": 31.68,
+      "z": 101.95,
+      "rotation": 0,
+      "visible": true,
+      "exitNumber": "3"
+    },
+    {
+      "name": "4号口扶梯",
+      "icon": "arrow-up-right",
+      "en": "Escalator",
+      "l": 11.7,
+      "d": 6,
+      "h": 3.4,
+      "color": "#9ca6a3",
+      "floor": "B1",
+      "id": "exit-approach-4",
+      "type": "escalator",
+      "x": -76.44,
+      "z": 30.4,
+      "rotation": 270,
+      "visible": true
+    },
+    {
+      "name": "4号口 · 长寿路",
+      "icon": "door-open",
+      "en": "Exit",
+      "l": 6,
+      "d": 6,
+      "h": 0.15,
+      "color": "#5c856b",
+      "floor": "B1",
+      "id": "exit-4",
+      "type": "exit",
+      "x": -76.44,
+      "z": 24.55,
+      "rotation": 0,
+      "visible": true,
+      "exitNumber": "4"
+    },
+    {
+      "name": "5号口扶梯",
+      "icon": "arrow-up-right",
+      "en": "Escalator",
+      "l": 18.359999999999985,
+      "d": 7,
+      "h": 3.4,
+      "color": "#9ca6a3",
+      "floor": "B1",
+      "id": "exit-approach-5",
+      "type": "escalator",
+      "x": -162.45999999999998,
+      "z": -6.95,
+      "rotation": 180,
+      "visible": true
+    },
+    {
+      "name": "5号口 · 新会路 · 常德路",
+      "icon": "door-open",
+      "en": "Exit",
+      "l": 6,
+      "d": 6,
+      "h": 0.15,
+      "color": "#5c856b",
+      "floor": "B1",
+      "id": "exit-5",
+      "type": "exit",
+      "x": -171.64,
+      "z": -6.95,
+      "rotation": 0,
+      "visible": true,
+      "exitNumber": "5"
+    },
+    {
+      "name": "6号口楼梯",
+      "icon": "list-filter",
+      "en": "Stairs",
+      "l": 10.855210730335916,
+      "d": 7,
+      "h": 3.4,
+      "color": "#c7bda8",
+      "floor": "B1",
+      "id": "exit-approach-6",
+      "type": "stairs",
+      "x": -142.74,
+      "z": -67.69999999999999,
+      "rotation": 324.52367984093485,
+      "visible": true
+    },
+    {
+      "name": "6号口 · 常德路",
+      "icon": "door-open",
+      "en": "Exit",
+      "l": 6,
+      "d": 6,
+      "h": 0.15,
+      "color": "#5c856b",
+      "floor": "B1",
+      "id": "exit-6",
+      "type": "exit",
+      "x": -138.32,
+      "z": -70.85,
+      "rotation": 0,
+      "visible": true,
+      "exitNumber": "6"
+    },
+    {
+      "name": "7号口扶梯",
+      "icon": "arrow-up-right",
+      "en": "Escalator",
+      "l": 12.599999999999994,
+      "d": 7,
+      "h": 3.4,
+      "color": "#9ca6a3",
+      "floor": "B1",
+      "id": "exit-approach-7",
+      "type": "escalator",
+      "x": -57.4,
+      "z": -76.7,
+      "rotation": 270,
+      "visible": true
+    },
+    {
+      "name": "7号口 · 常德路 · 长寿路",
+      "icon": "door-open",
+      "en": "Exit",
+      "l": 6,
+      "d": 6,
+      "h": 0.15,
+      "color": "#5c856b",
+      "floor": "B1",
+      "id": "exit-7",
+      "type": "exit",
+      "x": -57.4,
+      "z": -83,
+      "rotation": 0,
+      "visible": true,
+      "exitNumber": "7"
+    },
+    {
+      "name": "卫生间 · 无障碍卫生间",
+      "icon": "toilet",
+      "en": "Restroom",
+      "l": 5,
+      "d": 5,
+      "h": 0.15,
+      "color": "#617e9e",
+      "floor": "B1",
+      "id": "restroom-1",
+      "type": "restroom",
+      "x": 7.2,
+      "z": -71.75,
+      "rotation": 0,
+      "visible": true
+    },
+    {
+      "name": "进出站闸机",
+      "icon": "panel-top-dashed",
+      "en": "Ticket gates",
+      "l": 2.5,
+      "d": 6,
+      "h": 1.6,
+      "color": "#b87542",
+      "floor": "B1",
+      "id": "gates-west-1",
+      "type": "gates",
+      "x": -125.4,
+      "z": -30,
+      "rotation": 90,
+      "visible": true
+    },
+    {
+      "name": "进出站闸机",
+      "icon": "panel-top-dashed",
+      "en": "Ticket gates",
+      "l": 2.5,
+      "d": 8,
+      "h": 1.6,
+      "color": "#b87542",
+      "floor": "B1",
+      "id": "gates-west-2",
+      "type": "gates",
+      "x": -94.12,
+      "z": -48,
+      "rotation": 270,
+      "visible": true
+    },
+    {
+      "name": "进出站闸机",
+      "icon": "panel-top-dashed",
+      "en": "Ticket gates",
+      "l": 2.5,
+      "d": 8,
+      "h": 1.6,
+      "color": "#b87542",
+      "floor": "B1",
+      "id": "gates-west-3",
+      "type": "gates",
+      "x": -45.84,
+      "z": -30,
+      "rotation": 90,
+      "visible": true
+    },
+    {
+      "name": "进出站闸机",
+      "icon": "panel-top-dashed",
+      "en": "Ticket gates",
+      "l": 2.5,
+      "d": 6,
+      "h": 1.6,
+      "color": "#b87542",
+      "floor": "B1",
+      "id": "gates-east-1",
+      "type": "gates",
+      "x": -17.96,
+      "z": -48,
+      "rotation": 270,
+      "visible": true
+    },
+    {
+      "name": "进出站闸机",
+      "icon": "panel-top-dashed",
+      "en": "Ticket gates",
+      "l": 2.5,
+      "d": 6,
+      "h": 1.6,
+      "color": "#b87542",
+      "floor": "B1",
+      "id": "gates-east-2",
+      "type": "gates",
+      "x": -10,
+      "z": -14.6,
+      "rotation": 0,
+      "visible": true
+    },
+    {
+      "name": "进出站闸机",
+      "icon": "panel-top-dashed",
+      "en": "Ticket gates",
+      "l": 2.5,
+      "d": 7,
+      "h": 1.6,
+      "color": "#b87542",
+      "floor": "B1",
+      "id": "gates-east-3",
+      "type": "gates",
+      "x": -10,
+      "z": 20.5,
+      "rotation": 0,
+      "visible": true
+    },
+    {
+      "name": "进出站闸机",
+      "icon": "panel-top-dashed",
+      "en": "Ticket gates",
+      "l": 2.5,
+      "d": 8,
+      "h": 1.6,
+      "color": "#b87542",
+      "floor": "B1",
+      "id": "gates-east-4",
+      "type": "gates",
+      "x": -10,
+      "z": 62.8,
+      "rotation": 0,
+      "visible": true
+    },
+    {
+      "name": "服务中心",
+      "icon": "concierge-bell",
+      "en": "Service center",
+      "l": 4.5,
+      "d": 3,
+      "h": 2.2,
+      "color": "#b59c7b",
+      "floor": "B1",
+      "id": "service-west",
+      "type": "service",
+      "x": -101.6,
+      "z": -30.35,
+      "rotation": 0,
+      "visible": true
+    },
+    {
+      "name": "服务中心",
+      "icon": "concierge-bell",
+      "en": "Service center",
+      "l": 4.5,
+      "d": 3,
+      "h": 2.2,
+      "color": "#b59c7b",
+      "floor": "B1",
+      "id": "service-east",
+      "type": "service",
+      "x": -17.96,
+      "z": -22.25,
+      "rotation": 0,
+      "visible": true
+    },
+    {
+      "name": "★ 警务站",
+      "icon": "type",
+      "en": "Text",
+      "category": "annotation",
+      "l": 11.025,
+      "d": 4.2,
+      "h": 0.15,
+      "color": "#b94e46",
+      "floor": "B1",
+      "text": "★ 警务站",
+      "fontSize": 2.1,
+      "writingMode": "horizontal",
+      "textAlign": "center",
+      "textReverse": false,
+      "textBold": true,
+      "textMode": "callout",
+      "leaderLength": 4,
+      "anchorEnabled": true,
+      "id": "police",
+      "type": "text",
+      "x": 26.92,
+      "z": -74.45,
+      "rotation": 0,
+      "visible": true
+    },
+    {
+      "name": "7号线往花木路方向",
+      "icon": "type",
+      "en": "Text",
+      "category": "annotation",
+      "l": 21.168,
+      "d": 3.12,
+      "h": 0.15,
+      "color": "#c8551b",
+      "floor": "B3",
+      "text": "7号线往花木路方向",
+      "fontSize": 2.4,
+      "writingMode": "horizontal",
+      "textAlign": "center",
+      "textReverse": false,
+      "textBold": true,
+      "textMode": "floor",
+      "leaderLength": 8,
+      "anchorEnabled": true,
+      "id": "direction-7-huamu",
+      "type": "text",
+      "x": -143,
+      "z": -59,
+      "rotation": 0,
+      "visible": true
+    },
+    {
+      "name": "7号线往美兰湖方向",
+      "icon": "type",
+      "en": "Text",
+      "category": "annotation",
+      "l": 21.168,
+      "d": 3.12,
+      "h": 0.15,
+      "color": "#c8551b",
+      "floor": "B3",
+      "text": "7号线往美兰湖方向",
+      "fontSize": 2.4,
+      "writingMode": "horizontal",
+      "textAlign": "center",
+      "textReverse": false,
+      "textBold": true,
+      "textMode": "floor",
+      "leaderLength": 8,
+      "anchorEnabled": true,
+      "id": "direction-7-meilan",
+      "type": "text",
+      "x": -120,
+      "z": -17,
+      "rotation": 0,
+      "visible": true
+    },
+    {
+      "name": "13号线往金运路方向",
+      "icon": "type",
+      "en": "Text",
+      "category": "annotation",
+      "l": 3.12,
+      "d": 28.08,
+      "h": 0.15,
+      "color": "#bd4f8b",
+      "floor": "B2",
+      "text": "13号线往金运路方向",
+      "fontSize": 2.4,
+      "writingMode": "vertical",
+      "textAlign": "center",
+      "textReverse": false,
+      "textBold": true,
+      "textMode": "floor",
+      "leaderLength": 8,
+      "anchorEnabled": true,
+      "id": "direction-13-jinyun",
+      "type": "text",
+      "x": -42,
+      "z": 87,
+      "rotation": 0,
+      "visible": true
+    },
+    {
+      "name": "13号线往张江路方向",
+      "icon": "type",
+      "en": "Text",
+      "category": "annotation",
+      "l": 3.12,
+      "d": 28.08,
+      "h": 0.15,
+      "color": "#bd4f8b",
+      "floor": "B2",
+      "text": "13号线往张江路方向",
+      "fontSize": 2.4,
+      "writingMode": "vertical",
+      "textAlign": "center",
+      "textReverse": false,
+      "textBold": true,
+      "textMode": "floor",
+      "leaderLength": 8,
+      "anchorEnabled": true,
+      "id": "direction-13-zhangjiang",
+      "type": "text",
+      "x": 3,
+      "z": 91,
+      "rotation": 0,
+      "visible": true
+    }
+  ],
+  "zonePaths": [
+    {
+      "id": "hall-unpaid-outline",
+      "floor": "B1",
+      "kind": "unpaid",
+      "closed": true,
+      "vertices": [
+        {
+          "pos": {
+            "x": -31.56,
+            "z": 159.1
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -31.56,
+            "z": 82.15
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -64.88,
+            "z": 65.05
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -86.64,
+            "z": 65.05
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -86.64,
+            "z": 53.8
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -95.48,
+            "z": 53.8
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -95.48,
+            "z": 41.65
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -80.52,
+            "z": 41.65
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -80.52,
+            "z": 30.85
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -72.36,
+            "z": 30.85
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -72.36,
+            "z": 40.75
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -31.56,
+            "z": 40.75
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -31.56,
+            "z": -25.85
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -145.12,
+            "z": -25.85
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -145.12,
+            "z": -3.35
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -165.52,
+            "z": -3.35
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -165.52,
+            "z": -10.1
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -158.04,
+            "z": -10.1
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -158.04,
+            "z": -26.3
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -170.28,
+            "z": -26.3
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -170.28,
+            "z": -25.4
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -187.96,
+            "z": -25.4
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -187.96,
+            "z": -54.2
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -169.6,
+            "z": -54.2
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -169.6,
+            "z": -49.25
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -152.6,
+            "z": -49.25
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -152.6,
+            "z": -60.05
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -157.36,
+            "z": -60.05
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -157.36,
+            "z": -67.25
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -139,
+            "z": -67.25
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -139,
+            "z": -62.75
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -62.16,
+            "z": -62.75
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -62.16,
+            "z": -82.55
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -57.4,
+            "z": -82.55
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -57.4,
+            "z": -85.25
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -6.4,
+            "z": -85.25
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -6.4,
+            "z": -80.75
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": 18.08,
+            "z": -80.75
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": 40.52,
+            "z": -62.75
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": 40.52,
+            "z": -55.55
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": 20.8,
+            "z": -55.55
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": 20.8,
+            "z": -29.9
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": 11.96,
+            "z": -29.9
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": 11.96,
+            "z": -25.4
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": 33.04,
+            "z": -2.9
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": 22.84,
+            "z": 1.6
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": 7.88,
+            "z": -10.55
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -0.28,
+            "z": -10.55
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -0.28,
+            "z": -2.9
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -5.72,
+            "z": -2.9
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -5.72,
+            "z": 107.8
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": 25.56,
+            "z": 101.5
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": 25.56,
+            "z": 107.8
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -3,
+            "z": 113.65
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -5.72,
+            "z": 113.65
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -5.72,
+            "z": 143.35
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -0.96,
+            "z": 143.35
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -0.96,
+            "z": 159.1
+          },
+          "type": "corner"
+        }
+      ]
+    },
+    {
+      "id": "hall-paid-L",
+      "floor": "B1",
+      "kind": "paid",
+      "closed": true,
+      "vertices": [
+        {
+          "pos": {
+            "x": -174,
+            "z": -48
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -10,
+            "z": -48
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -10,
+            "z": 132
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -30,
+            "z": 132
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -30,
+            "z": -30
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -174,
+            "z": -30
+          },
+          "type": "corner"
+        }
+      ]
+    },
+    {
+      "id": "exit-4-triangular-void",
+      "floor": "B1",
+      "kind": "opening",
+      "closed": true,
+      "vertices": [
+        {
+          "pos": {
+            "x": -32.92,
+            "z": 70.45
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -58.76,
+            "z": 48.85
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -32.92,
+            "z": 48.85
+          },
+          "type": "corner"
+        }
+      ]
+    },
+    {
+      "id": "staff-police",
+      "floor": "B1",
+      "kind": "staff",
+      "closed": true,
+      "vertices": [
+        {
+          "pos": {
+            "x": 26,
+            "z": -78
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": 34,
+            "z": -78
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": 34,
+            "z": -72
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": 26,
+            "z": -72
+          },
+          "type": "corner"
+        }
+      ]
+    },
+    {
+      "id": "staff-hall-west",
+      "floor": "B1",
+      "kind": "staff",
+      "closed": true,
+      "vertices": [
+        {
+          "pos": {
+            "x": -99,
+            "z": -55
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -93,
+            "z": -55
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -93,
+            "z": -49
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -99,
+            "z": -49
+          },
+          "type": "corner"
+        }
+      ]
+    },
+    {
+      "id": "staff-hall-east",
+      "floor": "B1",
+      "kind": "staff",
+      "closed": true,
+      "vertices": [
+        {
+          "pos": {
+            "x": -8,
+            "z": 14
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -5,
+            "z": 14
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -5,
+            "z": 22
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -8,
+            "z": 22
+          },
+          "type": "corner"
+        }
+      ]
+    },
+    {
+      "id": "platform-7",
+      "floor": "B3",
+      "kind": "paid",
+      "closed": true,
+      "vertices": [
+        {
+          "pos": {
+            "x": -179,
+            "z": -47
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": 8,
+            "z": -47
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": 8,
+            "z": -28
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -179,
+            "z": -28
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -179,
+            "z": -33
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -166,
+            "z": -33
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -166,
+            "z": -41
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -179,
+            "z": -41
+          },
+          "type": "corner"
+        }
+      ]
+    },
+    {
+      "id": "platform-13",
+      "floor": "B2",
+      "kind": "paid",
+      "closed": true,
+      "vertices": [
+        {
+          "pos": {
+            "x": -28,
+            "z": -49
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -10,
+            "z": -49
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -10,
+            "z": 130
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -15,
+            "z": 130
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -15,
+            "z": 118
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -23,
+            "z": 118
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -23,
+            "z": 130
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -28,
+            "z": 130
+          },
+          "type": "corner"
+        }
+      ]
+    },
+    {
+      "id": "equipment-7-west",
+      "floor": "B3",
+      "kind": "staff",
+      "closed": true,
+      "vertices": [
+        {
+          "pos": {
+            "x": -172,
+            "z": -41.5
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -164,
+            "z": -41.5
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -164,
+            "z": -33.5
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -172,
+            "z": -33.5
+          },
+          "type": "corner"
+        }
+      ]
+    },
+    {
+      "id": "equipment-7-east",
+      "floor": "B3",
+      "kind": "staff",
+      "closed": true,
+      "vertices": [
+        {
+          "pos": {
+            "x": -1,
+            "z": -47
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": 8,
+            "z": -47
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": 8,
+            "z": -41.5
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -1,
+            "z": -41.5
+          },
+          "type": "corner"
+        }
+      ]
+    },
+    {
+      "id": "equipment-13-north",
+      "floor": "B2",
+      "kind": "staff",
+      "closed": true,
+      "vertices": [
+        {
+          "pos": {
+            "x": -28,
+            "z": -49
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -19,
+            "z": -49
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -19,
+            "z": -39
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -28,
+            "z": -39
+          },
+          "type": "corner"
+        }
+      ]
+    },
+    {
+      "id": "equipment-13-south",
+      "floor": "B2",
+      "kind": "staff",
+      "closed": true,
+      "vertices": [
+        {
+          "pos": {
+            "x": -15,
+            "z": 110
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -10,
+            "z": 110
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -10,
+            "z": 115
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -15,
+            "z": 115
+          },
+          "type": "corner"
+        }
+      ]
+    },
+    {
+      "id": "opening-7-west",
+      "floor": "B1",
+      "kind": "opening",
+      "closed": true,
+      "vertices": [
+        {
+          "pos": {
+            "x": -158.707,
+            "z": -44.074
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -123.293,
+            "z": -44.074
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -123.293,
+            "z": -32.926
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -158.707,
+            "z": -32.926
+          },
+          "type": "corner"
+        }
+      ]
+    },
+    {
+      "id": "opening-7-east",
+      "floor": "B1",
+      "kind": "opening",
+      "closed": true,
+      "vertices": [
+        {
+          "pos": {
+            "x": -67.739,
+            "z": -45.062
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -32.261,
+            "z": -45.062
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -32.261,
+            "z": -32.938
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -67.739,
+            "z": -32.938
+          },
+          "type": "corner"
+        }
+      ]
+    },
+    {
+      "id": "opening-13-north",
+      "floor": "B1",
+      "kind": "opening",
+      "closed": true,
+      "vertices": [
+        {
+          "pos": {
+            "x": -22.76,
+            "z": -19.61
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -15.24,
+            "z": -19.61
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -15.24,
+            "z": -0.39
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -22.76,
+            "z": -0.39
+          },
+          "type": "corner"
+        }
+      ]
+    },
+    {
+      "id": "opening-13-middle",
+      "floor": "B1",
+      "kind": "opening",
+      "closed": true,
+      "vertices": [
+        {
+          "pos": {
+            "x": -22.76,
+            "z": 16.39
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -15.24,
+            "z": 16.39
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -15.24,
+            "z": 35.61
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -22.76,
+            "z": 35.61
+          },
+          "type": "corner"
+        }
+      ]
+    },
+    {
+      "id": "opening-13-south",
+      "floor": "B1",
+      "kind": "opening",
+      "closed": true,
+      "vertices": [
+        {
+          "pos": {
+            "x": -22.76,
+            "z": 52.39
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -15.24,
+            "z": 52.39
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -15.24,
+            "z": 71.61
+          },
+          "type": "corner"
+        },
+        {
+          "pos": {
+            "x": -22.76,
+            "z": 71.61
+          },
+          "type": "corner"
+        }
+      ]
+    }
+  ]
+}

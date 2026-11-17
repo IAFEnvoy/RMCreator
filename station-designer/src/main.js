@@ -11,6 +11,7 @@ import { trackLayout, trainLayout } from './track.js';
 import { DEFAULT_TRAIN_CARS, MAX_TRAIN_CARS, MAX_TRAIN_UNITS, TRAIN_PRESETS, TRAIN_DIMENSION_RULES, trainPreset, trainDimensions, chooseTrainPreset, editTrainDimension, validTrainDimension } from './train-presets.js';
 import { TWO_POINT_TYPES, CONNECTION_TYPES, normalizeConnection, placementLimit, repeatPlacementEntity } from './placement.js';
 import { isStair, stairEndpoints, editStairEndpoint } from './stair-endpoints.js';
+import { stairWorldNodes, stairPreset, stairRoute, stairPathError, moveStairPoint, insertStairPoint, removeStairPoint, MAX_STAIR_POINTS } from './stair-path.js';
 import { connectionOpeningPaths } from './zone-openings.js';
 import { trainFit, trainEditError, syncTrains, removeWithTrains } from './train-placement.js';
 import { pathKnots, trackGeometry, trackPathError, syncTrackPaths, worldPoint, moveTrackKnot, splitQuadraticSegment, removeQuadraticSegment } from './track-path.js';
@@ -19,6 +20,7 @@ import { vectorizeCells, polygonArea, pathPolygon, polygonContains } from './zon
 import { zonePathError, moveZoneVertices, moveZoneHandle } from './zone-path.js';
 import { textError, syncText, moveText } from './text.js';
 import { ProjectFiles, blankProject, projectFilename } from './project-files.js';
+import changshouExample from '../examples/长寿路站-7号线-13号线-全6A.json';
 import { floorsTopDown, floorElevationWarnings, adjacentFloor, floorShortcut } from './floors.js';
 
 const $ = (s) => document.querySelector(s);
@@ -198,7 +200,9 @@ function trackPathSettings(e) {
 }
 function stairEndpointSettings(e) {
   const endpoints=stairEndpoints(e);
-  return `<section class="property-section stair-endpoint-settings"><div class="section-title">端点编辑<span>拖动圆点调整</span></div>${endpoints.map((p,index)=>`<div class="stair-endpoint-row"><strong><i class="endpoint-dot endpoint-dot-${index}"></i>${index?'终点':'起点'}</strong><label class="field"><span>楼层</span><select data-stair-endpoint="${index}" data-endpoint-axis="floor" aria-label="${index?'终点':'起点'}楼层">${index?`<option value="" ${!e.toFloor?'selected':''}>自定义高度</option>`:''}${floorOptions(p.floor,endpoints[1-index].floor)}</select></label><div class="dimensions">${['x','z'].map(axis=>`<label class="number-field"><span>${axis.toUpperCase()}</span><div><input type="number" data-stair-endpoint="${index}" data-endpoint-axis="${axis}" value="${Number(p[axis].toFixed(3))}" step=".5" min="-500" max="500" aria-label="${index?'终点':'起点'} ${axis.toUpperCase()}"><span>m</span></div></label>`).join('')}</div></div>`).join('')}</section>`;
+  const nodes=stairWorldNodes(e),route=e.stairPath?stairRoute(e):null;
+  const path=e.type==='stairs'?`<section class="property-section stair-path-settings"><div class="section-title">楼梯路径${route?`<span>${route.segments.filter(s=>!s.flat).length} 跑</span>`:''}</div><div class="object-actions"><button class="button" id="stair-turn">${icon('corner-up-right')}转弯楼梯</button><button class="button" id="stair-return">${icon('corner-down-left')}折返双跑</button></div>${e.stairPath?`<label class="field"><span>休息平台深度（m）</span><input type="number" data-property="landingDepth" value="${e.landingDepth??Math.max(2,e.d)}" min="1" max="20" step=".5"></label><div class="path-point-list">${nodes.map((p,i)=>`<div class="path-point-row"><span class="path-point-number">${i+1}</span><span class="path-point-role">${i===0?'起点':i===nodes.length-1?'终点':`转折 ${i}`}</span>${['x','z'].map(axis=>`<label>${axis.toUpperCase()}<input type="number" data-stair-point="${i}" data-stair-axis="${axis}" value="${Number(p[axis].toFixed(3))}" step=".5" min="-500" max="500" aria-label="楼梯点 ${i+1} ${axis.toUpperCase()}"></label>`).join('')}<button class="icon-btn" data-stair-insert="${i}" ${i===nodes.length-1||nodes.length>=MAX_STAIR_POINTS?'disabled':''} aria-label="在楼梯点 ${i+1} 后加点">${icon('plus')}</button><button class="icon-btn danger-text" data-stair-remove="${i}" ${i===0||i===nodes.length-1?'disabled':''} aria-label="删除楼梯点 ${i+1}">${icon('x')}</button>${i<nodes.length-1?`<label class="stair-flat-option"><input type="checkbox" data-stair-flat="${i}" ${p.landing?'checked':''}>下一段为水平通道</label>`:''}</div>`).join('')}</div><button class="layer-manage-button" id="stair-straight">${icon('minus')}恢复直线楼梯</button>`:''}</section>`:'';
+  return `<section class="property-section stair-endpoint-settings"><div class="section-title">端点编辑<span>拖动圆点调整</span></div>${endpoints.map((p,index)=>`<div class="stair-endpoint-row"><strong><i class="endpoint-dot endpoint-dot-${index}"></i>${index?'终点':'起点'}</strong><label class="field"><span>楼层</span><select data-stair-endpoint="${index}" data-endpoint-axis="floor" aria-label="${index?'终点':'起点'}楼层">${index?`<option value="" ${!e.toFloor?'selected':''}>自定义高度</option>`:''}${floorOptions(p.floor,endpoints[1-index].floor)}</select></label><div class="dimensions">${['x','z'].map(axis=>`<label class="number-field"><span>${axis.toUpperCase()}</span><div><input type="number" data-stair-endpoint="${index}" data-endpoint-axis="${axis}" value="${Number(p[axis].toFixed(3))}" step=".5" min="-500" max="500" aria-label="${index?'终点':'起点'} ${axis.toUpperCase()}"><span>m</span></div></label>`).join('')}</div></div>`).join('')}</section>${path}`;
 }
 function trainAttachment(e) {
   const fit = trainFit(state, e);
@@ -324,10 +328,9 @@ function render(rebuild = true) { if (activeFloor !== 'all' && !state.floors.som
 function commit(action, options = {}) {
   cancelPlacement();
   const before = clone(state);
-  action();
-  try{syncTrackPaths(state);const invalid=state.entities.filter(e=>e.type==='track').map(trackPathError).find(Boolean)||state.entities.filter(e=>e.type==='text').map(textError).find(Boolean)||(state.zonePaths||[]).map(p=>zonePathError(p)).find(Boolean);if(invalid)throw new Error(invalid);state.entities.filter(e=>e.type==='text').forEach(syncText);}
+  try{action();syncConnections();syncTrackPaths(state);const invalid=state.entities.filter(e=>e.type==='track').map(trackPathError).find(Boolean)||state.entities.filter(e=>e.type==='text').map(textError).find(Boolean)||(state.zonePaths||[]).map(p=>zonePathError(p)).find(Boolean)||state.entities.map(e=>stairPathError(e,{slope:true})).find(Boolean);if(invalid)throw new Error(invalid);state.entities.filter(e=>e.type==='text').forEach(syncText);}
   catch(error){state=before;render();toast(error.message);return false;}
-  syncConnections(); syncTrains(state);
+  syncTrains(state);
   const error=options.allowInvalidTrains?'':trainEditError(before,state);
   if(error){state=before;render();toast(error);return false;}
   if (JSON.stringify(before) !== JSON.stringify(state)) { undoStack.push(before); if (undoStack.length > 50) undoStack.shift(); redoStack = []; scheduleSave(); }
@@ -343,7 +346,7 @@ function scheduleSave() {
   clearTimeout(saveTimer); saveTimer = setTimeout(save, 650);
 }
 function save(notify = false) {
-  if(notify&&document.activeElement?.matches('[data-property],[data-stair-endpoint],[data-station-property],[data-path-index],[data-path-angle],[data-floor-code],[data-floor-name],[data-floor-elevation]'))document.activeElement.blur();
+  if(notify&&document.activeElement?.matches('[data-property],[data-stair-endpoint],[data-stair-point],[data-station-property],[data-path-index],[data-path-angle],[data-floor-code],[data-floor-name],[data-floor-elevation]'))document.activeElement.blur();
   clearTimeout(saveTimer);
   try {
     state.updatedAt = projectFiles.save(state).updatedAt;isDirty = false;
@@ -416,7 +419,7 @@ function updatePlacementBanner(status) {
   const p=scene.placement,controls=$('#placement-floor-controls');
   if(p&&controls){
     const connection=CONNECTION_TYPES.includes(p.entity.type),anchored=!!(p.start||p.points?.length);
-    controls.innerHTML=`<label>${connection?'起点层':'放置层'}<select data-placement-floor="from" aria-label="${connection?'起点楼层':'放置楼层'}" ${anchored||p.anchorPicking?'disabled':''}>${floorOptions(p.entity.floor)}</select></label>${connection?`<label>终点层<select data-placement-floor="to" aria-label="终点楼层">${floorOptions(p.entity.toFloor,p.entity.floor)}</select></label>`:''}${activeFloor==='all'?fadeFloorsControl():''}`;
+    controls.innerHTML=`<label>${connection?'起点层':'放置层'}<select data-placement-floor="from" aria-label="${connection?'起点楼层':'放置楼层'}" ${anchored||p.anchorPicking?'disabled':''}>${floorOptions(p.entity.floor)}</select></label>${connection?`<label>终点层<select data-placement-floor="to" aria-label="终点楼层">${floorOptions(p.entity.toFloor,p.entity.floor)}</select></label>`:''}${p.entity.type==='stairs'?`<label>楼梯形状<select data-placement-stair aria-label="楼梯形状">${[['straight','直线'],['turn','转弯'],['return','折返双跑']].map(([value,label])=>`<option value="${value}" ${(p.entity.stairShape||'straight')===value?'selected':''}>${label}</option>`).join('')}</select></label>`:''}${activeFloor==='all'?fadeFloorsControl():''}`;
     document.querySelectorAll('[data-track-mode]').forEach(b=>b.classList.toggle('active',b.dataset.trackMode===p.trackMode));
     if($('#finish-track-path')){$('#finish-track-path').hidden=p.trackMode!=='curve';$('#undo-path-point').hidden=p.trackMode!=='curve'||!p.points?.length;}
   }
@@ -431,7 +434,7 @@ function updatePlacementBanner(status) {
   }
   if(status.type==='train'){instruction.textContent='在轨道上点击放置列车';details.textContent=status.message||'自动吸附轨道 · 检查长度、宽度与占位';details.classList.toggle('invalid',status.valid===false);return;}
   instruction.textContent=status.twoPoint?(status.stage==='start'?(elevator?'选择井道第一个角点':connection?'选择起点':'选择轨道起点'):(elevator?'选择井道对角点':connection?'切换楼层，选择终点':'选择轨道终点')):`点击放置${types[status.type].name}`;
-  details.textContent=status.message||(elevator?'矩形井道 · 竖直连接 · 长宽 2–12 m':connection?'任意方向直线 · 参考线吸附':status.twoPoint?'两点确定 · 参考线吸附':'参考线与网格吸附');
+  details.textContent=status.message||(elevator?'矩形井道 · 竖直连接 · 长宽 2–12 m':connection?(status.type==='stairs'&&p?.entity.stairShape&&p.entity.stairShape!=='straight'?'转弯平台 · 放置后拖动转折点':'任意方向直线 · 参考线吸附'):status.twoPoint?'两点确定 · 参考线吸附':'参考线与网格吸附');
   details.classList.toggle('invalid',status.valid===false);
 }
 function fadeFloorsControl(){return `<label class="fade-floors-control"><input type="checkbox" data-fade-floors ${scene.fadeOtherFloors!==false?'checked':''}>虚化其他层</label>`;}
@@ -530,7 +533,7 @@ function showFiles() {
   if(searchFocused){$('#files-search').focus();$('#files-search').setSelectionRange(searchCursor,searchCursor);}
 }
 function showNewProject(template='blank') {
-  modal(`<div class="modal-icon">${icon('file-plus-2')}</div><h2>新建车站方案</h2><p>当前方案会保留在「我的方案」中。</p><form id="new-project-form"><label class="field"><span>方案名称</span><input name="title" required maxlength="100" value="${escapeHTML(projectFiles.uniqueTitle(template==='example'?'上海火车站示例':'未命名车站'))}" autocomplete="off"></label><label class="field"><span>初始内容</span><select name="template"><option value="blank" ${template==='blank'?'selected':''}>空白车站 · 2 个楼层</option><option value="example" ${template==='example'?'selected':''}>上海火车站示例</option></select></label><div class="modal-actions"><button type="button" class="button" data-open-files>返回文件管理</button><button class="button primary" type="submit">创建方案</button></div></form>`);
+  modal(`<div class="modal-icon">${icon('file-plus-2')}</div><h2>新建车站方案</h2><p>当前方案会保留在「我的方案」中。</p><form id="new-project-form"><label class="field"><span>方案名称</span><input name="title" required maxlength="100" value="${escapeHTML(projectFiles.uniqueTitle(template==='example'?'上海火车站示例':'未命名车站'))}" autocomplete="off"></label><label class="field"><span>初始内容</span><select name="template"><option value="blank" ${template==='blank'?'selected':''}>空白车站 · 2 个楼层</option><option value="example" ${template==='example'?'selected':''}>上海火车站示例</option><option value="changshou">长寿路站 · 7 / 13号线 · 全6A</option></select></label><div class="modal-actions"><button type="button" class="button" data-open-files>返回文件管理</button><button class="button primary" type="submit">创建方案</button></div></form>`);
 }
 function showFileName(id,duplicate=false) {
   const file=projectFiles.find(id),value=duplicate?projectFiles.uniqueTitle(`${file.title.slice(0,97)} 副本`):file.title;
@@ -545,7 +548,7 @@ function showExport() {
   modal(`<div class="modal-icon">${icon('package-open')}</div><h2>导出方案</h2><div class="export-image-settings"><label class="toggle-row"><span>底部文字标注</span><input type="checkbox" id="export-footer" role="switch" ${exportWithFooter?'checked':''}><i></i></label><div class="export-footer-preview" id="export-footer-preview" ${exportWithFooter?'':'hidden'}>RMCreator · ${escapeHTML(state.lines.map(line=>line.name).join(' / '))} · ${state.entities.length} 个构件<br>车站空间示意图 · 设计方案</div></div><button class="export-option" id="export-png"><span class="export-type">${icon('image')}</span><span><strong>导出高清示意图</strong><small>PNG 图片 · 当前视角 · 包含名称与标记</small></span>${icon('arrow-up-right')}</button><button class="export-option" id="export-json"><span class="export-type">${icon('file-json')}</span><span><strong>保存可编辑方案</strong><small>JSON 文件 · 保留全部构件与显示设置</small></span>${icon('arrow-up-right')}</button>`);
 }
 function showHelp() {
-  modal(`<div class="modal-icon">${icon('mouse-pointer-2')}</div><h2>使用帮助</h2><div class="help-steps"><div><b>01</b><span><strong>选层与填色</strong>选择楼层与区域颜色。单击添加角点，按下拖动拉出曲线手柄；点击起点或 Enter 闭合，Esc 取消。</span></div><div><b>02</b><span><strong>放置与吸附</strong>轨道点击起终点，可吸附已有轨道端点或中心线；楼梯和扶梯支持任意方向，两点分别选择不同楼层，可向上、向下或跨多层连接；电梯点击井道对角点。换层保留放置，全部楼层下可虚化其他层。靠近边缘或中线显示对齐参考线，绘制区域时可匹配等宽 / 等长；按住 Alt 临时关闭吸附。红色预览不可放置，Esc 取消。</span></div><div><b>03</b><span><strong>独立文字</strong>按 T 输入文字并点击楼层放置，可选贴地文字或朝向相机的引线标注。拖动文字移动位置，属性中调整字号、横竖排和颜色；悬浮文字可启用锚点，在画布取点或拖动端点设置指向位置。</span></div></div><div class="shortcut-grid"><span>选择<kbd>V</kbd></span><span>文字<kbd>T</kbd></span><span>移动<kbd>G</kbd></span><span>平移<kbd>H</kbd></span><span>适应画布<kbd>F</kbd></span><span>撤销<kbd>Ctrl Z</kbd></span><span>删除<kbd>Delete</kbd></span><span>上一层<kbd>+</kbd></span><span>下一层<kbd>-</kbd></span><span>暂停吸附<kbd>Alt</kbd></span><span>取消选择 / 放置<kbd>Esc</kbd></span></div><button class="button primary full-width" data-close-modal>开始设计 ${icon('arrow-right')}</button>`);
+  modal(`<div class="modal-icon">${icon('mouse-pointer-2')}</div><h2>使用帮助</h2><div class="help-steps"><div><b>01</b><span><strong>选层与填色</strong>选择楼层与区域颜色。单击添加角点，按下拖动拉出曲线手柄；点击起点或 Enter 闭合，Esc 取消。</span></div><div><b>02</b><span><strong>放置与吸附</strong>轨道点击起终点，可吸附已有轨道端点或中心线；楼梯可选直线、转弯或折返双跑；放置后拖动橙色转折点，属性中可加点、减点或设置水平通道。楼梯和扶梯支持任意方向，两点分别选择不同楼层，可向上、向下或跨多层连接；电梯点击井道对角点。换层保留放置，全部楼层下可虚化其他层。靠近边缘或中线显示对齐参考线，绘制区域时可匹配等宽 / 等长；按住 Alt 临时关闭吸附。红色预览不可放置，Esc 取消。</span></div><div><b>03</b><span><strong>独立文字</strong>按 T 输入文字并点击楼层放置，可选贴地文字或朝向相机的引线标注。拖动文字移动位置，属性中调整字号、横竖排和颜色；悬浮文字可启用锚点，在画布取点或拖动端点设置指向位置。</span></div></div><div class="shortcut-grid"><span>选择<kbd>V</kbd></span><span>文字<kbd>T</kbd></span><span>移动<kbd>G</kbd></span><span>平移<kbd>H</kbd></span><span>适应画布<kbd>F</kbd></span><span>撤销<kbd>Ctrl Z</kbd></span><span>删除<kbd>Delete</kbd></span><span>上一层<kbd>+</kbd></span><span>下一层<kbd>-</kbd></span><span>暂停吸附<kbd>Alt</kbd></span><span>取消选择 / 放置<kbd>Esc</kbd></span></div><button class="button primary full-width" data-close-modal>开始设计 ${icon('arrow-right')}</button>`);
 }
 
 document.addEventListener('click', async (event) => {
@@ -603,12 +606,18 @@ document.addEventListener('click', async (event) => {
   }
   if (target.dataset.visibility) commit(() => { const e = state.entities.find(e => e.id === target.dataset.visibility); e.visible = !e.visible; });
   if(target.dataset.rotateText)commit(()=>{const e=state.entities.find(e=>e.id===selected);if(e?.type==='text')e.rotation=(e.rotation+Number(target.dataset.rotateText)+360)%360;});
+  if(target.dataset.stairInsert!==undefined||target.dataset.stairRemove!==undefined)commit(()=>{
+    const e=state.entities.find(e=>e.id===selected);if(!e?.stairPath)return;
+    Object.assign(e,target.dataset.stairInsert!==undefined?insertStairPoint(e,Number(target.dataset.stairInsert)):removeStairPoint(e,Number(target.dataset.stairRemove)));
+  });
   if (target.dataset.view) setView(target.dataset.view);
   if (target.dataset.floor) setFloor(target.dataset.floor);
   if (target.dataset.placeFloor) { setFloor(target.dataset.placeFloor); toast('已切换楼层'); }
   if (target.dataset.tool) setTool(target.dataset.tool);
   if (target.hasAttribute('data-close-modal')) closeModal();
   switch (target.id) {
+    case 'stair-turn':case 'stair-return':commit(()=>{const e=state.entities.find(e=>e.id===selected);if(e?.type==='stairs')Object.assign(e,stairPreset(e,target.id==='stair-return'?'return':'turn'));});break;
+    case 'stair-straight':commit(()=>{const e=state.entities.find(e=>e.id===selected);if(e?.stairPath){const [a,b]=stairEndpoints(e),result=editStairEndpoint(state,{...e,stairPath:undefined,x:(a.x+b.x)/2,z:(a.z+b.z)/2,l:Math.hypot(b.x-a.x,b.z-a.z),rotation:Math.atan2(b.z-a.z,b.x-a.x)*180/Math.PI},0,a);if(!result.valid)throw new Error(result.message);Object.assign(e,result.entity);delete e.stairPath;delete e.landingDepth;}});break;
     case 'add-text-tool': startTextTool();break;
     case 'pick-text-anchor':startTextAnchorPlacement();break;
     case 'reset-text-anchor':commit(()=>{const e=state.entities.find(e=>e.id===selected);if(e?.type==='text'){e.anchorX=e.x;e.anchorZ=e.z;}});break;
@@ -696,7 +705,7 @@ document.addEventListener('submit',event=>{
   event.preventDefault();const title=new FormData(form).get('title');
   fileAction(()=>{
     if(form.id==='new-project-form'){
-      const project=new FormData(form).get('template')==='example'?defaultProject():blankProject(title);
+      const template=new FormData(form).get('template'),project=template==='changshou'?changshouExample:template==='example'?defaultProject():blankProject(title);
       activateProject(projectFiles.create(title,project));toast('新方案已创建，原方案已保留');
     }else if(form.dataset.duplicate==='true'){
       activateProject(projectFiles.duplicate(form.dataset.fileId,title));toast('副本已保存并打开');
@@ -709,6 +718,8 @@ document.addEventListener('input',event=>{
 document.addEventListener('compositionend',event=>{if(event.target.id==='files-search'){filesSearch=event.target.value;showFiles();}});
 document.addEventListener('change', (event) => {
   const input = event.target;
+  if(input.name==='template'&&input.form?.id==='new-project-form'){const title=input.form.elements.title;title.value=projectFiles.uniqueTitle(input.value==='changshou'?'长寿路站 · 全6A（修订）':input.value==='example'?'上海火车站示例':'未命名车站');return;}
+  if(input.hasAttribute('data-placement-stair')){const p=scene.placement;if(p?.entity.type==='stairs'){p.entity.stairShape=input.value;scene.refreshPlacement();}return;}
   if(input.hasAttribute('data-fade-floors')){
     scene.fadeOtherFloors=input.checked;scene.applyFloorFocus();
     document.querySelectorAll('[data-fade-floors]').forEach(el=>el.checked=input.checked);return;
@@ -772,6 +783,12 @@ document.addEventListener('change', (event) => {
     if(!result.valid){toast(result.message);renderInspector();return;}
     commit(()=>{Object.assign(source,result.entity);if(!result.entity.toFloor)delete source.toFloor;});return;
   }
+  if(input.dataset.stairPoint!==undefined){
+    const e=state.entities.find(e=>e.id===selected),value=Number(input.value);
+    if(!e?.stairPath||!input.value.trim()||!Number.isFinite(value)){renderInspector();return;}
+    commit(()=>Object.assign(e,moveStairPoint(e,Number(input.dataset.stairPoint),{[input.dataset.stairAxis]:value})));return;
+  }
+  if(input.dataset.stairFlat!==undefined){commit(()=>{const e=state.entities.find(e=>e.id===selected);if(e?.stairPath)e.stairPath[Number(input.dataset.stairFlat)].landing=input.checked;});return;}
   if(input.dataset.pathIndex!==undefined){
     const value=Number(input.value),index=Number(input.dataset.pathIndex),axis=input.dataset.pathAxis;
     if(!input.value.trim()||!Number.isFinite(value)||Math.abs(value)>500){toast('路径坐标需在 ±500 m 内');renderInspector();return;}
@@ -788,7 +805,7 @@ document.addEventListener('change', (event) => {
       commit(() => { const e = state.entities.find(e => e.id === selected); if (e?.type === 'train') chooseTrainPreset(e, value); });
       return;
     }
-    const numeric = ['l','d','h','x','z','fontSize','leaderLength','anchorX','anchorZ','rotation','floorHeight','trainCars','trainUnits','trainOffset','pathSmoothness'].includes(key);
+    const numeric = ['l','d','h','x','z','fontSize','leaderLength','anchorX','anchorZ','rotation','floorHeight','trainCars','trainUnits','trainOffset','pathSmoothness','landingDepth'].includes(key);
     if (key === 'trainCars' && (!Number.isInteger(Number(value)) || Number(value) < 1 || Number(value) > MAX_TRAIN_CARS)) { toast(`车厢数量需为 1–${MAX_TRAIN_CARS} 节`); renderInspector(); return; }
     if (key === 'trainUnits' && (!Number.isInteger(Number(value)) || Number(value) < 1 || Number(value) > MAX_TRAIN_UNITS)) { toast(`重联组数需为 1–${MAX_TRAIN_UNITS} 组`); renderInspector(); return; }
     if (key === 'floorHeight' && (Number(value) < 1 || Number(value) > 40 || !Number.isFinite(Number(value)))) { toast('层间距需为 1–40 米'); renderInspector(); return; }
@@ -796,6 +813,7 @@ document.addEventListener('change', (event) => {
     else if (!String(value).trim() && key !== 'toFloor') { renderInspector(); return; }
     commit(() => {
       const e=state.entities.find(e=>e.id===selected);
+      if(e?.stairPath&&key==='l'){const scale=value/e.l;e.stairPath=e.stairPath.map(p=>({...p,x:p.x*scale,z:p.z*scale}));}
       if(e) { if(e.type==='text'&&['x','z'].includes(key))Object.assign(e,moveText(e,{[key]:value}));else{if(e.type==='text'&&['anchorX','anchorZ'].includes(key)){e.anchorX??=e.x;e.anchorZ??=e.z;}e[key]=value;} if(e.type==='track'&&['x','z','rotation','floor'].includes(key))delete e.joins; if(e.type==='train'&&key==='trackId')e.trainOffset=0; if(e.type==='track'&&['x','z','l','d','rotation','floor'].includes(key)) { const snapped=snapTrack(state,e);e.x=snapped.x;e.z=snapped.z; if(snapped.snapped)toast('轨道已吸附付费区边缘'); } }
     });
   }

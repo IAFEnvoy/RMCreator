@@ -8,6 +8,7 @@ import { placementReferences, snapPlacementPoint } from '../src/placement-snap.j
 import { ZoneEditor } from '../src/zone-editor.js';
 import { worldPoint, pointAlongTrack, trackGeometry } from '../src/track-path.js';
 import { stairEndpoints } from '../src/stair-endpoints.js';
+import { makeStairPath, stairWorldNodes } from '../src/stair-path.js';
 
 // Vite imports icon SVGs as strings; their contents are irrelevant to these
 // pointer tests, so expose the same string-module shape in Node.
@@ -157,4 +158,17 @@ test('placed stair endpoint dragging shares the reference guides and honors Alt 
   const s=endpointScene();s.endpointDrag.references=placementReferences({...s.project,zonePaths:[rect('reference',0,10,40,8)]},{floors:['B2','B1'],excludeId:'existing'});
   s.moveStairEndpointDrag({clientX:39.8,clientY:17.9});const aligned=stairEndpoints(s.project.entities[0]);close(aligned[1].x,40);close(aligned[1].z,18);assert.ok(s.feedback.guides.length);
   s.moveStairEndpointDrag({clientX:39.8,clientY:17.9,altKey:true});const free=stairEndpoints(s.project.entities[0]);close(free[1].x,39.8);close(free[1].z,17.9);close(free[0].x,0);close(free[0].z,0);assert.equal(s.feedback.guides.length,0);
+});
+
+test('dragging a bend snaps with guides, Alt preserves exact coordinates and cancellation leaves the source intact',()=>{
+  for(const cancel of [false,true]){
+    const s=endpointScene();s.cancelStairEndpointDrag();
+    const source=makeStairPath(s.project.entities[0],[p(0,0),p(30,0),p(30,30)]);s.project.entities=[source];
+    const before=structuredClone(source);s.hit({clientX:30,clientY:0});s.beginStairEndpointDrag({clientX:30,clientY:0},{id:source.id,stairEndpoint:2});
+    s.endpointDrag.references=placementReferences({...s.project,zonePaths:[rect('reference',0,10,40,8)]},{floors:['B2','B1'],excludeId:source.id});
+    s.moveStairEndpointDrag({clientX:39.8,clientY:17.9});let points=stairWorldNodes(s.project.entities[0]);close(points[1].x,40);close(points[1].z,18);assert(s.feedback.guides.length);
+    s.moveStairEndpointDrag({clientX:39.8,clientY:17.9,altKey:true});points=stairWorldNodes(s.project.entities[0]);close(points[1].x,39.8);close(points[1].z,17.9);assert.equal(s.feedback.guides.length,0);assert.deepEqual(source,before);
+    s.finishStairEndpointDrag(cancel);assert.equal(s.commits.length,cancel?0:1);assert.deepEqual(s.project.entities[0],before);
+    if(!cancel)close(stairWorldNodes(s.commits[0].target)[1].x,39.8);
+  }
 });

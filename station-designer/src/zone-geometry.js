@@ -1,5 +1,6 @@
 import polygonClipping from 'polygon-clipping';
 import { flattenPath, corner, inRing, point, distance } from './zone-path.js';
+import { stairFootprint } from './stair-path.js';
 
 const kinds=['paid','unpaid','staff'],cache=new Map();
 export function pathPolygon(path) {
@@ -57,7 +58,7 @@ export function rectPolygon(e,padding=0) {
   const ring=[[-l,-d],[l,-d],[l,d],[-l,d],[-l,-d]].map(([x,z])=>[e.x+x*c-z*s,e.z+x*s+z*c]);return [[ring]];
 }
 export function cutOpenings(multi,openings) {
-  if(!multi.length||!openings.length)return multi;return polygonClipping.difference(multi,...openings.map(e=>rectPolygon(e,-.4)));
+  if(!multi.length||!openings.length)return multi;return polygonClipping.difference(multi,...openings.map(e=>e.stairPath?stairFootprint(e,-.4):rectPolygon(e,-.4)));
 }
 export function vectorizeCells(project,floor) {
   if(!Object.keys(project.zones[floor]||{}).length)return;

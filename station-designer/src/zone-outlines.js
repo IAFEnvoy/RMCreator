@@ -3,6 +3,7 @@ import { polygonEdges, zoneMasks } from './zone-geometry.js';
 import { clipToRect } from './zones.js';
 import { connectionFloors } from './placement.js';
 import { isStair, stairEndpoints } from './stair-endpoints.js';
+import { stairWorldNodes } from './stair-path.js';
 
 const contactTolerance = .08;
 
@@ -15,8 +16,9 @@ function floorPassages(project, floor) {
       const reach = Math.min(e.l / 2, Math.max(1, e.d));
       stairEndpoints(e).forEach((end, index) => {
         if (end.floor !== floor) return;
+        const nodes=stairWorldNodes(e),a=index?nodes.at(-2):nodes[0],b=index?nodes.at(-1):nodes[1],angle=Math.atan2(b.z-a.z,b.x-a.x),c=Math.cos(angle),s=Math.sin(angle);
         const x = (index ? -1 : 1) * (reach - contactTolerance) / 2;
-        passages.push({ x: end.x + c * x, z: end.z + s * x, l: reach + contactTolerance, d: e.d, rotation: e.rotation, axis: { x: c, z: s } });
+        passages.push({ x: end.x + c * x, z: end.z + s * x, l: reach + contactTolerance, d: e.d, rotation: angle*180/Math.PI, axis: { x: c, z: s } });
       });
     } else if (e.type === 'elevator' && connectionFloors(project, e).includes(floor)) {
       // The cabin door faces local +Z; the other three shaft walls stay closed.

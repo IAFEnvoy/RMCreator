@@ -6,6 +6,7 @@ import { defaultProject, entity } from '../src/project.js';
 import { entityDisplayFloors, stairPlanRange } from '../src/floor-entities.js';
 import { buildStairSteps, stairStepLayout } from '../src/stair-steps.js';
 import { worldPoint } from '../src/track-path.js';
+import { makeStairPath } from '../src/stair-path.js';
 
 registerHooks({load(url,context,next){return url.includes('.svg')?{format:'module',source:'export default "<svg></svg>"',shortCircuit:true}:next(url,context);}});
 const { StationScene } = await import('../src/scene.js');
@@ -103,4 +104,17 @@ test('3D models and placement previews keep the full flight, and elevator middle
   assert.equal(preview.getObjectByName('stair-plan-half'),undefined);
   s.isPreview=false;p.entities=[stair({type:'elevator',l:4,d:4})];s.update(p,'floor','B2','stairs');
   assert.equal(s.groups.size,1);assert.equal(s.groups.get('stairs').userData.drawFloor,'B2');
+});
+
+test('bent stairs use their real path in 3D and only show the local half on their two stopping floors',()=>{
+  const p=project(),e=makeStairPath(stair({rotation:0}),[{x:0,z:0},{x:40,z:0},{x:40,z:40}]);p.entities=[e];
+  for(const floor of ['B3','B1']){
+    const s=scene();s.update(p,'floor',floor,e.id);
+    const g=s.groups.get(e.id),model=g.getObjectByName('bent-stair');assert(model);
+    assert.equal(model.children.filter(g=>g.name==='stair-flight').length,1);
+    const label=g.children.find(c=>c.userData.labelFor===e.id);g.updateMatrixWorld(true);
+    const pos=label.getWorldPosition(new THREE.Vector3());near(pos.x,floor==='B3'?20:40);near(pos.z,floor==='B3'?0:20);
+  }
+  const s=scene();s.update(p,'floor','B2',e.id);assert.equal(s.groups.size,0);
+  s.update(p,'3d','all',e.id);assert.equal(s.groups.get(e.id).getObjectByName('bent-stair').children.filter(g=>g.name==='stair-flight').length,2);
 });

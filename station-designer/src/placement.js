@@ -1,6 +1,7 @@
 import { snapTrack } from './zones.js';
 import { snapRailPoint } from './track-path.js';
 import { inheritTrackStyle } from './track-drawing.js';
+import { stairPreset, stairPathError, reverseStairPath } from './stair-path.js';
 
 export const TWO_POINT_TYPES = ['track', 'stairs', 'escalator', 'elevator'];
 export const CONNECTION_TYPES = ['stairs', 'escalator', 'elevator'];
@@ -24,7 +25,9 @@ export function normalizeConnection(project, entity) {
   entity.h = Math.max(.5, connection.rise + (entity.type === 'elevator' ? 4 : 0));
   if (connection.descending) {
     [entity.floor, entity.toFloor] = [entity.toFloor, entity.floor];
-    if (entity.type !== 'elevator') entity.rotation = (entity.rotation + 180) % 360;
+    if(entity.stairPath){
+      entity.stairPath=reverseStairPath(entity.stairPath);
+    }else if (entity.type !== 'elevator') entity.rotation = (entity.rotation + 180) % 360;
   }
   return entity;
 }
@@ -74,6 +77,7 @@ export function repeatPlacementEntity(draft, placed, id) {
     // The stored mesh is normalized bottom-up; repeat in the user's picking order.
     next.floor = draft.floor;
     next.toFloor = draft.toFloor;
+    if(next.type==='stairs'){delete next.stairPath;delete next.landingDepth;next.stairShape=draft.stairShape||'straight';}
   }
   if (next.type === 'track') {
     next.drawMode = draft.drawMode || 'straight';
@@ -135,7 +139,13 @@ export function twoPointPlacement(project, source, first, pointer, options = {})
       if(target.h>500)error='连接高度不能超过 500 m';
     }
   }
+  if(target.type==='stairs'&&['turn','return'].includes(source.stairShape)&&!invalidInput&&target.l>=2){
+    target=stairPreset(target,source.stairShape);error=stairPathError(target,{slope:true});
+    if(!connection)error='请选择两个不同的楼层';
+    else if(target.h>500)error='连接高度不能超过 500 m';
+  }
   if (invalidInput || ![start.x, start.z, end.x, end.z].every(v => Number.isFinite(v) && Math.abs(v) <= 500)) error = '放置范围需在 ±500 m 内';
+  delete target.stairShape;
   const dimensions = elevator ? `${target.l} × ${target.d} m · 竖直井道` : `${Number(Math.hypot(end.x - start.x, end.z - start.z).toFixed(2))} m · ${Number(target.rotation.toFixed(1))}°`;
   return { entity: target, start, end, snapTarget, valid: !error, message: error || dimensions, dimensions, minimum };
 }

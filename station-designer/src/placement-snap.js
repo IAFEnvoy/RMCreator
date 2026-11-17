@@ -1,6 +1,7 @@
 import { trackGeometry, worldPoint } from './track-path.js';
 import { zoneMasks } from './zone-geometry.js';
 import { flattenPath } from './zone-path.js';
+import { stairFootprint } from './stair-path.js';
 
 const rad=Math.PI/180, eps=1e-7;
 const dot=(a,b)=>a.x*b.x+a.z*b.z;
@@ -12,6 +13,7 @@ const angleKey=angle=>(((angle%Math.PI+Math.PI)%Math.PI)%(Math.PI/2)).toFixed(5)
 
 export function placementOutline(object) {
   if(object.vertices)return flattenPath(object);
+  if(object.stairPath)return stairFootprint(object).flatMap(poly=>poly[0].map(([x,z])=>({x,z})));
   if(object.type==='track'&&object.path)return trackGeometry(object).samples.flatMap(p=>[-1,1].map(sign=>worldPoint(object,{x:p.x-p.tz*object.d/2*sign,z:p.z+p.tx*object.d/2*sign})));
   return [-1,1].flatMap(x=>[-1,1].map(z=>worldPoint(object,{x:x*object.l/2,z:z*object.d/2})));
 }

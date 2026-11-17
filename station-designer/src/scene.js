@@ -9,6 +9,8 @@ import { buildTextCallout, updateTextCallout } from './text-callout.js';
 import { buildTrain } from './train.js';
 import { buildTrackModel } from './track-model.js';
 import { buildStairSteps } from './stair-steps.js';
+import { buildBentStair } from './stair-model.js';
+import { stairWorldNodes, stairRoute, stairRoutePoint, moveStairPoint, stairPathError } from './stair-path.js';
 import { placeTrain, trainFit, trainOnTrack, trainsOnTrack, trainCarPose, syncTrains } from './train-placement.js';
 import { trackGeometry, pointAlongTrack, snapRailPoint, makeTrackPath, trackPathError, moveTrackKnot, syncTrackPaths } from './track-path.js';
 import { curveDraft, curveDrawingState, changeTrackMode, inheritTrackStyle } from './track-drawing.js';
@@ -224,7 +226,7 @@ export class StationScene {
     textures.forEach(t=>t.dispose());materials.forEach(m=>m.dispose());group.clear();
   }
   placementPreview(entity,valid) {
-    const p=this.placement,key=JSON.stringify([entity.floor,entity.toFloor,entity.lineId,entity.l,entity.d,entity.h,entity.rotation,entity.path,entity.pathKind,entity.direction,entity.arrowVisible,entity.bandVisible,entity.bandSide,entity.bandColor,entity.type==='track'?Math.sign(entity.z):0,entity.trackId,entity.trainOffset,entity.color,entity.text,entity.fontSize,entity.writingMode,entity.textAlign,entity.textReverse,entity.textBold,entity.textMode,entity.leaderLength,entity.anchorEnabled,entity.anchorX,entity.anchorZ,valid]);
+    const p=this.placement,key=JSON.stringify([entity.floor,entity.toFloor,entity.lineId,entity.l,entity.d,entity.h,entity.rotation,entity.path,entity.stairPath,entity.landingDepth,entity.pathKind,entity.direction,entity.arrowVisible,entity.bandVisible,entity.bandSide,entity.bandColor,entity.type==='track'?Math.sign(entity.z):0,entity.trackId,entity.trainOffset,entity.color,entity.text,entity.fontSize,entity.writingMode,entity.textAlign,entity.textReverse,entity.textBold,entity.textMode,entity.leaderLength,entity.anchorEnabled,entity.anchorX,entity.anchorZ,valid]);
     if(p.previewKey!==key){
       this.clearPlacementGroup(p.group);
       this.isPreview=true;try{this.buildEntity(p.group,entity);}finally{this.isPreview=false;}
@@ -529,6 +531,11 @@ export class StationScene {
     let height=this.view==='floor'?Math.min(e.h,1.6):e.toFloor?this.floorY(e.toFloor)-this.floorY(e.floor):e.h;
     const range=this.view==='floor'&&!this.isPreview?stairPlanRange(e,g.userData.drawFloor):null;
     if(this.view==='floor'&&!this.isPreview&&!range)return;
+    if(e.stairPath){
+      g.add(buildBentStair(e,height,this.mat.bind(this),range));
+      const p=stairRoutePoint(e,range?(range.from+range.to)/2:.5,height);
+      this.label(g,p.x,p.y+3,p.z,`<div class="facility-label"><span class="facility-symbol">${facilityIcons.stairs}</span><span>${esc(e.name)}</span></div>`,'markers',e.id,true);return;
+    }
     g.add(buildStairSteps(e,height,this.mat.bind(this),range));
     if(range){
       const part=new THREE.Group();part.name='stair-plan-half';
@@ -582,9 +589,10 @@ export class StationScene {
     this.label(g,0,e.h+3,0,`<div class="facility-label"><span class="facility-symbol">${facilityIcons.service}</span><span>${esc(e.name)}</span></div>`,'markers',e.id);
   }
   stairEndpointPosition(entity,index) {
-    const endpoint=stairEndpoints(entity)[index],floor=endpoint.floor||entity.floor;
+    const bend=index>1,endpoint=bend?stairWorldNodes(entity)[index-1]:stairEndpoints(entity)[index],floor=bend?entity.floor:endpoint.floor||entity.floor;
     const drawFloor=this.view==='floor'&&this.activeFloor!=='all'?this.activeFloor:floor;
-    const height=this.view==='floor'?0:index&&!entity.toFloor?entity.h:0;
+    const rise=entity.toFloor?this.floorY(entity.toFloor)-this.floorY(entity.floor):entity.h;
+    const height=this.view==='floor'?0:bend?stairRoute(entity,rise).landings[index-2].y:index&&!entity.toFloor?entity.h:0;
     return {floor,drawFloor,position:new THREE.Vector3(endpoint.x,this.floorY(drawFloor)+height+.6,endpoint.z+this.floorOffset(drawFloor))};
   }
   refreshStairEndpoints() {
@@ -593,16 +601,17 @@ export class StationScene {
     if(!isStair(entity)||!this.groups.get(entity.id))return;
     const root=new THREE.Group();root.userData.entityId=entity.id;this.stairHandles=root;this.scene.add(root);
     const radius=Math.max(.15,Math.min(3,(this.camera.right-this.camera.left)/this.camera.zoom/this.width*6));
-    for(const index of [0,1]){
-      const endpoint=stairEndpoints(entity)[index];
+    for(const index of [0,1,...(entity.stairPath?entity.stairPath.slice(1,-1).map((p,i)=>i+2):[])]){
+      const bend=index>1,endpoint=bend?{...stairWorldNodes(entity)[index-1],floor:this.activeFloor==='all'?entity.floor:this.activeFloor}:stairEndpoints(entity)[index];
       if(this.view==='floor'&&(!endpoint.floor||this.activeFloor!=='all'&&endpoint.floor!==this.activeFloor))continue;
+      if(bend&&this.view==='floor'){const range=stairPlanRange(entity,endpoint.floor),t=stairRoute(entity).landings[index-2].t;if(!range||t<range.from||t>range.to)continue;}
       const {position,drawFloor}=this.stairEndpointPosition(entity,index),invalid=this.endpointDrag?.index===index&&this.endpointDrag.result?.valid===false;
-      const color=invalid?'#c56352':index?'#9b6bb3':'#467fb5';
+      const color=invalid?'#c56352':bend?'#dd9b42':index?'#9b6bb3':'#467fb5';
       const mesh=new THREE.Mesh(new THREE.SphereGeometry(radius,16,10),new THREE.MeshBasicMaterial({color,depthTest:false,toneMapped:false}));
       mesh.position.copy(position);mesh.userData.stairEndpoint=index;mesh.userData.drawFloor=drawFloor;mesh.renderOrder=60;root.add(mesh);
       const div=document.createElement('div');div.className=`stair-endpoint-label endpoint-${index}`;
-      const floor=stairEndpoints(entity)[index].floor;
-      div.textContent=`${index?'终点':'起点'} · ${this.project.floors.find(f=>f.id===floor)?.code||'自定义高度'}`;
+      const floor=endpoint.floor;
+      div.textContent=bend?`转折 ${index-1}`:`${index?'终点':'起点'} · ${this.project.floors.find(f=>f.id===floor)?.code||'自定义高度'}`;
       const label=new CSS2DObject(div);label.position.copy(position);label.center.set(.5,1.6);root.add(label);
     }
   }
@@ -612,7 +621,7 @@ export class StationScene {
     this.plane.constant=-position.y;
     if(!this.raycaster.ray.intersectPlane(this.plane,point))return;
     const endpoints=stairEndpoints(source);
-    this.endpointDrag={id:source.id,index,source:structuredClone(source),base:this.project,floor,drawFloor,guideY:position.y,offset:position.clone().sub(point),client:{x:event.clientX,y:event.clientY},started:false,references:placementReferences(this.project,{floors:[...new Set([source.floor,source.toFloor].filter(Boolean))],excludeId:source.id}),anchor:endpoints[1-index]};
+    this.endpointDrag={id:source.id,index,source:structuredClone(source),base:this.project,floor,drawFloor,guideY:position.y,offset:position.clone().sub(point),client:{x:event.clientX,y:event.clientY},started:false,references:placementReferences(this.project,{floors:[...new Set([source.floor,source.toFloor].filter(Boolean))],excludeId:source.id}),anchor:index>1?stairWorldNodes(source)[index-2]:endpoints[1-index]};
     this.controls.enabled=false;this.renderer.domElement.style.cursor='grabbing';
   }
   moveStairEndpointDrag(event) {
@@ -623,7 +632,8 @@ export class StationScene {
     point.add(d.offset);const raw={x:point.x,z:point.z-this.floorOffset(d.drawFloor)},disabled=event.altKey||!d.base.snapping;
     const aligned=snapPlacementPoint(d.base,d.floor,raw,{references:d.references,tolerance:this.snapTolerance(),excludeId:d.id,anchor:d.anchor,disabled});
     const target=aligned.snapped?aligned.point:disabled?raw:placementPoint(raw);
-    d.result=editStairEndpoint(d.base,d.source,d.index,{x:target.x,z:target.z});
+    if(d.index>1){const entity=moveStairPoint(d.source,d.index-1,{x:target.x,z:target.z}),message=stairPathError(entity,{slope:true});d.result={entity,valid:!message,message};}
+    else d.result=editStairEndpoint(d.base,d.source,d.index,{x:target.x,z:target.z});
     const preview=d.result.valid?{...d.base,entities:d.base.entities.map(e=>e.id===d.id?d.result.entity:e)}:d.base;
     this.update(preview,this.view,this.activeFloor,d.id);
     this.showSnap({floor:d.drawFloor,guideY:d.guideY,guides:aligned.guides});
