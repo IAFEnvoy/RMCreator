@@ -10,7 +10,7 @@ export class LayoutFiles{
       for(const f of s.files){if(typeof f.id!=='string'||!/^[\w-]{1,100}$/.test(f.id)||!Number.isFinite(Date.parse(f.updatedAt))||f.deletedAt&&!Number.isFinite(Date.parse(f.deletedAt)))throw new Error();titleOf(f.title);f.project=readProject(f.project);}
       if(!s.files.some(f=>f.id===s.activeId&&!f.deletedAt))s.activeId=s.files.find(f=>!f.deletedAt).id;this.data=s;return;
     }catch{this.recovery=this.raw;this.warning='方案库读取失败，原数据会保存在恢复备份中。';}
-    const f=this.makeFile('中央站配线示意',exampleProject());this.data={version:1,activeId:f.id,files:[f]};
+    const project=exampleProject('interchange'),f=this.makeFile(project.name,project);this.data={version:1,activeId:f.id,files:[f]};
   }
   makeFile(title,project){return {id:uid(),title:titleOf(title),project:readProject(project),updatedAt:new Date().toISOString()};}
   get current(){return clone(this.data.files.find(f=>f.id===this.data.activeId&&!f.deletedAt));}

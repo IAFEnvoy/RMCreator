@@ -10,8 +10,8 @@ const line=points=>createObject('line',{points});
 const storage=()=>{const values=new Map();return {values,getItem:key=>values.get(key)??null,setItem:(key,value)=>values.set(key,value)};};
 const close=(a,b)=>assert.ok(distance(a,b)<1e-8,`${JSON.stringify(a)} != ${JSON.stringify(b)}`);
 
-test('both editable presets round-trip and remain flat lines, platforms and text',()=>{
-  for(const kind of ['station','depot']){
+test('editable presets round-trip and remain flat lines, platforms and text',()=>{
+  for(const kind of ['station','depot','interchange']){
     const p=exampleProject(kind);assert.equal(projectError(p),'');assert.deepEqual(readProject(JSON.parse(JSON.stringify(p))),p);
     assert.ok(p.objects.every(o=>['line','platform','text'].includes(o.type)));
   }
@@ -19,6 +19,25 @@ test('both editable presets round-trip and remain flat lines, platforms and text
   assert.equal(platforms.length,1);
   assert.equal(platforms[0].y-platforms[0].height/2,308);
   assert.equal(platforms[0].y+platforms[0].height/2,412);
+});
+test('reference interchange exports two platforms, green crossovers and a connected dashed northern link',()=>{
+  const p=exampleProject('interchange'),platforms=p.objects.filter(o=>o.type==='platform'),dashes=p.objects.filter(o=>o.dash==='dashed');
+  assert.equal(p.name,'广州3、9号线 高增站');
+  assert.ok(p.objects.filter(o=>o.name.startsWith('3号线')).every(o=>o.color==='#ec9d49'));
+  assert.ok(p.objects.filter(o=>o.name.startsWith('9号线')).every(o=>o.color==='#64ca98'));
+  assert.equal(platforms.length,2);assert.notEqual(platforms[0].fill,platforms[1].fill);
+  assert.equal(p.settings.names,false);assert.equal(p.settings.grid,false);assert.equal(p.settings.title,false);
+  assert.equal(dashes.length,1);assert.equal(dashes[0].name,'顶部虚线联络');
+  assert.equal(dashes[0].color,'#64ca98');assert.deepEqual(dashes[0].gradient,{endColor:'#ec9d49'});
+  close(dashes[0].points[0],{x:155,y:78});close(dashes.at(-1).points.at(-1),{x:358,y:254});
+  for(let i=1;i<dashes.length;i++)close(dashes[i-1].points.at(-1),dashes[i].points[0]);
+  assert.ok(p.objects.filter(o=>o.name.startsWith('9号线 · 站前交叉')).length===2);
+  assert.ok(p.objects.filter(o=>o.name.startsWith('9号线 · 站后交叉')).length===2);
+  const stops=p.objects.filter(o=>o.dash==='siding');assert.equal(stops.length,3);
+  assert.deepEqual(stops.filter(o=>o.color==='#64ca98').map(o=>o.points.at(-1)),[{x:267,y:780},{x:254,y:780}]);
+  close(stops.find(o=>o.color==='#ec9d49').points.at(-1),{x:321,y:142});
+  const svg=exportSVG(p).source;assert.match(svg,/stroke-dasharray/);assert.doesNotMatch(svg,/<text|layout-grid/);
+  p.objects[0].points[0].x=0;assert.equal(exampleProject('interchange').objects[0].points[0].x,54);
 });
 test('invalid imports reject duplicate IDs, invalid curves, coordinates and colors',()=>{
   const p=blankProject();p.objects=[line([{x:0,y:0},{x:100,y:0}])];
@@ -105,6 +124,25 @@ test('SVG export includes styled curves, labels and platforms without editor hel
   assert.doesNotMatch(out.source,/data-object|editing-overlay|object-hit|layout-grid|M 0 0 L 20 20/);assert.ok(out.width>1000&&out.height>200);
   p.settings.names=false;assert.doesNotMatch(exportSVG(p).source,/1 \/ 2 站台/);
 });
+test('a fresh library defaults to an independent copy of the Gaozeng drawing',()=>{
+  const first=new LayoutFiles(storage()),second=new LayoutFiles(storage()),project=first.current.project;
+  assert.equal(first.current.title,'广州3、9号线 高增站');
+  assert.deepEqual(project,exampleProject('interchange'));
+  assert.equal(project.objects.length,16);
+  first.save({...project,name:'我的方案',objects:[]});
+  assert.deepEqual(second.current.project,exampleProject('interchange'));
+});
+
+test('the default drawing never replaces an existing library or its active project',()=>{
+  const s=storage(),existing=new LayoutFiles(s),legacy=exampleProject('station');
+  const first=existing.create(legacy.name,legacy),active=existing.create('我的空白方案',blankProject('我的空白方案'));
+  existing.trash(existing.list().find(f=>f.id!==first.id&&f.id!==active.id).id);
+  const raw=s.getItem(LAYOUT_STORAGE_KEYS.workspace),reopened=new LayoutFiles(s);
+  assert.deepEqual(reopened.current,active);assert.deepEqual(reopened.data,existing.data);
+  assert.equal(reopened.list().some(f=>f.title==='广州3、9号线 高增站'),false);
+  assert.equal(s.getItem(LAYOUT_STORAGE_KEYS.workspace),raw);
+});
+
 test('layout file creation, reopening, rename and trash restore are persistent and isolated',()=>{
   const s=storage(),other=[...Object.values(ROUTE_STORAGE_KEYS),...Object.values(STATION_STORAGE_KEYS)];other.forEach(k=>s.setItem(k,`original:${k}`));
   const f=new LayoutFiles(s);f.save(f.current.project);const initial=f.current.id;
@@ -121,7 +159,7 @@ test('concurrent libraries never overwrite newer work',()=>{
   assert.throws(()=>second.save(second.current.project),/其他窗口更新/);assert.equal(new LayoutFiles(s).current.title,'窗口一修改');
 });
 test('corrupt original storage is preserved as recovery before replacement',()=>{
-  const s=storage();s.setItem(LAYOUT_STORAGE_KEYS.workspace,'{"broken":true}');const f=new LayoutFiles(s);assert.match(f.warning,/恢复备份/);f.save(f.current.project);assert.equal(s.getItem(LAYOUT_STORAGE_KEYS.recovery),'{"broken":true}');assert.equal(new LayoutFiles(s).warning,'');
+  const s=storage();s.setItem(LAYOUT_STORAGE_KEYS.workspace,'{"broken":true}');const f=new LayoutFiles(s);assert.match(f.warning,/恢复备份/);assert.deepEqual(f.current.project,exampleProject('interchange'));f.save(f.current.project);assert.equal(s.getItem(LAYOUT_STORAGE_KEYS.recovery),'{"broken":true}');assert.equal(new LayoutFiles(s).warning,'');
 });
 
 // Exercise the real pointer state machine with a minimal SVG surface; rendering is
@@ -142,6 +180,18 @@ test('drawing from a snapped point commits exactly the same orthogonal endpoint 
 test('drawing mixes line and curve segments without losing the unfinished path',()=>{
   const {e,click}=editorHarness();e.setTool('line');click(100,100);click(200,100);e.setTool('curve');assert.equal(e.draft.points.length,2);click(300,100);click(300,200);e.setTool('line');click(500,200);e.finish();
   assert.equal(e.project.objects.length,1);assert.equal(e.tool,'select');assert.deepEqual(e.project.objects[0].points,[{x:100,y:100},{x:200,y:100},{x:300,y:200,control:{x:300,y:100}},{x:500,y:200}]);assert.equal(e.project.objects[0].color,'#47a58c');assert.equal(e.project.objects[0].dash,'dashed');
+});
+
+test('gradient preview and continuous mixed-line drawing keep independent color settings',()=>{
+  const {e,click}=editorHarness();e.style.gradient={endColor:'#ec9d49'};e.overlay={};
+  e.drawOverlay=LayoutEditor.prototype.drawOverlay;
+  e.setTool('line');click(100,100);e.pointer={x:200,y:100};e.drawOverlay();
+  assert.match(e.overlay.innerHTML,/<linearGradient/);assert.match(e.overlay.innerHTML,/stop-color="#ec9d49"/);
+  click(200,100);e.setTool('curve');click(300,100);click(300,200);e.finish(true);
+  assert.equal(e.project.objects.length,1);assert.deepEqual(e.project.objects[0].gradient,{endColor:'#ec9d49'});
+  e.style.gradient.endColor='#ffffff';
+  click(500,100);click(600,100);click(600,200);e.finish();
+  assert.equal(e.project.objects[0].gradient.endColor,'#ec9d49');assert.equal(e.project.objects[1].gradient.endColor,'#ffffff');
 });
 test('storage line type survives mixed-segment placement and continuous placement',()=>{
   const {e,click}=editorHarness();e.style.dash='siding';e.setTool('line');click(100,100);click(200,100);

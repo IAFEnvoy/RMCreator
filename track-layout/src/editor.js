@@ -156,7 +156,7 @@ export class LayoutEditor{
   finish(repeat=false){
     const d=this.draft;if(!d||d.type!=='line'||d.points.length<2)return;
     if(d.control){this.callbacks.onMessage?.('请先点击曲线终点，或按 Backspace 撤回控制点');return;}
-    this.add(createObject('line',{...this.style,points:clone(d.points),name:`线路 ${this.project.objects.filter(o=>o.type==='line').length+1}`}),repeat);
+    this.add(createObject('line',{...clone(this.style),points:clone(d.points),name:`线路 ${this.project.objects.filter(o=>o.type==='line').length+1}`}),repeat);
   }
   backspace(){if(this.draft?.type==='line'){this.lineClicks=[];if(this.draft.control)delete this.draft.control;else this.draft.points.pop();if(!this.draft.points.length)this.draft=null;this.snap=null;this.drawOverlay();this.status();return true;}return false;}
   escape(){this.cancelGesture();this.draft=null;this.setTool('select');this.select([]);}

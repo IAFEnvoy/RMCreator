@@ -15,6 +15,7 @@ const $=s=>document.querySelector(s);
 let files;
 try{files=new LayoutFiles(localStorage);}catch{const cache=new Map();files=new LayoutFiles({getItem:k=>cache.get(k)||null,setItem:(k,v)=>cache.set(k,v)});files.warning='浏览器存储不可用，请下载 JSON 保存作品。';}
 let state=files.current.project,undoStack=[],redoStack=[],dirty=false,saveTimer,toastTimer,panel='object',trashView=false;
+const presetTitles={blank:'未命名配线',station:'中央站配线示意',depot:'车辆基地配线',interchange:'广州3、9号线 高增站'};
 const tools=[['select','选择','mouse-pointer-2','V'],['line','折线','pen-line','L'],['curve','曲线','spline','C'],['platform','站台','rectangle-horizontal','R'],['text','文字','type','T']];
 $('#app').innerHTML=`
   <header class="workshop-header">${appSwitcher('layout')}<button id="project-menu" class="project-name" aria-label="配线方案管理"><span></span>${icon('chevron-down')}</button><div class="header-spacer"></div><span id="save-status" role="status" title="保存在当前浏览器">${icon('check')}<span>已保存</span></span><div class="history-buttons"><button id="undo" class="icon-btn" title="撤销 Ctrl+Z" aria-label="撤销">${icon('undo-2')}</button><button id="redo" class="icon-btn" title="重做 Ctrl+Shift+Z" aria-label="重做">${icon('redo-2')}</button></div><button id="save" class="icon-btn" title="保存 Ctrl+S" aria-label="保存方案">${icon('save')}</button><button id="files" class="button">${icon('folder-open')}<span>我的配线</span></button><details class="export-menu"><summary class="button primary">${icon('download')}导出${icon('chevron-down')}</summary><nav aria-label="导出格式"><button data-export="svg">${icon('pen-line')}矢量图 SVG</button><button data-export="png">${icon('image')}图片 PNG</button><button data-export="json">${icon('file-json')}JSON</button></nav></details><button id="help" class="icon-btn" title="操作帮助" aria-label="操作帮助">${icon('circle-help')}</button></header>
@@ -24,6 +25,7 @@ $('#app').innerHTML=`
     <aside class="right-panel panel"><div class="inspector-tabs" role="tablist" aria-label="设置范围"><button role="tab" data-panel="object" aria-selected="true">${icon('sliders-horizontal')}对象属性</button><button role="tab" data-panel="canvas" aria-selected="false">${icon('grid-2x2')}画布设置</button></div><div id="inspector"></div></aside>
   </main><div id="toast" role="status" hidden></div><div id="modal-root"></div><input id="file-input" type="file" accept=".json,application/json" hidden>`;
 // Keep icon imports explicit so the new workshop loads independently of Three.js.
+$('#drawing-width').closest('.style-row').insertAdjacentHTML('afterend',`<div class="style-row gradient-style-row"><label>颜色<select id="drawing-color-mode" aria-label="新线条颜色模式"><option value="solid">纯色</option><option value="gradient">渐变</option></select></label><label id="drawing-end-color-field" hidden>终点颜色<input type="color" id="drawing-end-color" value="#df7455" aria-label="新线条终点颜色"></label></div>`);
 const editor=new LayoutEditor($('#drawing-canvas'),{
   onChange:objects=>commit(()=>state.objects=objects),onSelect:()=>{renderObjects();renderInspector();},onNode:()=>renderInspector(),
   onTool:tool=>{document.querySelectorAll('[data-tool]').forEach(b=>{b.classList.toggle('active',b.dataset.tool===tool);b.setAttribute('aria-pressed',String(b.dataset.tool===tool));});},
@@ -38,6 +40,7 @@ function updateHeader(){
   for(const key of ['grid','snap']){const b=$(`#toggle-${key}`);b.classList.toggle('active',state.settings[key]);b.setAttribute('aria-pressed',String(state.settings[key]));}
   document.querySelectorAll('[data-color]').forEach(b=>{b.classList.toggle('active',b.dataset.color===editor.style.color);b.setAttribute('aria-pressed',String(b.dataset.color===editor.style.color));});
   $('#drawing-color').value=editor.style.color;$('#current-color-name').textContent=editor.style.color.toUpperCase();
+  $('#drawing-color-mode').value=editor.style.gradient?'gradient':'solid';$('#drawing-end-color-field').hidden=!editor.style.gradient;$('#drawing-end-color').value=editor.style.gradient?.endColor||PALETTE[1];
 }
 function render(){editor.setProject(state);updateHeader();renderObjects();renderInspector();refresh();}
 function commit(action){const before=clone(state);try{action();const error=projectError(state);if(error)throw new Error(error);}catch(error){state=before;editor.preview=null;render();toast(error.message);return false;}
@@ -58,6 +61,7 @@ function renderObjects(){
 const numberField=(label,key,value,{min=-20000,max=20000,step=1}={})=>`<label class="field"><span>${label}</span><input type="number" data-property="${key}" value="${Math.round(value*1000)/1000}" min="${min}" max="${max}" step="${step}"></label>`;
 const selectField=(label,key,value,options)=>`<label class="field"><span>${label}</span><select data-property="${key}">${options.map(([v,t])=>`<option value="${v}" ${value===v?'selected':''}>${t}</option>`).join('')}</select></label>`;
 const colorField=(label,key,value)=>`<label class="field color-field"><span>${label}</span><div><input type="color" data-property="${key}" value="${value}"><span>${value.toUpperCase()}</span></div></label>`;
+const lineColorFields=o=>`${selectField('颜色模式','colorMode',o.gradient?'gradient':'solid',[['solid','纯色'],['gradient','渐变']])}${colorField(o.gradient?'起点颜色':'线条颜色','color',o.color)}${o.gradient?colorField('终点颜色','gradientEndColor',o.gradient.endColor):''}`;
 function renderInspector(){
   document.querySelectorAll('[data-panel]').forEach(b=>b.setAttribute('aria-selected',String(b.dataset.panel===panel)));
   const root=$('#inspector'),objects=currentObjects();
@@ -66,14 +70,14 @@ function renderInspector(){
   }else if(!objects.length){
     root.innerHTML='<div class="empty-inspector">未选择对象</div>';
   }else if(objects.length>1){
-    const lines=objects.filter(o=>o.type==='line');root.innerHTML=`<div class="selection-card">${icon('layers-3')}<div><strong>已选 ${objects.length} 个对象</strong></div></div>${lines.length?`<section class="property-section"><div class="section-title">批量样式</div>${colorField('线条颜色','color',lines[0].color)}${numberField('线条粗细','width',lines[0].width,{min:1,max:30})}${selectField('线型','dash',lines[0].dash,LINE_STYLES)}</section>`:''}${objectActions(objects)}`;
+    const lines=objects.filter(o=>o.type==='line');root.innerHTML=`<div class="selection-card">${icon('layers-3')}<div><strong>已选 ${objects.length} 个对象</strong></div></div>${lines.length?`<section class="property-section"><div class="section-title">批量样式</div>${lineColorFields(lines[0])}${numberField('线条粗细','width',lines[0].width,{min:1,max:30})}${selectField('线型','dash',lines[0].dash,LINE_STYLES)}</section>`:''}${objectActions(objects)}`;
   }else{
     const o=objects[0],labels={line:'线条',platform:'站台',text:'文字标注'};
     root.innerHTML=`<div class="selection-card"><span class="selection-symbol" style="color:${o.color}">${icon(o.type==='line'?'spline':o.type==='platform'?'rectangle-horizontal':'type')}</span><div><strong>${labels[o.type]}</strong>${o.type==='line'?`<span>${o.points.length} 个顶点</span>`:''}</div>${o.locked?icon('lock-keyhole'):''}</div><section class="property-section"><div class="section-title">基本属性</div><label class="field"><span>对象名称</span><input data-property="name" value="${esc(o.name)}" maxlength="100"></label>${o.type==='line'?lineProperties(o):o.type==='platform'?platformProperties(o):textProperties(o)}</section>${o.type==='line'?pathProperties(o):''}${objectActions(objects)}`;
   }
   refresh();
 }
-function lineProperties(o){return `${colorField('线条颜色','color',o.color)}<div class="field-grid">${numberField('粗细（px）','width',o.width,{min:1,max:30,step:.5})}${selectField('线型','dash',o.dash,LINE_STYLES)}</div>${selectField('方向箭头','arrow',o.arrow,[['none','不显示'],['start','起点'],['end','终点'],['both','两端']])}`;}
+function lineProperties(o){return `${lineColorFields(o)}<div class="field-grid">${numberField('粗细（px）','width',o.width,{min:1,max:30,step:.5})}${selectField('线型','dash',o.dash,LINE_STYLES)}</div>${selectField('方向箭头','arrow',o.arrow,[['none','不显示'],['start','起点'],['end','终点'],['both','两端']])}`;}
 function platformProperties(o){return `${colorField('填充颜色','fill',o.fill)}${colorField('边框颜色','color',o.color)}<div class="field-grid">${numberField('长度','width',o.width,{min:8,max:4000})}${numberField('宽度','height',o.height,{min:8,max:2000})}${numberField('X','x',o.x)}${numberField('Y','y',o.y)}${numberField('角度（°）','rotation',o.rotation,{min:-360,max:360})}${numberField('圆角','radius',o.radius,{min:0,max:200})}</div>`;}
 function textProperties(o){return `<label class="field"><span>文字内容</span><textarea data-property="text" maxlength="500" rows="3">${esc(o.text)}</textarea></label>${colorField('文字颜色','color',o.color)}<div class="field-grid">${numberField('字号','fontSize',o.fontSize,{min:8,max:120})}${numberField('角度（°）','rotation',o.rotation,{min:-360,max:360})}${numberField('X','x',o.x)}${numberField('Y','y',o.y)}</div>`;}
 function pathProperties(o){
@@ -90,7 +94,7 @@ function renderStatus(status){
 function modal(html){editor.cancelGesture();$('#modal-root').innerHTML=`<div class="modal-backdrop"><section class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">${html}<button data-close class="icon-btn modal-close" aria-label="关闭">${icon('x')}</button></section></div>`;refresh();$('#modal-root input, #modal-root button')?.focus();}
 function closeModal(){$('#modal-root').innerHTML='';}
 function showNew(preset='blank'){
-  modal(`<h2 id="modal-title">新建配线方案</h2><form id="new-form"><label class="field"><span>方案名称</span><input name="title" value="${esc(files.unique(preset==='station'?'中央站配线示意':preset==='depot'?'车辆基地配线':'未命名配线'))}" maxlength="100" required></label><label class="field"><span>初始内容</span><select name="template">${[['blank','空白画布'],['station','车站配线 · 站前渡线与折返线'],['depot','车辆基地 · 扇形存车线']].map(([v,t])=>`<option value="${v}" ${v===preset?'selected':''}>${t}</option>`).join('')}</select></label><div class="modal-actions"><button type="button" data-close class="button">取消</button><button type="submit" class="button primary">${icon('plus')}创建方案</button></div></form>`);
+  modal(`<h2 id="modal-title">新建配线方案</h2><form id="new-form"><label class="field"><span>方案名称</span><input name="title" value="${esc(files.unique(presetTitles[preset]||presetTitles.blank))}" maxlength="100" required></label><label class="field"><span>初始内容</span><select name="template">${[['blank','空白画布'],['station','车站配线 · 站前渡线与折返线'],['depot','车辆基地 · 扇形存车线'],['interchange','广州3、9号线 高增站']].map(([v,t])=>`<option value="${v}" ${v===preset?'selected':''}>${t}</option>`).join('')}</select></label><div class="modal-actions"><button type="button" data-close class="button">取消</button><button type="submit" class="button primary">${icon('plus')}创建方案</button></div></form>`);
 }
 function showFiles(){
   if(dirty&&!save())return;
@@ -137,7 +141,7 @@ document.addEventListener('click',event=>{
   switch(b.id){
     case 'project-menu':case 'files':showFiles();break;
     case 'new':case 'modal-new':showNew();break;
-    case 'examples':showNew('station');break;
+    case 'examples':showNew('interchange');break;
     case 'import-json':$('#file-input').click();break;
     case 'save':save(true);break;
     case 'undo':undo();break;case 'redo':redo();break;
@@ -159,13 +163,21 @@ document.addEventListener('click',event=>{
 document.addEventListener('change',event=>{
   const input=event.target;
   if(input.id==='drawing-color'){editor.style.color=input.value;updateHeader();editor.drawOverlay();return;}
+  if(input.id==='drawing-color-mode'){if(input.value==='gradient')editor.style.gradient={endColor:PALETTE[1]};else delete editor.style.gradient;updateHeader();editor.drawOverlay();return;}
+  if(input.id==='drawing-end-color'){editor.style.gradient={endColor:input.value};updateHeader();editor.drawOverlay();return;}
   if(input.id==='drawing-width'){editor.style.width=Number(input.value);editor.drawOverlay();return;}
   if(input.id==='drawing-dash'){editor.style.dash=input.value;editor.drawOverlay();return;}
-  if(input.name==='template'){$('#new-form [name="title"]').value=files.unique(input.value==='station'?'中央站配线示意':input.value==='depot'?'车辆基地配线':'未命名配线');return;}
+  if(input.name==='template'){$('#new-form [name="title"]').value=files.unique(presetTitles[input.value]||presetTitles.blank);return;}
   if(input.dataset.setting){commit(()=>state.settings[input.dataset.setting]=input.checked);return;}
   if(input.id==='diagram-title'){commit(()=>state.name=input.value.trim());return;}
   if(input.dataset.property){
     const key=input.dataset.property;if(key==='background'){commit(()=>state.settings.background=input.value);return;}
+    if(key==='colorMode'||key==='gradientEndColor'){
+      commit(()=>{for(const o of currentObjects().filter(o=>o.type==='line'&&!o.locked)){
+        if(key==='colorMode'){if(input.value==='gradient')o.gradient={endColor:o.gradient?.endColor||PALETTE[1]};else delete o.gradient;}
+        else o.gradient={endColor:input.value};
+      }});return;
+    }
     const numeric=['width','height','x','y','rotation','radius','fontSize'].includes(key),value=numeric?Number(input.value):input.value;
     if(numeric&&(!input.value.trim()||!Number.isFinite(value))){toast('请输入有效数值');renderInspector();return;}
     commit(()=>{for(const o of currentObjects()){if(o.locked)continue;if(currentObjects().length>1&&o.type!=='line')continue;o[key]=value;}});return;

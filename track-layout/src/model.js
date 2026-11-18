@@ -1,4 +1,6 @@
 import { guideThrough, projectGuide, snapGeometry, snapWithGuides } from '../../shared/snap-math.js';
+import referenceInterchange from '../examples/reference-interchange.json' with { type: 'json' };
+import { upgradeReferenceLink } from './migrations.js';
 
 export const FORMAT='rmcreator-track-layout';
 export const LINE_STYLES=[['solid','实线'],['dashed','虚线'],['dotted','点线'],['siding','存车线']];
@@ -32,6 +34,7 @@ export function projectError(p) {
     if(!o||!['line','platform','text'].includes(o.type)||typeof o.id!=='string'||!/^[\w-]{1,100}$/.test(o.id)||typeof o.name!=='string'||o.name.length>100||typeof o.visible!=='boolean'||typeof o.locked!=='boolean')return '对象数据无效';
     if(!color(o.color))return '对象颜色无效';
     if(o.type==='line'){
+      if(o.gradient!==undefined&&(!o.gradient||typeof o.gradient!=='object'||Array.isArray(o.gradient)||!color(o.gradient.endColor)))return '渐变终点颜色无效';
       if(!Array.isArray(o.points)||o.points.length<2||o.points.length>128||!o.points.every((p,i)=>validPoint(p)&&(!p.control||i>0&&validPoint(p.control)))||!finite(o.width,1,30)||!LINE_STYLES.some(([value])=>value===o.dash)||!['none','start','end','both'].includes(o.arrow)||o.points.slice(1).some((p,i)=>distance(o.points[i],p)<.1))return '线条路径无效（需 2–128 个顶点，相邻顶点不能重合）';
     }else{
       if(!validPoint(o)||!finite(o.rotation,-360,360))return '对象位置或角度无效';
@@ -52,6 +55,7 @@ export function readProject(input) {
     });
     if(hosts.length===1){hosts[0].dash='siding';result.objects=result.objects.filter(o=>o.id!==bar.id);}
   }
+  upgradeReferenceLink(result,referenceInterchange);
   return result;
 }
 export function quadratic(a,c,b,t){const s=1-t;return {x:s*s*a.x+2*s*t*c.x+t*t*b.x,y:s*s*a.y+2*s*t*c.y+t*t*b.y};}
@@ -157,6 +161,7 @@ export function snapPoint(project,p,{tolerance=10,excludeIds=[],draft=[],disable
 }
 
 export function exampleProject(kind='station'){
+  if(kind==='interchange')return readProject(referenceInterchange);
   const p=blankProject(kind==='depot'?'车辆基地配线':'中央站配线示意');
   const line=(name,points,color=PALETTE[0],extra={})=>p.objects.push(createObject('line',{name,points:points.map(v=>Array.isArray(v)?point(...v):v),color,...extra}));
   const platform=(name,x,y,width=320,height=44)=>p.objects.push(createObject('platform',{name,x,y,width,height}));

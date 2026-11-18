@@ -1,15 +1,27 @@
-import { round, drawingBounds, lineTerminator } from './model.js';
+import { round, drawingBounds, objectBounds, lineTerminator } from './model.js';
 export const escapeHTML=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const n=value=>round(value);
 export function pathData(points){return points.map((p,i)=>i?(p.control?`Q ${n(p.control.x)} ${n(p.control.y)} ${n(p.x)} ${n(p.y)}`:`L ${n(p.x)} ${n(p.y)}`):`M ${n(p.x)} ${n(p.y)}`).join(' ');}
+function lineGradient(o,id){
+  if(!o.gradient)return '';
+  let a=o.points[0],b=o.points.at(-1);
+  if(Math.hypot(b.x-a.x,b.y-a.y)<.001){
+    const bounds=objectBounds(o);a={x:bounds.x,y:bounds.y};
+    b=bounds.right-bounds.x>=bounds.bottom-bounds.y?{x:bounds.right,y:bounds.y}:{x:bounds.x,y:bounds.bottom};
+  }
+  return `<linearGradient id="${id}" gradientUnits="userSpaceOnUse" x1="${n(a.x)}" y1="${n(a.y)}" x2="${n(b.x)}" y2="${n(b.y)}" color-interpolation="sRGB"><stop offset="0" stop-color="${o.color}"/><stop offset="1" stop-color="${o.gradient.endColor}"/></linearGradient>`;
+}
 export function objectMarkup(o,{names=true,interactive=false}={}){
   if(!o.visible)return '';
   const id=escapeHTML(o.id),attrs=interactive?` data-object="${id}" class="layout-object${o.locked?' is-locked':''}"`:'';
   if(o.type==='line'){
     const stop=lineTerminator(o),stopPath=stop?pathData([stop.a,stop.b]):'',dash=o.dash==='dashed'?`${o.width*3} ${o.width*2}`:o.dash==='dotted'?`0 ${o.width*2.5}`:'',mark=`arrow-${id}`;
     const markers=`${['start','both'].includes(o.arrow)?` marker-start="url(#${mark}-start)"`:''}${['end','both'].includes(o.arrow)?` marker-end="url(#${mark}-end)"`:''}`;
-    const defs=o.arrow==='none'?'':`<defs><marker id="${mark}-end" viewBox="0 0 10 10" refX="${stop?20:8}" refY="5" markerWidth="16" markerHeight="16" orient="auto-start-reverse" markerUnits="userSpaceOnUse"><path d="M 1 1 L 9 5 L 1 9" fill="none" stroke="${o.color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></marker><marker id="${mark}-start" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="16" markerHeight="16" orient="auto-start-reverse" markerUnits="userSpaceOnUse"><path d="M 1 1 L 9 5 L 1 9" fill="none" stroke="${o.color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>`;
-    return `<g${attrs}>${defs}<path d="${pathData(o.points)}" fill="none" stroke="${o.color}" stroke-width="${o.width}" stroke-linecap="round" stroke-linejoin="round"${dash?` stroke-dasharray="${dash}"`:''}${markers}/>${stop?`<path class="buffer-stop" d="${stopPath}" fill="none" stroke="${o.color}" stroke-width="${n(stop.width)}" stroke-linecap="round"/>`:''}${interactive?`<path d="${pathData(o.points)}" fill="none" stroke="transparent" stroke-width="18" vector-effect="non-scaling-stroke" class="object-hit"/>${stop?`<path d="${stopPath}" fill="none" stroke="transparent" stroke-width="18" vector-effect="non-scaling-stroke" class="object-hit"/>`:''}`:''}</g>`;
+    const gradientId=`gradient-${id}`,endColor=o.gradient?.endColor||o.color,stroke=o.gradient?`url(#${gradientId})`:o.color;
+    const gradient=lineGradient(o,gradientId);
+    const arrows=o.arrow==='none'?'':`<marker id="${mark}-end" viewBox="0 0 10 10" refX="${stop?20:8}" refY="5" markerWidth="16" markerHeight="16" orient="auto-start-reverse" markerUnits="userSpaceOnUse"><path d="M 1 1 L 9 5 L 1 9" fill="none" stroke="${endColor}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></marker><marker id="${mark}-start" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="16" markerHeight="16" orient="auto-start-reverse" markerUnits="userSpaceOnUse"><path d="M 1 1 L 9 5 L 1 9" fill="none" stroke="${o.color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></marker>`;
+    const defs=gradient||arrows?`<defs>${gradient}${arrows}</defs>`:'';
+    return `<g${attrs}>${defs}<path d="${pathData(o.points)}" fill="none" stroke="${stroke}" stroke-width="${o.width}" stroke-linecap="round" stroke-linejoin="round"${dash?` stroke-dasharray="${dash}"`:''}${markers}/>${stop?`<path class="buffer-stop" d="${stopPath}" fill="none" stroke="${endColor}" stroke-width="${n(stop.width)}" stroke-linecap="round"/>`:''}${interactive?`<path d="${pathData(o.points)}" fill="none" stroke="transparent" stroke-width="18" vector-effect="non-scaling-stroke" class="object-hit"/>${stop?`<path d="${stopPath}" fill="none" stroke="transparent" stroke-width="18" vector-effect="non-scaling-stroke" class="object-hit"/>`:''}`:''}</g>`;
   }
   if(o.type==='platform')return `<g${attrs} transform="translate(${n(o.x)} ${n(o.y)}) rotate(${n(o.rotation)})"><rect x="${-o.width/2}" y="${-o.height/2}" width="${o.width}" height="${o.height}" rx="${Math.min(o.radius,o.width/2,o.height/2)}" fill="${o.fill}" stroke="${o.color}" stroke-width="1.5"/>${names&&o.name?`<text x="0" y="0" dy=".35em" text-anchor="middle" fill="#53627a" font-size="14" pointer-events="none">${escapeHTML(o.name)}</text>`:''}</g>`;
   const lines=o.text.split('\n'),first=-(lines.length-1)*o.fontSize*.7;
