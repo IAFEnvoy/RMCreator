@@ -106,8 +106,9 @@ export function twoPointPlacement(project, source, first, pointer, options = {})
     else if (l > 12 || d > 12) error = '井道长宽均不能超过 12 m';
   } else {
     const alongX = Math.abs(dx) >= Math.abs(dz);
-    // Stairs and escalators are free to turn; rail contacts also take precedence over the axis lock.
-    end = !track || point.snapped ? { x: point.x, z: point.z } : alongX ? { x: point.x, z: start.z } : { x: start.x, z: point.z };
+    // Prepared points already satisfy the drawing constraint, including a
+    // parallel/perpendicular guide at an arbitrary angle.
+    end = !track || point.snapped || options.prepared && point.aligned ? { x: point.x, z: point.z } : alongX ? { x: point.x, z: start.z } : { x: start.x, z: point.z };
     const length = Math.hypot(end.x - start.x, end.z - start.z);
     const rotation = (Math.atan2(end.z - start.z, end.x - start.x) * 180 / Math.PI + 360) % 360;
     target = { ...source, x: (start.x + end.x) / 2, z: (start.z + end.z) / 2, l: Math.max(.5, Math.min(500, length)), rotation };

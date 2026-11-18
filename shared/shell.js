@@ -4,6 +4,7 @@ import './shell.css';
 const tools = [
   ['route', '线路图绘制', '../route-map/'],
   ['station', '车站空间设计', '../station-designer/'],
+  ['layout', '配线工坊', '../track-layout/'],
 ];
 
 export function appSwitcher(current) {

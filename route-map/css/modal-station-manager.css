@@ -178,7 +178,7 @@
   height: 100%;
   aspect-ratio: auto;
   background: #ffffff;
-  cursor: grab;
+  cursor: default;
   flex: 1;
 }
 

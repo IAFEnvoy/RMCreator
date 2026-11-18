@@ -1,12 +1,27 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { defaultProject, isProject } from '../src/project.js';
+import { defaultProject, isProject, migrateProject } from '../src/project.js';
+import changshouExample from '../examples/长寿路站-7号线-13号线-全6A.json' with { type: 'json' };
 import { ProjectFiles, blankProject, projectFilename, WORKSPACE_KEY, LEGACY_KEY, RECOVERY_KEY } from '../src/project-files.js';
 
 function storage(initial = {}) {
   const data = new Map(Object.entries(initial));
   return { data, fail: false, getItem(key) { return data.get(key) ?? null; }, setItem(key, value) { if(this.fail)throw new Error('QuotaExceededError');data.set(key, value); } };
 }
+
+test('a fresh workspace loads the complete Changshou Road JSON as an independent default project', () => {
+  const files = new ProjectFiles(storage()), expected = migrateProject(changshouExample);
+  assert.deepEqual(files.current.project, expected);assert.equal(files.current.title, expected.name);
+  assert.ok(isProject(files.current.project));assert.equal(files.current.project.floors.length, 3);
+  const edited = files.current.project;edited.entities[0].name = '修改后的对象';files.save(edited);
+  assert.deepEqual(new ProjectFiles(storage()).current.project, expected);
+});
+
+test('unreadable legacy data falls back to the Changshou Road example', () => {
+  const local = storage({[LEGACY_KEY]:'{invalid'}), files = new ProjectFiles(local);
+  assert.deepEqual(files.current.project, migrateProject(changshouExample));
+  assert.equal(local.getItem(LEGACY_KEY), '{invalid');
+});
 
 test('blank files have editable floors and lines with no example entities or painted areas', () => {
   const blank = blankProject('新车站');assert.equal(blank.name, '新车站');assert.ok(isProject(blank));

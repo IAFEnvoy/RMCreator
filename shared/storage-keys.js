@@ -15,3 +15,8 @@ export const STATION_STORAGE_KEYS = Object.freeze({
   legacyProject: 'station-studio-project',
   recovery: 'station-studio-workspace-recovery',
 });
+
+export const LAYOUT_STORAGE_KEYS = Object.freeze({
+  workspace: 'rmcreator.trackLayout.workspace.v1',
+  recovery: 'rmcreator.trackLayout.recovery.v1',
+});

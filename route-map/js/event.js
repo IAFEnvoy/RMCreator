@@ -181,8 +181,11 @@ export function createEventBinder({
 
   function bindCanvas() {
     svg.addEventListener("mousedown", onCanvasMouseDown);
-    svg.addEventListener("mousemove", onCanvasMouseMove);
+    window.addEventListener("mousemove", event => {
+      if (state.drag.mode || svg.contains(event.target)) onCanvasMouseMove(event);
+    });
     window.addEventListener("mouseup", onCanvasMouseUp);
+    svg.addEventListener("auxclick", event => { if (event.button === 1) event.preventDefault(); });
     svg.addEventListener("click", onCanvasClick);
     svg.addEventListener("wheel", onCanvasWheel, { passive: false });
   }
@@ -436,6 +439,7 @@ export function createEventBinder({
   }
 
   function onCanvasClick(event) {
+    if (event.button !== 0 || state.drag.mode === "pan") return;
     if (state.drag.suppressClick) {
       state.drag.suppressClick = false;
       return;
@@ -594,6 +598,19 @@ export function createEventBinder({
   }
 
   function onCanvasMouseDown(event) {
+    if (state.drag.mode) return;
+    if (event.button === 2) {
+      state.drag.mode = "pan";
+      state.drag.suppressContextMenu = false;
+      state.drag.fromX = event.clientX;
+      state.drag.fromY = event.clientY;
+      state.drag.panX = state.pan.x;
+      state.drag.panY = state.pan.y;
+      state.drag.didMove = false;
+      renderer.updateDragCursor();
+      event.preventDefault();
+      return;
+    }
     if (event.button !== 0) {
       return;
     }
@@ -660,7 +677,7 @@ export function createEventBinder({
 
     if (!target.closest("[data-station-id],[data-line-id],[data-shape-id],[data-text-id]")
       && !target.closest("[data-subdrawing-id]")) {
-      if (state.activeTool === "select") {
+      if (!state.activeTool || state.activeTool === "select") {
         state.drag.mode = "marquee";
         state.drag.marqueeStart = point;
         state.drag.marqueeCurrent = point;
@@ -670,20 +687,6 @@ export function createEventBinder({
         return;
       }
 
-      // In shape/subDrawing placement mode, blank click should place, not start panning.
-      if ((state.activeTool === "shape" && state.menuSelection.shape)
-        || (state.activeTool === "subDrawing" && state.menuSelection.subDrawing)) {
-        return;
-      }
-
-      state.drag.mode = "pan";
-      state.drag.fromX = event.clientX;
-      state.drag.fromY = event.clientY;
-      state.drag.panX = state.pan.x;
-      state.drag.panY = state.pan.y;
-      state.drag.didMove = false;
-      renderer.updateDragCursor();
-      event.preventDefault();
     }
   }
 
@@ -859,9 +862,11 @@ export function createEventBinder({
 
   function onCanvasMouseUp(event) {
     const dragMode = state.drag.mode;
+    if (!dragMode || event.button !== (dragMode === "pan" ? 2 : 0)) return;
     const isSelectionMoveDrag = dragMode === "selection-move";
     const hadMove = Boolean(state.drag.didMove);
     const lineSplitCandidate = state.drag.lineSplitCandidate;
+    if (dragMode === "pan") state.drag.suppressContextMenu = hadMove;
 
     if (dragMode === "line") {
       const startId = state.drag.lineStartStationId;
@@ -901,7 +906,7 @@ export function createEventBinder({
       }
     }
 
-    if ((dragMode === "pan" || dragMode === "marquee" || dragMode === "selection-move") && hadMove) {
+    if ((dragMode === "marquee" || dragMode === "selection-move") && hadMove) {
       state.drag.suppressClick = true;
     }
 

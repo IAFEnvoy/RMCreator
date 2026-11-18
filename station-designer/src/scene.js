@@ -11,8 +11,9 @@ import { buildTrackModel } from './track-model.js';
 import { buildStairSteps } from './stair-steps.js';
 import { buildBentStair } from './stair-model.js';
 import { stairWorldNodes, stairRoute, stairRoutePoint, moveStairPoint, stairPathError } from './stair-path.js';
-import { placeTrain, trainFit, trainOnTrack, trainsOnTrack, trainCarPose, syncTrains } from './train-placement.js';
-import { trackGeometry, pointAlongTrack, snapRailPoint, makeTrackPath, trackPathError, moveTrackKnot, syncTrackPaths } from './track-path.js';
+import { placeTrain, trainFit, trainCarPose, syncTrains } from './train-placement.js';
+import { connectedTrainRoute } from './train-route.js';
+import { trackGeometry, pointAlongTrack, worldPoint, snapRailPoint, makeTrackPath, trackPathError, moveTrackKnot, syncTrackPaths } from './track-path.js';
 import { curveDraft, curveDrawingState, changeTrackMode, inheritTrackStyle } from './track-drawing.js';
 import { gateLayout } from './gates.js';
 import { TWO_POINT_TYPES, CONNECTION_TYPES, placementPoint, twoPointPlacement, retargetPlacement, placementInputFloor, connectionFloors } from './placement.js';
@@ -25,6 +26,7 @@ import { ZoneEditor } from './zone-editor.js';
 import { placementReferences, snapPlacementPoint, alignmentMessage } from './placement-snap.js';
 import { isStair, stairEndpoints, editStairEndpoint } from './stair-endpoints.js';
 import { entityDisplayFloors, stairPlanRange } from './floor-entities.js';
+import { setMouseButtons } from './mouse-controls.js';
 
 const esc = (s) => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[c]));
 const facilityIcons = {
@@ -47,6 +49,7 @@ export class StationScene {
     this.renderer.domElement.setAttribute('aria-label', '可交互的地铁车站三维设计场景'); this.renderer.domElement.tabIndex = 0; container.prepend(this.renderer.domElement);
     this.labelRenderer = new CSS2DRenderer(); this.labelRenderer.domElement.className = 'label-renderer'; container.append(this.labelRenderer.domElement);
     this.controls = new OrbitControls(this.camera, this.renderer.domElement); this.controls.enableDamping = true; this.controls.dampingFactor = .1; this.controls.target.set(0, 6, 0); this.controls.minZoom = .3; this.controls.maxZoom = 6; this.controls.maxPolarAngle = Math.PI / 2.03; this.controls.minPolarAngle = .05;
+    setMouseButtons(this.controls);
     this.controls.addEventListener('change', () => { const zoom = this.camera.zoom; if (this.zoomLevel !== zoom) { this.zoomLevel = zoom; this.callbacks.onZoom(zoom);this.refreshStairEndpoints(); } if(this.zoneEditor?.active)this.zoneEditor.render(); });
     const ambient = new THREE.HemisphereLight('#ffffff', '#c6cbb9', 2.1); this.scene.add(ambient);
     const keyLight = new THREE.DirectionalLight('#fffdf0', 2.8); keyLight.position.set(-50, 150, -70); this.scene.add(keyLight);
@@ -171,7 +174,8 @@ export class StationScene {
         const track=this.project.entities.find(t=>t.id===e.trackId&&t.type==='track');
         const forward=track?trackLayout(this.project,track).forward:true;
         const facing=e.trainFacing==='reverse'?!forward:forward;
-        group.add(buildTrain(e,e.color,facing,this.mat.bind(this),track?.path?spec=>trainCarPose(e,track,spec,facing):null));
+        const route=connectedTrainRoute(this.project,track);
+        group.add(buildTrain(e,e.color,facing,this.mat.bind(this),route?spec=>trainCarPose(e,track,spec,facing,route):null));
         if(!this.isPreview&&!trainFit(this.project,e).valid){
           const half=e.l/2;this.line(group,[[-half,.1,-e.d/2],[half,.1,-e.d/2],[half,.1,e.d/2],[-half,.1,e.d/2],[-half,.1,-e.d/2]],'#cc6655');
         }
@@ -193,7 +197,7 @@ export class StationScene {
     const twoPoint=TWO_POINT_TYPES.includes(entity.type);
     this.scene.add(group,helper);this.placement={entity,group,helper,guide,onPlace,twoPoint};
     if(!twoPoint&&entity.type!=='train')this.placementPreview(entity,true);else group.visible=false;
-    this.controls.enabled=false;this.renderer.domElement.style.cursor='crosshair';
+    this.controls.enabled=true;this.renderer.domElement.style.cursor='crosshair';
     if(entity.type==='track')this.placement.trackMode=entity.drawMode||'straight';
     this.callbacks.onPlacementChange?.({stage:'start',valid:true,twoPoint,type:entity.type,trackMode:this.placement.trackMode});
     this.applyFloorFocus();
@@ -218,7 +222,7 @@ export class StationScene {
       if(!p.twoPoint&&p.entity.type!=='train')this.placementPreview(p.entity,true);
       this.callbacks.onPlacementChange?.({stage:p.start?'end':'start',type:p.entity.type,twoPoint:p.twoPoint,trackMode:p.trackMode,valid:true});
     }
-    this.controls.enabled=false;this.renderer.domElement.style.cursor='crosshair';this.applyFloorFocus();
+    this.controls.enabled=true;this.renderer.domElement.style.cursor='crosshair';this.applyFloorFocus();
   }
   clearPlacementGroup(group) {
     const materials=new Set(),textures=new Set();
@@ -291,19 +295,29 @@ export class StationScene {
     const fallback=disabled?raw:placementPoint(raw),curve=entity.type==='track'&&p.trackMode==='curve';
     const control=curve&&curveDrawingState((p.points||[]).length).nextRole==='control';
     const anchor=p.points?.at(-1)||p.start;
+    const floors=connection&&p.start?[...new Set([entity.floor,inputFloor])]:[inputFloor],tolerance=this.snapTolerance();
+    const references=this.snapReferences(floors,entity.id);
     let constraint;
     if(entity.type==='track'&&p.trackMode==='straight'&&p.start){
       const alongX=Math.abs(raw.x-p.start.x)>=Math.abs(raw.z-p.start.z);
       constraint={n:alongX?{x:0,z:1}:{x:1,z:0},value:alongX?p.start.z:p.start.x};
+      if(!disabled){
+        let best=Math.abs(raw.x*constraint.n.x+raw.z*constraint.n.z-constraint.value);
+        const angles=[...references.map(ref=>ref.angle),...(Number.isFinite(p.start.angle)?[p.start.angle*Math.PI/180]:[])];
+        for(const angle of angles)for(const a of [angle,angle+Math.PI/2]){
+          const n={x:-Math.sin(a),z:Math.cos(a)},value=p.start.x*n.x+p.start.z*n.z,d=Math.abs(raw.x*n.x+raw.z*n.z-value);
+          if(d<=tolerance&&d<best-1e-7){best=d;constraint={n,value};}
+        }
+      }
     }
-    const constrained=q=>!constraint?q:constraint.n.x?{...q,x:constraint.value}:{...q,z:constraint.value};
-    const rail=entity.type==='track'&&!control?snapRailPoint(project,entity,raw):null;
+    const constrained=q=>{if(!constraint)return q;const d=constraint.value-q.x*constraint.n.x-q.z*constraint.n.z;return {...q,x:q.x+constraint.n.x*d,z:q.z+constraint.n.z*d};};
     let dedicated;
-    if(rail?.snapped){p.point=rail;dedicated=rail;}
-    else if(entity.type!=='train'){
-      const floors=connection&&p.start?[...new Set([entity.floor,inputFloor])]:[inputFloor];
-      const aligned=snapPlacementPoint(project,inputFloor,constrained(raw),{references:this.snapReferences(floors,entity.id),tolerance:this.snapTolerance(),anchor,excludeId:entity.id,disabled,constraint,moving:!p.twoPoint&&!p.anchorPicking?{...entity,...raw}:undefined});
+    if(entity.type!=='train'){
+      const railCache={};
+      const aligned=snapPlacementPoint(project,inputFloor,constrained(raw),{references,tolerance,anchor,vertices:p.points||[],excludeId:entity.id,disabled,constraint,moving:!p.twoPoint&&!p.anchorPicking?{...entity,...raw}:undefined,
+        snapGeometry:entity.type==='track'&&!control?(point,line)=>snapRailPoint(project,entity,point,tolerance,line,railCache):undefined});
       p.point=aligned.snapped?aligned.point:constrained(fallback);p.alignmentGuides=aligned.guides;
+      if(aligned.geometry)dedicated=aligned.geometry;
       // A track starts alongside a platform, rather than on the platform edge.
       // Resolve that contact before the first click so it never moves a picked point.
       if(entity.type==='track'&&!anchored&&!aligned.snapped&&!disabled){
@@ -678,7 +692,7 @@ export class StationScene {
     this.renderer.setSize(w,h);this.labelRenderer.setSize(w,h);
   }
   setView(view) {
-    this.view=view;this.controls.enableRotate=view!=='floor';this.controls.mouseButtons.LEFT=view==='floor'||this.tool==='pan'?THREE.MOUSE.PAN:THREE.MOUSE.ROTATE;
+    this.view=view;this.controls.enableRotate=view!=='floor';
     this.cameraPreset(view==='floor'?'top':'iso');
   }
   cameraPreset(preset) {
@@ -700,7 +714,7 @@ export class StationScene {
   }
   rotate() {const offset=this.camera.position.clone().sub(this.controls.target);offset.applyAxisAngle(new THREE.Vector3(0,1,0),Math.PI/4);this.camera.position.copy(this.controls.target).add(offset);this.camera.lookAt(this.controls.target);this.controls.update();}
   zoom(factor) {this.camera.zoom=THREE.MathUtils.clamp(this.camera.zoom*factor,.3,6);this.camera.updateProjectionMatrix();this.callbacks.onZoom(this.camera.zoom);}
-  setTool(tool) {this.tool=tool;this.renderer.domElement.style.cursor=this.zoneEditor.active?'crosshair':tool==='pan'?'grab':tool==='move'?'move':'default';this.controls.mouseButtons.LEFT=tool==='pan'||this.view==='floor'?THREE.MOUSE.PAN:THREE.MOUSE.ROTATE;}
+  setTool(tool) {this.tool=tool;this.renderer.domElement.style.cursor=this.zoneEditor.active?'crosshair':tool==='move'?'move':'default';}
   hit(event) {
     const rect=this.renderer.domElement.getBoundingClientRect();this.pointer.set((event.clientX-rect.left)/rect.width*2-1,-(event.clientY-rect.top)/rect.height*2+1);this.raycaster.setFromCamera(this.pointer,this.camera);
     const hits=[...(this.stairHandles?this.raycaster.intersectObject(this.stairHandles,true):[]),...this.raycaster.intersectObjects([...this.groups.values(),...this.zoneGroups],true)];
@@ -708,6 +722,14 @@ export class StationScene {
   }
   installPointerEvents() {
     const canvas=this.renderer.domElement;
+    canvas.addEventListener('pointerdown',event=>{
+      setMouseButtons(this.controls,event);
+      if(event.button===1||event.button===2){
+        event.preventDefault();
+        canvas.focus({preventScroll:true});
+      }
+    },true);
+    canvas.addEventListener('auxclick',event=>{if(event.button===1)event.preventDefault();});
     const refreshModifier=event=>{
       if(event.key!=='Alt')return;
       if(this.placement&&this.lastPlacementPointer){event.preventDefault();this.movePlacement({...this.lastPlacementPointer,altKey:event.type==='keydown'});}
@@ -739,7 +761,7 @@ export class StationScene {
       }
       if(this.zoneEditor.pointerDown(event)){event.stopImmediatePropagation();event.preventDefault();canvas.focus();canvas.setPointerCapture(event.pointerId);}
     },true);
-    canvas.addEventListener('pointermove',event=>{if(this.zoneEditor.active&&this.tool!=='pan'&&!(event.buttons&2)){event.stopImmediatePropagation();this.zoneEditor.pointerMove(event);}},true);
+    canvas.addEventListener('pointermove',event=>{if(this.zoneEditor.active&&this.tool!=='pan'&&!(event.buttons&6)){event.stopImmediatePropagation();this.zoneEditor.pointerMove(event);}},true);
     canvas.addEventListener('pointerup',event=>{if(this.zoneEditor.active&&event.button===0&&this.tool!=='pan'){event.stopImmediatePropagation();this.zoneEditor.pointerUp(event);}},true);
     canvas.addEventListener('dblclick',event=>{if(this.zoneEditor.drawing){event.preventDefault();this.zoneEditor.close();}},true);
     canvas.addEventListener('pointerdown',event=>{if(this.placement&&event.button===0){event.stopImmediatePropagation();event.preventDefault();canvas.focus({preventScroll:true});this.placement.pointerDown={x:event.clientX,y:event.clientY};canvas.setPointerCapture(event.pointerId);this.movePlacement(event);}},true);
@@ -755,7 +777,7 @@ export class StationScene {
       const hit=this.hit(event);if(hit?.pathIndex===undefined||hit.id!==this.selected)return;
       event.stopImmediatePropagation();event.preventDefault();
       const source=this.project.entities.find(e=>e.id===hit.id);
-      this.pathDrag={id:hit.id,index:hit.pathIndex,source:structuredClone(source),base:this.project};
+      this.pathDrag={id:hit.id,index:hit.pathIndex,source:structuredClone(source),base:this.project,references:placementReferences(this.project,{floors:[source.floor],excludeId:source.id})};
       this.plane.constant=-this.floorY(source.floor);this.controls.enabled=false;canvas.setPointerCapture(event.pointerId);
     },true);
     canvas.addEventListener('pointerdown',event=>{
@@ -771,17 +793,22 @@ export class StationScene {
     },true);
     canvas.addEventListener('pointerdown',event=>{
       if(event.button!==0)return;this.down={x:event.clientX,y:event.clientY};
-      if(this.tool==='move') {const hit=this.hit(event);if(hit&&hit.id!=='station'){this.callbacks.onSelect(hit.id);this.plane.constant=-hit.group.position.y;this.raycaster.ray.intersectPlane(this.plane,this.dragPoint);this.drag={id:hit.id,group:hit.group,offset:hit.group.position.clone().sub(this.dragPoint),started:false};this.controls.enabled=false;canvas.setPointerCapture(event.pointerId);}}
+      if(this.tool==='move') {const hit=this.hit(event);if(hit&&hit.id!=='station'){this.callbacks.onSelect(hit.id);this.plane.constant=-hit.group.position.y;this.raycaster.ray.intersectPlane(this.plane,this.dragPoint);this.drag={id:hit.id,group:hit.group,offset:hit.group.position.clone().sub(this.dragPoint),started:false,base:this.project};this.controls.enabled=false;canvas.setPointerCapture(event.pointerId);}}
     });
     canvas.addEventListener('pointermove',event=>{
+      if(event.buttons&6)return;
       if(this.endpointDrag){this.moveStairEndpointDrag(event);return;}
       if(this.pathDrag){
         const d=this.pathDrag,point=new THREE.Vector3();this.hit(event);if(!this.raycaster.ray.intersectPlane(this.plane,point))return;
-        const position=placementPoint({x:point.x,z:point.z-this.floorOffset(d.source.floor)}),target=moveTrackKnot(d.base,d.source,d.index,position);
+        const source=d.source,raw={x:point.x,z:point.z-this.floorOffset(source.floor)},anchor=worldPoint(source,source.path[d.index===0?1:d.index-1]);
+        const disabled=event.altKey||!d.base.snapping,end=d.index===0||d.index===source.path.length-1,cache={};
+        const aligned=snapPlacementPoint(d.base,source.floor,raw,{references:d.references,anchor,tolerance:this.snapTolerance(),disabled,
+          snapGeometry:end?(p,line)=>snapRailPoint(d.base,source,p,this.snapTolerance(),line,cache):undefined});
+        const position=aligned.snapped?aligned.point:disabled?raw:placementPoint(raw),target=moveTrackKnot(d.base,source,d.index,position,{prepared:true});
         const error=trackPathError(target);d.target=target;
         if(error){this.callbacks.onSnap?.(error);return;}
         const preview=structuredClone(d.base);preview.entities[preview.entities.findIndex(e=>e.id===d.id)]=target;
-        try{syncTrackPaths(preview);syncTrains(preview);this.update(preview,this.view,this.activeFloor,d.id);this.callbacks.onSnap?.('拖动路径点 · 端点可吸附轨道');}catch{}
+        try{syncTrackPaths(preview);syncTrains(preview);this.update(preview,this.view,this.activeFloor,d.id);this.showSnap({...aligned.point,floor:source.floor,guides:aligned.guides});}catch{}
         return;
       }
       if(this.textDrag){const d=this.textDrag,point=new THREE.Vector3();this.hit(event);if(!this.raycaster.ray.intersectPlane(this.plane,point))return;
@@ -794,7 +821,7 @@ export class StationScene {
       if(!this.drag.started&&Math.hypot(event.clientX-this.down.x,event.clientY-this.down.y)>3){this.drag.started=true;this.callbacks.onMoveStart();}
       if(this.drag.started){
         point.add(this.drag.offset);
-        const entity=this.project.entities.find(e=>e.id===this.drag.id),offset=this.floorOffset(this.drag.group.userData.drawFloor||entity.floor);
+        const entity=this.drag.base.entities.find(e=>e.id===this.drag.id),offset=this.floorOffset(this.drag.group.userData.drawFloor||entity.floor);
         const position={x:Math.round(point.x*2)/2,z:Math.round((point.z-offset)*2)/2};
         let target;
         if(entity.type==='train'){
@@ -805,21 +832,29 @@ export class StationScene {
         }else{target=snapTrack(this.project,{...entity,...position});this.showSnap(target);}
         this.drag.target=target;this.drag.group.position.x=target.x;this.drag.group.position.z=target.z+offset;
         this.drag.group.rotation.y=-THREE.MathUtils.degToRad(target.rotation);
-        if(entity.type==='track')for(const train of trainsOnTrack(this.project,entity.id)){
-          const group=this.groups.get(train.id),moved=trainOnTrack(this.project,train,target);
-          if(group)group.position.set(moved.x,this.floorY(moved.floor),moved.z+offset);
+        if(entity.type==='train'){
+          // Carriage poses are local to the moving train and must be rebuilt as its
+          // centre crosses a curve or another rail, rather than translated rigidly.
+          this.drag.group.traverse(o=>{o.geometry?.dispose();if(o.isLine)o.material?.dispose();});
+          this.drag.group.clear();this.buildEntity(this.drag.group,target);
+        }
+        if(entity.type==='track'){
+          const preview=structuredClone(this.drag.base),moved=preview.entities.find(e=>e.id===entity.id);
+          Object.assign(moved,target);delete moved.joins;
+          try{syncTrackPaths(preview);syncTrains(preview);this.update(preview,this.view,this.activeFloor,this.drag.id);this.drag.group=this.groups.get(this.drag.id);}catch{}
         }
         this.select(this.drag.id);
       }
     });
     const end=event=>{
+      if(event.button!==0)return;
       if(this.endpointDrag){this.finishStairEndpointDrag();return;}
       if(this.pathDrag){const d=this.pathDrag;this.pathDrag=null;this.controls.enabled=true;this.showSnap({snapped:false});if(d.target)this.callbacks.onPathChange(d.id,d.target);else this.update(d.base,this.view,this.activeFloor,d.id);return;}
       if(this.textDrag){const d=this.textDrag;this.textDrag=null;this.controls.enabled=true;this.setTool(this.tool);if(d.started){const e=this.project.entities.find(e=>e.id===d.id);if(d.anchorOnly)this.callbacks.onTextAnchorMove(d.id,d.target);else this.callbacks.onMove(d.id,{x:d.group.position.x,z:d.group.position.z-this.floorOffset(e.floor)});}return;}
       if(this.drag){const d=this.drag;this.drag=null;this.controls.enabled=true;this.showSnap({snapped:false});if(d.started&&d.target)this.callbacks.onMove(d.id,d.target);this.down=null;return;}
       if(this.down&&Math.hypot(event.clientX-this.down.x,event.clientY-this.down.y)<5&&event.button===0&&this.tool!=='pan'){const hit=this.hit(event);this.callbacks.onSelect(hit?.id||'station');}this.down=null;
     };
-    canvas.addEventListener('pointerup',end);canvas.addEventListener('pointercancel',()=>{if(this.endpointDrag){this.cancelStairEndpointDrag();return;}if(this.zoneEditor.active){this.zoneEditor.cancelDrag();return;}if(this.placement){delete this.placement.pointerDown;return;}if(this.pathDrag){const d=this.pathDrag;this.pathDrag=null;this.update(d.base,this.view,this.activeFloor,d.id);}if(this.textDrag){this.textDrag=null;this.update(this.project,this.view,this.activeFloor,this.selected);}this.drag=null;this.down=null;this.controls.enabled=true;this.showSnap({snapped:false});this.setTool(this.tool);});
+    canvas.addEventListener('pointerup',end);canvas.addEventListener('pointercancel',()=>{if(this.endpointDrag){this.cancelStairEndpointDrag();return;}if(this.zoneEditor.active){this.zoneEditor.cancelDrag();return;}if(this.placement){delete this.placement.pointerDown;return;}if(this.pathDrag){const d=this.pathDrag;this.pathDrag=null;this.update(d.base,this.view,this.activeFloor,d.id);}if(this.textDrag){this.textDrag=null;this.update(this.project,this.view,this.activeFloor,this.selected);}const base=this.drag?.base;this.drag=null;if(base)this.update(base,this.view,this.activeFloor,this.selected);this.down=null;this.controls.enabled=true;this.showSnap({snapped:false});this.setTool(this.tool);});
     canvas.addEventListener('contextmenu',e=>e.preventDefault());
   }
   async exportPNG(project, options = {}) {

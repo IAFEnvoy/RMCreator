@@ -57,14 +57,15 @@ export class ZoneEditor {
     this.guides=[];this.snap=null;this.scene.showSnap?.({});
     if(handles||event.altKey||!this.scene.project.snapping){this.scene.callbacks.onSnap?.('');return p;}
     const vertices=this.ring.vertices.filter((v,i)=>!exclude.includes(i)).map(v=>v.pos),edges=this.scene.project.entities.filter(e=>e.type==='track'&&e.floor===this.path.floor&&e.visible).flatMap(t=>trackFootprints(t).flatMap(e=>polygonEdges(rectPolygon(e))));
-    const result=snapZonePoint(this.scene.project,this.path.floor,p,{tolerance:this.tolerance(),excludeId:this.path.id,vertices,anchor,constrain:!!event.shiftKey,edges});
     let constraint;
     if(event.shiftKey&&anchor){const dx=p.x-anchor.x,dz=p.z-anchor.z,length=Math.hypot(dx,dz);if(length>.001){const n={x:-dz/length,z:dx/length};constraint={n,value:anchor.x*n.x+anchor.z*n.z};}}
-    const aligned=snapPlacementPoint(this.scene.project,this.path.floor,p,{references:this.scene.snapReferences?.([this.path.floor],this.path.id),tolerance:this.tolerance(),excludeId:this.path.id,vertices,anchor,constraint});
-    const geometry=result.snapped==='顶点'||result.snapped==='边界';
-    if(aligned.snapped&&(!geometry||distance(p,aligned.point)<distance(p,result)-1e-5)){
-      this.guides=aligned.guides;this.snap=aligned.point;this.scene.showSnap?.({floor:this.path.floor,guides:this.guides});this.scene.callbacks.onSnap?.(alignmentMessage(this.guides));return {x:aligned.point.x,z:aligned.point.z};
+    const cache={};
+    const aligned=snapPlacementPoint(this.scene.project,this.path.floor,p,{references:this.scene.snapReferences?.([this.path.floor],this.path.id),tolerance:this.tolerance(),excludeId:this.path.id,vertices,anchor,constraint,
+      snapGeometry:(point,line)=>snapZonePoint(this.scene.project,this.path.floor,point,{tolerance:this.tolerance(),excludeId:this.path.id,vertices,edges,constraint:line,geometryOnly:true,cache})});
+    if(aligned.snapped){
+      this.guides=aligned.guides;this.snap=aligned.point;this.scene.showSnap?.({...aligned.point,floor:this.path.floor,guides:this.guides});this.scene.callbacks.onSnap?.(alignmentMessage(this.guides)||(aligned.point.snapped?`已吸附${aligned.point.snapped}`:''));return {x:aligned.point.x,z:aligned.point.z};
     }
+    const result=snapZonePoint(this.scene.project,this.path.floor,p,{tolerance:this.tolerance(),excludeId:this.path.id,vertices,anchor,constrain:!!event.shiftKey,edges});
     this.snap=result.snapped?result:null;this.scene.callbacks.onSnap?.(result.snapped?`已吸附${result.snapped}`:'');return {x:result.x,z:result.z};
   }
   pointerDown(event) {

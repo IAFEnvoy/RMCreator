@@ -1,6 +1,7 @@
 import polygonClipping from 'polygon-clipping';
 import { flattenPath, corner, inRing, point, distance } from './zone-path.js';
 import { stairFootprint } from './stair-path.js';
+import { snapGeometry } from '../../shared/snap-math.js';
 
 const kinds=['paid','unpaid','staff'],cache=new Map();
 export function pathPolygon(path) {
@@ -75,15 +76,20 @@ export function nearestOnEdge(p,e) {
   const dx=e.x2-e.x1,dz=e.z2-e.z1,l=dx*dx+dz*dz,t=l?Math.max(0,Math.min(1,((p.x-e.x1)*dx+(p.z-e.z1)*dz)/l)):0;
   const q=point(e.x1+dx*t,e.z1+dz*t);return {...q,distance:distance(p,q)};
 }
-export function snapZonePoint(project,floor,p,{tolerance=1,vertices=[],excludeId,anchor,constrain=false,edges:extraEdges=[]}={}) {
+export function snapZonePoint(project,floor,p,{tolerance=1,vertices=[],excludeId,anchor,constrain=false,constraint,geometryOnly=false,edges:extraEdges=[],cache={}}={}) {
   if(!project.snapping)return {...p};
+  if(!constraint&&constrain&&anchor&&distance(anchor,p)>1e-7){const dx=p.x-anchor.x,dz=p.z-anchor.z,l=Math.hypot(dx,dz);constraint={n:{x:-dz/l,z:dx/l},value:(-dz*anchor.x+dx*anchor.z)/l};}
   const compatible=q=>!constrain||!anchor||Math.abs((q.x-anchor.x)*(p.z-anchor.z)-(q.z-anchor.z)*(p.x-anchor.x))<.001*Math.max(1,distance(anchor,p));
-  const paths=(project.zonePaths||[]).filter(path=>path.floor===floor&&path.id!==excludeId);
-  const candidates=[...vertices,...paths.flatMap(path=>[...path.vertices,...(path.holes||[]).flat()].map(v=>v.pos))];
-  let best;for(const q of candidates){const d=distance(p,q);if(d<=tolerance&&compatible(q)&&(!best||d<best.distance))best={...q,distance:d,snapped:'顶点'};}
-  if(best)return best;
-  const masks=zoneMasks(excludeId?{...project,zonePaths:(project.zonePaths||[]).filter(path=>path.id!==excludeId)}:project,floor),edges=[...kinds.flatMap(k=>polygonEdges(masks[k])),...extraEdges];
-  for(const e of edges){const q=nearestOnEdge(p,e);if(q.distance<=tolerance*.8&&compatible(q)&&(!best||q.distance<best.distance))best={...q,snapped:'边界'};}
+  if(!cache.targets){
+    const paths=(project.zonePaths||[]).filter(path=>path.floor===floor&&path.id!==excludeId);
+    const candidates=[...vertices,...paths.flatMap(path=>[...path.vertices,...(path.holes||[]).flat()].map(v=>v.pos))];
+    const masks=zoneMasks(excludeId?{...project,zonePaths:(project.zonePaths||[]).filter(path=>path.id!==excludeId)}:project,floor),edges=[...kinds.flatMap(k=>polygonEdges(masks[k])),...extraEdges];
+    cache.targets={points:candidates.map(q=>({x:q.x,y:q.z})),segments:edges.map(e=>({a:{x:e.x1,y:e.z1},b:{x:e.x2,y:e.z2}}))};
+  }
+  const hit=snapGeometry({x:p.x,y:p.z},{...cache.targets,tolerance,segmentTolerance:tolerance*.8,constraint:constraint?{n:{x:constraint.n.x,y:constraint.n.z},value:constraint.value}:undefined});
+  if(hit)return {x:hit.x,z:hit.y,distance:hit.distance,snapped:hit.type==='point'?'顶点':'边界',snapType:hit.type};
+  if(geometryOnly)return {...p};
+  let best;
   const grid=point(Math.round(p.x/2)*2,Math.round(p.z/2)*2),d=distance(p,grid);if(!best&&d<=tolerance&&compatible(grid))best={...grid,distance:d,snapped:'网格'};
   if(!best)for(const q of [point(grid.x,p.z),point(p.x,grid.z)]){const d=distance(p,q);if(d<=tolerance*.65&&compatible(q)&&(!best||d<best.distance))best={...q,distance:d,snapped:'网格线'};}
   return best||{...p};

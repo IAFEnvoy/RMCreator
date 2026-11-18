@@ -1,14 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ROUTE_STORAGE_KEYS, STATION_STORAGE_KEYS } from '../shared/storage-keys.js';
+import { ROUTE_STORAGE_KEYS, STATION_STORAGE_KEYS, LAYOUT_STORAGE_KEYS } from '../shared/storage-keys.js';
 import { ProjectFiles } from '../station-designer/src/project-files.js';
 import { themeTokens } from '../shared/theme.js';
 
-test('route drawings and station projects have distinct storage keys', () => {
-  const all = [...Object.values(ROUTE_STORAGE_KEYS), ...Object.values(STATION_STORAGE_KEYS)];
+test('route drawings, station projects and track layouts have distinct storage keys', () => {
+  const all = [...Object.values(ROUTE_STORAGE_KEYS), ...Object.values(STATION_STORAGE_KEYS), ...Object.values(LAYOUT_STORAGE_KEYS)];
   assert.equal(new Set(all).size, all.length);
   assert.ok(Object.values(ROUTE_STORAGE_KEYS).every(key => key.startsWith('rmcreator.')));
   assert.ok(Object.values(STATION_STORAGE_KEYS).every(key => key.startsWith('station-studio-')));
+  assert.ok(Object.values(LAYOUT_STORAGE_KEYS).every(key => key.startsWith('rmcreator.trackLayout.')));
 });
 
 test('creating, saving and deleting station projects preserves every route key and restores legacy stations', () => {

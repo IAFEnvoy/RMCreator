@@ -249,6 +249,8 @@ export function createStationManager({
       renderPreview(preset);
     });
 
+    stationPreviewCanvas.addEventListener("auxclick", event => { if (event.button === 1) event.preventDefault(); });
+    stationPreviewCanvas.addEventListener("contextmenu", event => event.preventDefault());
     stationPreviewCanvas.addEventListener("mousedown", onPreviewMouseDown);
     stationPreviewCanvas.addEventListener("wheel", onPreviewWheel, { passive: false });
     window.addEventListener("mousemove", onWindowMouseMove);
@@ -3050,7 +3052,7 @@ export function createStationManager({
   }
 
   function onPreviewMouseDown(event) {
-    if (!state.stationManager.isOpen || event.button !== 0) {
+    if (!state.stationManager.isOpen || event.button !== 2) {
       return;
     }
 
@@ -3086,8 +3088,8 @@ export function createStationManager({
     renderPreview(getSelectedPreset());
   }
 
-  function onWindowMouseUp() {
-    stopPreviewPanning();
+  function onWindowMouseUp(event) {
+    if (event.button === 2) stopPreviewPanning();
   }
 
   function stopPreviewPanning() {

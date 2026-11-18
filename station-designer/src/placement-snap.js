@@ -1,3 +1,4 @@
+import { snapWithGuides } from '../../shared/snap-math.js';
 import { trackGeometry, worldPoint } from './track-path.js';
 import { zoneMasks } from './zone-geometry.js';
 import { flattenPath } from './zone-path.js';
@@ -72,52 +73,39 @@ function referenceLines(references,anchor,vertices=[]) {
       }
     }
   }
+  for(let i=1;i<vertices.length;i++)if(distance(vertices[i-1],vertices[i])>eps){const a=Math.atan2(vertices[i].z-vertices[i-1].z,vertices[i].x-vertices[i-1].x);frames.set(angleKey(a),a);}
+  if(Number.isFinite(anchor?.angle))frames.set(angleKey(anchor.angle*rad),anchor.angle*rad);
   for(const p of [...vertices,...(anchor?[anchor]:[])])for(const angle of frames.values())for(const n of [axis(angle),axis(angle+Math.PI/2)]){
-    lines.push({n,value:dot(p,n),kind:'vertex',a:p,b:p});
+    lines.push({n,value:dot(p,n),kind:'vertex',a:p,b:p,anchor:p===anchor});
   }
   return lines;
 }
 
-function intersect(a,b) {
-  const det=a.n.x*b.n.z-a.n.z*b.n.x;
-  return Math.abs(det)<1e-5?null:{x:(a.value*b.n.z-a.n.z*b.value)/det,z:(a.n.x*b.value-a.value*b.n.x)/det};
-}
+const xy=p=>({x:p.x,y:p.z});
+const xz=p=>({x:p.x,z:p.y});
+const mathLine=line=>({...line,n:xy(line.n),a:line.a?xy(line.a):undefined,b:line.b?xy(line.b):undefined});
 
-export function snapPlacementPoint(project,floor,point,{references,tolerance=1,excludeId,disabled=false,anchor,vertices=[],constraint,moving}={}) {
+export function snapPlacementPoint(project,floor,point,{references,tolerance=1,excludeId,disabled=false,anchor,vertices=[],constraint,moving,snapGeometry}={}) {
   const free={point:{...point},snapped:false,guides:[]};
   if(disabled||!project.snapping)return free;
-  const refs=references||placementReferences(project,{floors:[floor],excludeId});
-  const lines=referenceLines(refs,anchor,vertices),candidates=[];
-  for(const line of lines){
+  const refs=references||placementReferences(project,{floors:[floor],excludeId}),lines=[];
+  for(const line of referenceLines(refs,anchor,vertices)){
     let offsets=[0];
-    if(moving){
-      const b=bounds(placementOutline(moving),line.n),center=dot(moving,line.n);
-      offsets=[0,b.min-center,b.max-center];
-    }
-    for(const offset of offsets){
-      const candidate={...line,value:line.value-offset,offset};
-      const q=constraint?(intersect(constraint,candidate)||(Math.abs(dot(point,line.n)-candidate.value)<eps?point:null)):add(point,line.n,candidate.value-dot(point,line.n));
-      if(!q||distance(q,point)>tolerance+eps)continue;
-      candidates.push({line:candidate,point:q,distance:distance(q,point)});
-    }
+    if(moving){const b=bounds(placementOutline(moving),line.n),center=dot(moving,line.n);offsets=[0,b.min-center,b.max-center];}
+    for(const offset of offsets)lines.push(mathLine({...line,value:line.value-offset,offset}));
   }
-  candidates.sort((a,b)=>a.distance-b.distance||(a.line.kind==='equal'?1:0)-(b.line.kind==='equal'?1:0));
-  const first=candidates[0];if(!first)return free;
-  let q=first.point,hits=[first.line];
-  for(const candidate of candidates.slice(1)){
-    const second=candidate.line;
-    if(Math.abs(dot(first.line.n,second.n))>.01)continue;
-    const both=intersect(first.line,second);
-    if(both&&distance(both,point)<=tolerance*(constraint?1:Math.SQRT2)+eps&&(!constraint||Math.abs(dot(both,constraint.n)-constraint.value)<eps)){q=both;hits.push(second);break;}
-  }
+  const result=snapWithGuides(xy(point),{lines,tolerance,constraint:constraint?mathLine({...constraint,a:anchor,b:anchor}):undefined,
+    geometry:snapGeometry?(p,line)=>{const hit=snapGeometry(xz(p),line?{...line,n:xz(line.n)}:undefined);return hit?.snapped?{...hit,...xy(hit)}:null;}:undefined});
+  const q=xz(result.point);
   if(Math.abs(q.x)>500||Math.abs(q.z)>500)return free;
-  const guides=hits.map(({offset=0,...line})=>{
-    const contact=add(q,line.n,offset);
+  const guides=result.lines.map(({offset=0,...raw})=>{
+    const line={...raw,n:xz(raw.n),a:xz(raw.a),b:xz(raw.b)},contact=add(q,line.n,offset);
     const t=perpendicular(line.n),coordinates=[dot(line.a,t),dot(line.b,t),dot(contact,t)];
     const origin={x:line.n.x*(line.value+offset),z:line.n.z*(line.value+offset)};
     return {...line,value:line.value+offset,a:add(origin,t,Math.min(...coordinates)-2),b:add(origin,t,Math.max(...coordinates)+2),contact,...(line.measure?{measure:{...line.measure,b:contact}}:{})};
   });
-  return {point:{x:q.x,z:q.z,aligned:true},snapped:true,guides};
+  const hit=result.geometry?{...result.geometry}:{};delete hit.y;
+  return {point:{...hit,...q,...(guides.length?{aligned:true}:{})},snapped:!!(guides.length||result.geometry),guides,geometry:result.geometry?hit:null};
 }
 
 export function alignmentMessage(guides) {

@@ -1,5 +1,6 @@
 import { STATION_STORAGE_KEYS } from '../../shared/storage-keys.js';
 import { defaultProject, migrateProject } from './project.js';
+import changshouExample from '../examples/长寿路站-7号线-13号线-全6A.json' with { type: 'json' };
 
 export const WORKSPACE_KEY = STATION_STORAGE_KEYS.workspace;
 export const LEGACY_KEY = STATION_STORAGE_KEYS.legacyProject;
@@ -50,7 +51,7 @@ export class ProjectFiles {
       this.warning = '方案库读取失败，已保留原数据并尝试恢复上次方案';
     }
     let project;
-    try { project = migrateProject(JSON.parse(storage.getItem(LEGACY_KEY))); } catch { project = defaultProject(); }
+    try { project = migrateProject(JSON.parse(storage.getItem(LEGACY_KEY))); } catch { project = migrateProject(changshouExample); }
     const file = this.makeFile(project.name || '车站设计方案', project);
     this.workspace = { version: 1, activeId: file.id, files: [file] };
   }

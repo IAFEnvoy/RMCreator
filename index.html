@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#f6f8fb" />
-  <meta name="description" content="RMCreator 轨道交通设计工作台：绘制线路图，设计车站 3D 示意图与分层平面图。" />
+  <meta name="description" content="RMCreator 轨道交通设计工作台：绘制线路图、平面配线图，设计车站 3D 示意图与分层平面图。" />
   <link rel="icon" href="./favicon.webp" />
   <title>RMCreator · 轨道交通设计工作台</title>
   <script type="module" src="./shared/home.js"></script>
@@ -12,14 +12,14 @@
 <body class="home-page">
   <header class="home-header">
     <a class="home-brand" href="./" aria-label="RMCreator 首页"><img src="./favicon.webp" alt="" width="33" height="33" /><span>RMCreator</span></a>
-    <nav class="home-nav" aria-label="主导航"><a href="./" aria-current="page">首页</a><a href="./route-map/">线路图</a><a href="./station-designer/">车站设计</a></nav>
+    <nav class="home-nav" aria-label="主导航"><a href="./" aria-current="page">首页</a><a href="./route-map/">线路图</a><a href="./station-designer/">车站设计</a><a href="./track-layout/">配线工坊</a></nav>
     <span class="home-local"><i></i>浏览器工作台</span>
   </header>
   <main class="home-main">
     <section class="home-intro">
       <div class="home-eyebrow"><span></span> RAIL TRANSIT DESIGN</div>
       <h1>让轨道交通的想法，<br>在这里成形。</h1>
-      <p>从线路网络到车站空间，选择一个工具，开始你的设计。</p>
+      <p>从线路网络、车站空间到平面配线，选择一个工具，开始你的设计。</p>
     </section>
     <section class="tool-grid" aria-label="设计工具">
       <a class="tool-card route-card" href="./route-map/">
@@ -68,6 +68,20 @@
           <span class="preview-badge"><i class="station-dot"></i>看见车站空间</span>
         </div>
         <div class="tool-card-body"><div class="tool-card-top"><span class="tool-number">02 / STATION</span><span class="tool-open" aria-hidden="true">↗</span></div><h2>车站空间设计</h2><p>组织楼层、轨道与设施，让车站结构一目了然。</p><div class="tool-capabilities"><span>3D 示意</span><span>分层平面</span><span>区域与设施</span></div><span class="tool-start">开始设计 <span aria-hidden="true">→</span></span></div>
+      </a>
+      <a class="tool-card layout-card" href="./track-layout/">
+        <div class="tool-preview layout-preview" aria-hidden="true">
+          <span class="preview-label">LAYOUT / 配线</span>
+          <svg viewBox="0 0 520 250" fill="none">
+            <g stroke="#e0e7f1" stroke-width=".6"><path d="M0 50h520M0 100h520M0 150h520M0 200h520M60 0v250M110 0v250M160 0v250M210 0v250M260 0v250M310 0v250M360 0v250M410 0v250M460 0v250"/></g>
+            <rect x="192" y="114" width="132" height="44" rx="4" fill="#e1e7f0" stroke="#b5c4d9"/>
+            <g stroke="#2f6de5" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"><path d="M33 99H332C389 99 405 43 462 43H487M33 173H332C389 173 405 117 462 117H487"/></g>
+            <g stroke="#df7455" stroke-width="5" stroke-linecap="round"><path d="M78 99L152 173M78 173L152 99"/></g>
+            <g fill="#8498b4" font-family="sans-serif" font-size="10" text-anchor="middle"><text x="258" y="139">1 / 2 站台</text><text x="258" y="77">中央站</text></g>
+          </svg>
+          <span class="preview-badge"><i class="layout-dot"></i>几笔，理清配线</span>
+        </div>
+        <div class="tool-card-body"><div class="tool-card-top"><span class="tool-number">03 / LAYOUT</span><span class="tool-open" aria-hidden="true">↗</span></div><h2>配线工坊</h2><p>用彩色线条与站台，组织车站、折返线和车辆基地。</p><div class="tool-capabilities"><span>平面线条</span><span>曲线与吸附</span><span>站台与标注</span></div><span class="tool-start">开始配线 <span aria-hidden="true">→</span></span></div>
       </a>
     </section>
     <div class="home-note"><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="3" width="14" height="14" rx="3"/><path d="M6 3v5h8V3M6 17v-6h8v6"/></svg><span>作品自动保存在当前浏览器，可随时导出项目文件备份。</span></div>

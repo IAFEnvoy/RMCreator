@@ -129,6 +129,36 @@ test('curve placement confirmation keeps the snapped preview endpoint with no wh
   assert.deepEqual(start,p(100.23,50.17));close(end.x,s.placement.point.x);close(end.z,s.placement.point.z);
 });
 
+test('rail contact and a non-grid start are solved together, keeping preview and placement orthogonal',()=>{
+  const project=fixture();project.entities=[entity('host','track','斜线',110,60,{floor:'B2',l:100,d:4,rotation:45})];
+  const s=scene(project,'track',{toFloor:undefined});s.activeFloor='B2';s.placement.start=p(100.23,50.17);
+  s.movePlacement({clientX:100.7,clientY:50.3});
+  close(s.endpoints[1].x,100.17);close(s.endpoints[1].z,50.17);assert.equal(s.placement.point.snapped,true);assert.ok(s.feedback.guides.length);
+  // A longer run reaches the same rail while retaining the exact chosen start.
+  s.placement.start=p(60.23,50.17);s.movePlacement({clientX:100.7,clientY:50.3});
+  close(s.endpoints[0].x,60.23);close(s.endpoints[1].z,50.17);close(s.preview.rotation,0);assert.equal(s.valid,true);
+});
+
+test('parallel and perpendicular rail placement preserves arbitrary reference angles',()=>{
+  const project=fixture();project.entities=[entity('host','track','斜线',0,0,{floor:'B2',l:100,d:4,rotation:37})];
+  const start=p(100.23,70.17);
+  for(const angle of [37,127]){
+    const s=scene(project,'track',{toFloor:undefined});s.activeFloor='B2';s.placement.start=start;
+    const a=angle*Math.PI/180;s.movePlacement({clientX:start.x+Math.cos(a)*45+.1,clientY:start.z+Math.sin(a)*45+.1});
+    close(s.preview.rotation,angle);assert.deepEqual(s.endpoints[0],start);assert.ok(s.feedback.guides.length);assert.equal(s.valid,true);
+  }
+});
+
+test('area boundary contacts retain right-angle guides and exact intersections on a diagonal edge',()=>{
+  const project=fixture();project.zonePaths=[{id:'triangle',floor:'B2',kind:'paid',closed:true,vertices:[corner(p(0,0)),corner(p(50,50)),corner(p(50,0))]}];
+  const editor=Object.create(ZoneEditor.prototype),anchor=p(20.23,35);
+  Object.assign(editor,{path:{id:'draft',floor:'B2',vertices:[corner(anchor)]},contour:-1,tolerance(){return .7;},scene:{project,callbacks:{onSnap(){}},showSnap(data){this.feedback=data;}}});
+  for(const modifiers of [{},{shiftKey:true}]){
+    const q=editor.snapped(p(20.5,20.3),modifiers,{anchor});close(q.x,20.23);close(q.z,20.23);assert.ok(editor.guides.length);assert.equal(editor.snap.snapped,'边界');
+  }
+  const free=editor.snapped(p(20.5,20.3),{altKey:true},{anchor});assert.deepEqual(free,p(20.5,20.3));assert.equal(editor.guides.length,0);
+});
+
 function endpointScene() {
   const project=fixture(),source=entity('existing','stairs','楼梯',15,0,{floor:'B2',toFloor:'B1',l:30});project.entities=[source];
   const s=scene(project);s.placement=null;s.selected=source.id;s.controls={enabled:true};s.renderer={domElement:{style:{}}};s.plane=new THREE.Plane(new THREE.Vector3(0,1,0),0);s.setTool=()=>{};

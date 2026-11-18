@@ -473,6 +473,8 @@ export function createShapeManager({
     });
 
     shapeEditorCanvas.addEventListener("click", onCanvasClick);
+    shapeEditorCanvas.addEventListener("auxclick", event => { if (event.button === 1) event.preventDefault(); });
+    shapeEditorCanvas.addEventListener("contextmenu", event => event.preventDefault());
     shapeEditorCanvas.addEventListener("mousedown", onCanvasMouseDown);
     shapeEditorCanvas.addEventListener("wheel", onCanvasWheel, { passive: false });
     window.addEventListener("mousemove", onWindowMouseMove);
@@ -691,7 +693,7 @@ export function createShapeManager({
     };
     const downloadName = `RMC_ShapeType_${buildExportTimestamp()}.json`;
 
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const blob = new Blob([JSON.stringify(payload)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -2619,6 +2621,7 @@ export function createShapeManager({
   }
 
   function onCanvasClick(event) {
+    if (event.button !== 0 || panState.isPanning) return;
     if (suppressCanvasClick) {
       suppressCanvasClick = false;
       return;
@@ -2674,9 +2677,21 @@ export function createShapeManager({
   }
 
   function onCanvasMouseDown(event) {
-    if (!state.shapeManager.isOpen || event.button !== 0) {
+    if (!state.shapeManager.isOpen || panState.isPanning || handleState.isDragging || transformState.isDragging) {
       return;
     }
+
+    if (event.button === 2) {
+      panState.isPanning = true;
+      panState.didPan = false;
+      panState.startClientX = event.clientX;
+      panState.startClientY = event.clientY;
+      panState.startViewBox = { ...getCurrentViewBox() };
+      shapeEditorCanvasWrap.classList.add("panning");
+      event.preventDefault();
+      return;
+    }
+    if (event.button !== 0) return;
 
     const handleHit = findHandleHit(event.target);
     if (handleHit) {
@@ -2707,18 +2722,6 @@ export function createShapeManager({
       return;
     }
 
-    if (findPrimitiveIndex(event.target) !== null) {
-      return;
-    }
-
-    panState.isPanning = true;
-    panState.didPan = false;
-    panState.startClientX = event.clientX;
-    panState.startClientY = event.clientY;
-    panState.startCanvasPoint = clientToCanvasPoint(event.clientX, event.clientY);
-    panState.startViewBox = { ...getCurrentViewBox() };
-    shapeEditorCanvasWrap.classList.add("panning");
-    event.preventDefault();
   }
 
   function onWindowMouseMove(event) {
@@ -2798,20 +2801,16 @@ export function createShapeManager({
       return;
     }
 
-    const startPoint = panState.startCanvasPoint;
-    const currentPoint = clientToCanvasPoint(event.clientX, event.clientY);
-    if (!startPoint || !currentPoint) {
-      return;
-    }
-
+    const rect = shapeEditorCanvas.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
     const dxPx = event.clientX - panState.startClientX;
     const dyPx = event.clientY - panState.startClientY;
     if (Math.abs(dxPx) > 1 || Math.abs(dyPx) > 1) {
       panState.didPan = true;
     }
 
-    const dx = currentPoint.x - startPoint.x;
-    const dy = currentPoint.y - startPoint.y;
+    const dx = dxPx / rect.width * panState.startViewBox.width;
+    const dy = dyPx / rect.height * panState.startViewBox.height;
 
     state.shapeManager.viewBox = {
       x: panState.startViewBox.x - dx,
@@ -2823,7 +2822,8 @@ export function createShapeManager({
     renderEditorCanvas(getSelectedShape());
   }
 
-  function onWindowMouseUp() {
+  function onWindowMouseUp(event) {
+    if (event.button !== (panState.isPanning ? 2 : 0)) return;
     if (handleState.isDragging) {
       finishHandleDrag();
       return;
@@ -2886,6 +2886,7 @@ export function createShapeManager({
 
   function stopPanning() {
     panState.isPanning = false;
+    panState.didPan = false;
     panState.startCanvasPoint = null;
     shapeEditorCanvasWrap.classList.remove("panning");
   }

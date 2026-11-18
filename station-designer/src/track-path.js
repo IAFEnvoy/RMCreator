@@ -1,4 +1,6 @@
 // Track geometry is shared by drawing, snapping, trains and boundary facilities.
+import { snapGeometry } from '../../shared/snap-math.js';
+
 const rad = Math.PI / 180, clamp = (n, a, b) => Math.max(a, Math.min(b, n));
 const unit = (x, z) => { const l = Math.hypot(x, z); return l > 1e-8 ? { x: x / l, z: z / l } : { x: 1, z: 0 }; };
 export const pathKnots = track => track.path || [{ x: -track.l / 2, z: 0 }, { x: track.l / 2, z: 0 }];
@@ -79,8 +81,23 @@ export function trackFootprints(track) {
   }
   return result;
 }
-export function snapRailPoint(project, source, point, tolerance = 3) {
+export function snapRailPoint(project, source, point, tolerance = 3, constraint, cache = {}) {
   if (!project.snapping) return { ...point };
+  if(constraint){
+    if(!cache.targets){
+      const points=[],segments=[];
+      for(const track of project.entities.filter(e=>e.type==='track'&&e.visible&&e.floor===source.floor&&e.id!==source.id)){
+        const {samples,length}=trackGeometry(track);
+        for(const fraction of [0,1]){const p=pointAlongTrack(track,length*fraction,true);points.push({x:p.x,y:p.z,track,s:fraction*length});}
+        for(let i=1;i<samples.length;i++){const a=worldPoint(track,samples[i-1]),b=worldPoint(track,samples[i]);segments.push({a:{x:a.x,y:a.z},b:{x:b.x,y:b.z},track,start:samples[i-1].s,end:samples[i].s});}
+      }
+      cache.targets={points,segments};
+    }
+    const hit=snapGeometry({x:point.x,y:point.z},{...cache.targets,tolerance,constraint:{n:{x:constraint.n.x,y:constraint.n.z},value:constraint.value}});
+    if(!hit)return {...point};
+    const track=hit.target.track,s=hit.type==='point'?hit.target.s:hit.target.start+(hit.target.end-hit.target.start)*hit.t;
+    return {...pointAlongTrack(track,s,true),x:hit.x,z:hit.y,distance:hit.distance,fraction:s/(trackGeometry(track).length||1),trackId:track.id,snapKind:hit.type==='point'?'endpoint':'track',snapType:hit.type,snapped:true};
+  }
   let best, endpoint;
   for (const track of project.entities.filter(e => e.type === 'track' && e.visible && e.floor === source.floor && e.id !== source.id)) {
     const hit = projectToTrack(track, point);
@@ -92,7 +109,7 @@ export function snapRailPoint(project, source, point, tolerance = 3) {
     }
   }
   best = endpoint || best;
-  return best ? { ...best, snapped: true } : { ...point };
+  return best ? { ...best, snapType:best.snapKind==='endpoint'?'point':'segment', snapped: true } : { ...point };
 }
 export function makeTrackPath(source, points, mode = 'curve') {
   const origin = points[0], a = { ...source, x: origin.x, z: origin.z, rotation: 0 };
@@ -136,11 +153,11 @@ export function trackPathError(track) {
   if (geometry.samples.some(p => { const w = worldPoint(track, p); return Math.abs(w.x) > 500 || Math.abs(w.z) > 500; })) return '轨道需在 ±500 m 范围内';
   return '';
 }
-export function moveTrackKnot(project, source, index, point) {
+export function moveTrackKnot(project, source, index, point, { prepared = false } = {}) {
   const track = structuredClone(source);
   track.path ||= pathKnots(track);
   const end = index === 0 ? 'start' : index === track.path.length - 1 ? 'end' : null;
-  const target = end ? snapRailPoint(project, track, point) : point;
+  const target = prepared ? point : end ? snapRailPoint(project, track, point) : point;
   const local = localPoint(track, target);
   track.path[index] = local;
   if (end && track.joins) delete track.joins[end];

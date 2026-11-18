@@ -77,6 +77,14 @@ test('point editing detaches or reattaches endpoints and detects cyclic joins',(
   assert.equal(isProject(p),false);assert.throws(()=>syncTrackPaths(p),/循环/);
 });
 
+test('editing a knot retains an already solved guide point instead of snapping it a second time',()=>{
+  const host=rail('host',{z:10}),source=makeTrackPath(rail('branch'),[{x:-50,z:30},{x:50,z:30}]),project=projectWith(host,source);
+  const target={x:-40.23,z:10.37,aligned:true};
+  const edited=moveTrackKnot(project,source,0,target,{prepared:true}),p=worldPoint(edited,edited.path[0]);
+  close(p.x,target.x);close(p.z,target.z);assert.equal(edited.joins.start,undefined);
+  assert.deepEqual(source.path[0],{x:0,z:0});
+});
+
 test('invalid paths are rejected before expensive processing',()=>{
   for(const path of [[],[{x:0,z:0}],Array(33).fill({x:0,z:0}),[{x:0,z:0},{x:NaN,z:0}],
     [{x:0,z:0},{x:1,z:0}],[{x:0,z:0},{x:501,z:0}],[{x:0,z:0},{x:10,z:0,tx:0,tz:0}]]){

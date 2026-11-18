@@ -467,6 +467,11 @@ function buildContext(state, targetEntity) {
 
 function onContextMenu(event, opts) {
   const { state, selectEntity, holder } = opts;
+  if (state.drag?.mode === "pan" || state.drag?.suppressContextMenu) {
+    event.preventDefault();
+    hideMenu(holder);
+    return;
+  }
   if (state.appSettings?.enableContextMenu === false) {
     return;
   }

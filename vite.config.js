@@ -30,6 +30,7 @@ export default defineConfig({
         home: resolve(root, 'index.html'),
         route: resolve(root, 'route-map/index.html'),
         station: resolve(root, 'station-designer/index.html'),
+        layout: resolve(root, 'track-layout/index.html'),
       },
       output: { codeSplitting: { groups: [{ name: 'three', test: /node_modules[\\/].*three/ }] } },
     },
